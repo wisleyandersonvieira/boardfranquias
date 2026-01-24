@@ -54,6 +54,7 @@ const Users = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
   const [resetPasswordUser, setResetPasswordUser] = useState<{ id: string; name: string; email: string } | null>(null);
+  const [isMasterUser, setIsMasterUser] = useState(false);
   const [activeTab, setActiveTab] = useState("users");
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -144,11 +145,12 @@ const Users = () => {
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('role')
+        .select('role, email')
         .eq('id', user.id)
         .single();
 
       setIsAdmin(profile?.role === 'admin');
+      setIsMasterUser(profile?.email === 'wisley_anderson@hotmail.com');
     } catch (error) {
       console.error('Error checking admin status:', error);
     }
@@ -377,10 +379,12 @@ const Users = () => {
               <UsersIcon className="h-4 w-4" />
               Usuários
             </TabsTrigger>
-            <TabsTrigger value="matrices" className="flex items-center gap-2">
-              <Building2 className="h-4 w-4" />
-              Matriz
-            </TabsTrigger>
+            {isMasterUser && (
+              <TabsTrigger value="matrices" className="flex items-center gap-2">
+                <Building2 className="h-4 w-4" />
+                Matriz
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="users">
