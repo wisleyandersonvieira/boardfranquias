@@ -19,6 +19,7 @@ interface Store {
   phone: string | null;
   manager_name: string | null;
   opening_date: string | null;
+  matrix_id: string;
   created_at: string;
   updated_at: string;
 }
@@ -29,6 +30,8 @@ const Stores = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [editingStore, setEditingStore] = useState<Store | null>(null);
   const [activeTab, setActiveTab] = useState("register");
+  const [userMatrixId, setUserMatrixId] = useState<string>("");
+  const [userMatrixName, setUserMatrixName] = useState<string>("");
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -41,11 +44,48 @@ const Stores = () => {
     phone: "",
     manager_name: "",
     opening_date: "",
+    matrix_id: "",
   });
 
   useEffect(() => {
+    fetchUserMatrix();
     fetchStores();
   }, []);
+
+  const fetchUserMatrix = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('matrix_id')
+        .eq('id', user.id)
+        .single();
+
+      if (error || !profile?.matrix_id) {
+        console.error("Error fetching user matrix:", error);
+        return;
+      }
+
+      const { data: matrix, error: matrixError } = await supabase
+        .from('matrices')
+        .select('id, code, name')
+        .eq('id', profile.matrix_id)
+        .single();
+
+      if (matrixError || !matrix) {
+        console.error("Error fetching matrix:", matrixError);
+        return;
+      }
+
+      setUserMatrixId(matrix.id);
+      setUserMatrixName(`${matrix.code} - ${matrix.name}`);
+      setFormData(prev => ({ ...prev, matrix_id: matrix.id }));
+    } catch (error) {
+      console.error("Error in fetchUserMatrix:", error);
+    }
+  };
 
   // Adicionar useEffect para atualizar quando mudar de aba
   useEffect(() => {
@@ -203,6 +243,7 @@ const Stores = () => {
       phone: store.phone || "",
       manager_name: store.manager_name || "",
       opening_date: store.opening_date || "",
+      matrix_id: store.matrix_id,
     });
     setEditingStore(store);
     setActiveTab("register");
@@ -254,6 +295,7 @@ const Stores = () => {
       phone: "",
       manager_name: "",
       opening_date: "",
+      matrix_id: userMatrixId,
     });
     setEditingStore(null);
   };
@@ -328,6 +370,17 @@ const Stores = () => {
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleSubmit} className="space-y-4">
+                  {/* Campo Matriz - sempre visível mas não editável */}
+                  <div className="space-y-2">
+                    <Label htmlFor="matrix">Matriz *</Label>
+                    <Input
+                      id="matrix"
+                      value={userMatrixName}
+                      disabled
+                      className="bg-muted"
+                    />
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="code">Código *</Label>
