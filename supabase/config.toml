@@ -1,7 +1,1 @@
-project_id = "qyqohixqddotjgijftcw"
-
-[functions.reset-user-password]
-verify_jwt = false
-
-[functions.ai-analytics]
-verify_jwt = false
+project_id = "odmqiojfqmqauzedaosa"
