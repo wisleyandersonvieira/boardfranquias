@@ -30,12 +30,19 @@ interface Profile {
   description: string | null;
 }
 
+interface Matrix {
+  id: string;
+  name: string;
+  code: number;
+}
+
 interface CreateUserModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
   stores: Store[];
   profiles: Profile[];
+  matrices: Matrix[];
 }
 
 const CreateUserModal = ({
@@ -44,12 +51,14 @@ const CreateUserModal = ({
   onSuccess,
   stores,
   profiles,
+  matrices,
 }: CreateUserModalProps) => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [selectedStoreIds, setSelectedStoreIds] = useState<string[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState("");
+  const [selectedMatrixId, setSelectedMatrixId] = useState("");
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
@@ -91,6 +100,15 @@ const CreateUserModal = ({
       return;
     }
 
+    if (!selectedMatrixId) {
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: "Selecione uma matriz.",
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -115,12 +133,13 @@ const CreateUserModal = ({
       // Aguardar um pouco para o trigger criar o profile
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // Atualizar o profile para ativo e vincular o perfil de acesso
+      // Atualizar o profile para ativo e vincular o perfil de acesso e matriz
       const { error: updateError } = await supabase
         .from('profiles')
         .update({ 
           is_active: true,
-          profile_id: selectedProfileId || null
+          profile_id: selectedProfileId || null,
+          matrix_id: selectedMatrixId
         })
         .eq('id', signUpData.user.id);
 
@@ -149,6 +168,7 @@ const CreateUserModal = ({
       setPassword("");
       setSelectedStoreIds([]);
       setSelectedProfileId("");
+      setSelectedMatrixId("");
       
       onSuccess();
       onClose();
@@ -206,6 +226,22 @@ const CreateUserModal = ({
               required
               minLength={6}
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Matriz *</Label>
+            <Select value={selectedMatrixId} onValueChange={setSelectedMatrixId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione uma matriz" />
+              </SelectTrigger>
+              <SelectContent>
+                {matrices.map((matrix) => (
+                  <SelectItem key={matrix.id} value={matrix.id}>
+                    {matrix.code} - {matrix.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">

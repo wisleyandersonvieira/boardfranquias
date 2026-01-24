@@ -16,6 +16,12 @@ import { ResetPasswordModal } from "@/components/ResetPasswordModal";
 import { useConfiguracoesPermissions } from "@/hooks/useConfiguracoesPermissions";
 import MatricesTab from "@/components/MatricesTab";
 
+interface Matrix {
+  id: string;
+  name: string;
+  code: number;
+}
+
 interface User {
   id: string;
   name: string;
@@ -23,9 +29,11 @@ interface User {
   is_active: boolean;
   store_id: string | null;
   profile_id: string | null;
+  matrix_id: string | null;
   created_at: string;
   user_stores?: { store_id: string }[];
   user_profiles?: { name: string };
+  matrices?: { name: string; code: number };
 }
 
 interface Store {
@@ -44,6 +52,7 @@ const Users = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [matrices, setMatrices] = useState<Matrix[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [selectedStoreIds, setSelectedStoreIds] = useState<string[]>([]);
@@ -64,6 +73,7 @@ const Users = () => {
     fetchUsers();
     fetchStores();
     fetchProfiles();
+    fetchMatrices();
     checkAdminStatus();
   }, []);
 
@@ -78,12 +88,17 @@ const Users = () => {
           is_active,
           store_id,
           profile_id,
+          matrix_id,
           created_at,
           user_stores (
             store_id
           ),
           user_profiles (
             name
+          ),
+          matrices (
+            name,
+            code
           )
         `)
         .order('created_at', { ascending: false });
@@ -134,6 +149,25 @@ const Users = () => {
         variant: "destructive",
         title: "Erro",
         description: "Erro ao carregar perfis: " + error.message,
+      });
+    }
+  };
+
+  const fetchMatrices = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('matrices')
+        .select('id, name, code')
+        .eq('is_active', true)
+        .order('code');
+
+      if (error) throw error;
+      setMatrices(data || []);
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: "Erro ao carregar matrizes: " + error.message,
       });
     }
   };
@@ -399,6 +433,7 @@ const Users = () => {
                       <TableHead>Nome</TableHead>
                       <TableHead>Email</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Matriz</TableHead>
                       <TableHead>Perfil</TableHead>
                       <TableHead>Data Cadastro</TableHead>
                       <TableHead className="text-right">Ações</TableHead>
@@ -407,7 +442,7 @@ const Users = () => {
                   <TableBody>
                     {users.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                           Nenhum usuário encontrado
                         </TableCell>
                       </TableRow>
@@ -420,6 +455,9 @@ const Users = () => {
                             <Badge variant={user.is_active ? "default" : "secondary"}>
                               {user.is_active ? "Aprovado" : "Pendente"}
                             </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {user.matrices ? `${user.matrices.code} - ${user.matrices.name}` : "-"}
                           </TableCell>
                           <TableCell>
                             {user.user_profiles?.name || "Nenhum perfil"}
@@ -622,6 +660,7 @@ const Users = () => {
           onSuccess={fetchUsers}
           stores={stores}
           profiles={profiles}
+          matrices={matrices}
         />
 
         {/* Modal para redefinir senha */}
