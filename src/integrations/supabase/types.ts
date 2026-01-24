@@ -2286,6 +2286,7 @@ export type Database = {
           email: string
           id: string
           is_active: boolean
+          matrix_id: string
           name: string
           profile_id: string | null
           role: Database["public"]["Enums"]["user_role"]
@@ -2297,6 +2298,7 @@ export type Database = {
           email: string
           id: string
           is_active?: boolean
+          matrix_id: string
           name: string
           profile_id?: string | null
           role?: Database["public"]["Enums"]["user_role"]
@@ -2308,6 +2310,7 @@ export type Database = {
           email?: string
           id?: string
           is_active?: boolean
+          matrix_id?: string
           name?: string
           profile_id?: string | null
           role?: Database["public"]["Enums"]["user_role"]
@@ -2315,6 +2318,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "profiles_matrix_id_fkey"
+            columns: ["matrix_id"]
+            isOneToOne: false
+            referencedRelation: "matrices"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "profiles_profile_id_fkey"
             columns: ["profile_id"]
