@@ -2511,6 +2511,7 @@ export type Database = {
           created_at: string
           id: string
           manager_name: string | null
+          matrix_id: string
           name: string
           opening_date: string | null
           phone: string | null
@@ -2523,6 +2524,7 @@ export type Database = {
           created_at?: string
           id?: string
           manager_name?: string | null
+          matrix_id: string
           name: string
           opening_date?: string | null
           phone?: string | null
@@ -2535,12 +2537,21 @@ export type Database = {
           created_at?: string
           id?: string
           manager_name?: string | null
+          matrix_id?: string
           name?: string
           opening_date?: string | null
           phone?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "stores_matrix_id_fkey"
+            columns: ["matrix_id"]
+            isOneToOne: false
+            referencedRelation: "matrices"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       suppliers: {
         Row: {
