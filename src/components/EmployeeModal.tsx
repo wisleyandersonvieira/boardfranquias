@@ -1,0 +1,1252 @@
+import { useState, useEffect } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus, Edit, Trash2, UserPlus, Upload, Download, Eye, X, Ban, RotateCcw, Filter, ChevronLeft, ChevronRight } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { CalendarIcon } from "lucide-react";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { cn } from "@/lib/utils";
+
+interface Employee {
+  id: string;
+  name: string;
+  cpf: string;
+  birth_date?: string;
+  gender?: string;
+  marital_status?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  job_function_id?: string;
+  registration_date: string;
+  base_salary: number;
+  observations?: string;
+  bank_account?: string;
+  store_id: string;
+  is_active: boolean;
+  is_registered?: boolean;
+  dismissal_date?: string;
+  attachments?: any[];
+  created_at: string;
+  updated_at: string;
+  job_functions?: { name: string };
+  stores?: { name: string };
+}
+
+interface JobFunction {
+  id: string;
+  code: number;
+  name: string;
+  base_salary: number;
+}
+
+interface EmployeeModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+const EmployeeModal = ({ isOpen, onClose }: EmployeeModalProps) => {
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [filteredEmployees, setFilteredEmployees] = useState<Employee[]>([]);
+  const [jobFunctions, setJobFunctions] = useState<JobFunction[]>([]);
+  const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [employeesWithMovements, setEmployeesWithMovements] = useState<Set<string>>(new Set());
+  const { toast } = useToast();
+
+  // Filter states
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterName, setFilterName] = useState("");
+  const [filterStore, setFilterStore] = useState("all");
+  const [filterRegistered, setFilterRegistered] = useState("all");
+  const [filterActive, setFilterActive] = useState("all");
+
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15;
+
+  // Função utilitária para upload de arquivo
+  const uploadFile = async (file: File, storeId: string): Promise<string | null> => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast({
+          title: "Erro",
+          description: "Usuário não autenticado",
+          variant: "destructive"
+        });
+        return null;
+      }
+
+      const fileExtension = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+      // Use store_id as the first path segment for RLS compliance
+      const filePath = `${storeId}/${user.id}/${fileName}`;
+      
+      // Determinar contentType correto
+      let contentType = file.type;
+      if (!contentType && fileExtension) {
+        const typeMap: { [key: string]: string } = {
+          'pdf': 'application/pdf',
+          'jpg': 'image/jpeg',
+          'jpeg': 'image/jpeg', 
+          'png': 'image/png',
+          'txt': 'text/plain',
+          'doc': 'application/msword',
+          'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        };
+        contentType = typeMap[fileExtension.toLowerCase()] || 'application/octet-stream';
+      }
+
+      const { data, error } = await supabase.storage
+        .from('account-documents')
+        .upload(filePath, file, { contentType });
+      
+      if (error) {
+        console.error('Erro ao fazer upload do arquivo:', error);
+        toast({
+          title: "Erro",
+          description: "Erro ao fazer upload do arquivo",
+          variant: "destructive"
+        });
+        return null;
+      }
+
+      return filePath;
+    } catch (error) {
+      console.error('Erro no uploadFile:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao fazer upload do arquivo",
+        variant: "destructive"
+      });
+      return null;
+    }
+  };
+
+  // Função utilitária para visualização e download
+  const viewAttachment = async (filePath: string, mode: 'inline' | 'download' = 'inline') => {
+    try {
+      // Detectar se é PDF para forçar download
+      const fileExtension = filePath.split('.').pop()?.toLowerCase();
+      const isPdf = fileExtension === 'pdf';
+      
+      // Se já é uma URL completa (anexos antigos), abrir diretamente
+      if (filePath.startsWith('http')) {
+        if (mode === 'inline' && !isPdf) {
+          window.open(filePath, '_blank');
+        } else {
+          // Para downloads, usar fetch + blob para evitar bloqueio
+          try {
+            const response = await fetch(filePath);
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filePath.split('/').pop() || 'arquivo';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            toast({
+              title: "Sucesso",
+              description: "Download realizado com sucesso"
+            });
+          } catch (fetchError) {
+            console.error('Erro no fetch:', fetchError);
+            // Fallback para método anterior
+            const link = document.createElement('a');
+            link.href = filePath;
+            link.download = filePath.split('/').pop() || 'arquivo';
+            link.click();
+          }
+        }
+        return;
+      }
+      
+      // Para paths do bucket, gerar signed URL
+      const { data, error } = await supabase.storage
+        .from('account-documents')
+        .createSignedUrl(filePath, 3600);
+      
+      if (error) {
+        console.error('Erro ao gerar URL do anexo:', error);
+        toast({
+          title: "Erro",
+          description: `Erro ao abrir anexo: ${error.message}`,
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      // Para PDFs, sempre fazer download. Para outros arquivos, seguir o mode
+      if (isPdf || mode === 'download') {
+        // Usar fetch + blob para evitar bloqueio do navegador
+        try {
+          const response = await fetch(data.signedUrl);
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+          
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = filePath.split('/').pop() || 'arquivo';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(url);
+          toast({
+            title: "Sucesso", 
+            description: "Download realizado com sucesso"
+          });
+        } catch (fetchError) {
+          console.error('Erro no fetch do arquivo:', fetchError);
+          toast({
+            title: "Erro",
+            description: "Erro ao fazer download do arquivo",
+            variant: "destructive"
+          });
+        }
+      } else {
+        window.open(data.signedUrl, '_blank');
+      }
+    } catch (error) {
+      console.error('Erro ao visualizar anexo:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao visualizar anexo",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const [formData, setFormData] = useState({
+    name: "",
+    cpf: "",
+    birth_date: "",
+    gender: "",
+    marital_status: "",
+    address: "",
+    phone: "",
+    email: "",
+    job_function_id: "",
+    registration_date: new Date().toISOString().split('T')[0],
+    base_salary: "",
+    observations: "",
+    bank_account: "",
+    store_id: "",
+    is_registered: "nao",
+  });
+
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const [existingAttachments, setExistingAttachments] = useState<string[]>([]);
+
+  const fetchEmployees = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('employees')
+        .select(`
+          *,
+          job_functions (
+            name
+          )
+        `)
+        .order('is_active', { ascending: false })
+        .order('name', { ascending: true });
+
+      if (error) throw error;
+      setEmployees((data || []).map(emp => ({
+        ...emp,
+        attachments: Array.isArray(emp.attachments) ? emp.attachments : []
+      })));
+
+      // Check which employees have financial movements
+      await checkEmployeesWithMovements(data || []);
+    } catch (error) {
+      console.error('Erro ao carregar funcionários:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar funcionários",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const checkEmployeesWithMovements = async (employeesList: { id: string }[]) => {
+    try {
+      const employeeIds = employeesList.map(e => e.id);
+      
+      const { data, error } = await supabase
+        .from('accounts_payable')
+        .select('employee_id')
+        .in('employee_id', employeeIds);
+
+      if (error) throw error;
+
+      const idsWithMovements = new Set<string>();
+      (data || []).forEach(item => {
+        if (item.employee_id) {
+          idsWithMovements.add(item.employee_id);
+        }
+      });
+      
+      setEmployeesWithMovements(idsWithMovements);
+    } catch (error) {
+      console.error('Erro ao verificar movimentações:', error);
+    }
+  };
+
+  const fetchJobFunctions = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('job_functions')
+        .select('*')
+        .eq('is_active', true)
+        .order('name', { ascending: true });
+
+      if (error) throw error;
+      setJobFunctions(data || []);
+    } catch (error) {
+      console.error('Erro ao carregar funções:', error);
+    }
+  };
+
+  const fetchStores = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Verificar se o usuário é admin
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, store_id')
+        .eq('id', user.id)
+        .single();
+
+      if (profile?.role === 'admin') {
+        // Admins podem ver todas as lojas
+        const { data, error } = await supabase
+          .from("stores")
+          .select("id, name, code")
+          .order("name");
+
+        if (error) throw error;
+        setStores(data || []);
+      } else {
+        // Buscar lojas autorizadas para o usuário
+        const { data: userStores, error: userStoresError } = await supabase
+          .from('user_stores')
+          .select('store_id')
+          .eq('user_id', user.id);
+
+        if (userStoresError) throw userStoresError;
+
+        // Incluir também a loja principal do profile
+        const authorizedStoreIds = new Set<string>();
+        if (profile?.store_id) {
+          authorizedStoreIds.add(profile.store_id);
+        }
+        userStores?.forEach(us => authorizedStoreIds.add(us.store_id));
+
+        if (authorizedStoreIds.size > 0) {
+          const { data, error } = await supabase
+            .from("stores")
+            .select("id, name, code")
+            .in('id', Array.from(authorizedStoreIds))
+            .order("name");
+
+          if (error) throw error;
+          setStores(data || []);
+        } else {
+          setStores([]);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching stores:", error);
+      toast({
+        title: "Erro",
+        description: "Erro ao buscar lojas",
+        variant: "destructive",
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchEmployees();
+      fetchJobFunctions();
+      fetchStores();
+    }
+  }, [isOpen]);
+
+  // Filter employees when filters or employees change
+  useEffect(() => {
+    let result = [...employees];
+
+    // Filter by name
+    if (filterName) {
+      result = result.filter(emp => 
+        emp.name.toLowerCase().includes(filterName.toLowerCase())
+      );
+    }
+
+    // Filter by store
+    if (filterStore !== "all") {
+      result = result.filter(emp => emp.store_id === filterStore);
+    }
+
+    // Filter by registered
+    if (filterRegistered !== "all") {
+      const isRegistered = filterRegistered === "sim";
+      result = result.filter(emp => emp.is_registered === isRegistered);
+    }
+
+    // Filter by active
+    if (filterActive !== "all") {
+      const isActive = filterActive === "ativo";
+      result = result.filter(emp => emp.is_active === isActive);
+    }
+
+    setFilteredEmployees(result);
+    setCurrentPage(1); // Reset to first page when filters change
+  }, [employees, filterName, filterStore, filterRegistered, filterActive]);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredEmployees.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedEmployees = filteredEmployees.slice(startIndex, endIndex);
+
+  const clearFilters = () => {
+    setFilterName("");
+    setFilterStore("all");
+    setFilterRegistered("all");
+    setFilterActive("all");
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuário não autenticado');
+
+      // Buscar store_id do profile primeiro, depois de user_stores
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('store_id')
+        .eq('id', user.id)
+        .single();
+
+      let userStoreId = profile?.store_id;
+
+      // Se não tiver store_id no profile, buscar de user_stores
+      if (!userStoreId) {
+        const { data: userStoresData } = await supabase
+          .from('user_stores')
+          .select('store_id')
+          .eq('user_id', user.id)
+          .limit(1)
+          .single();
+        
+        userStoreId = userStoresData?.store_id;
+      }
+
+      if (!userStoreId && !formData.store_id) throw new Error('Store ID não encontrado. Verifique se você tem uma loja atribuída.');
+
+      // Upload de novos anexos using store_id from form data for RLS compliance
+      const uploadedPaths: string[] = [];
+      for (const file of attachments) {
+        const filePath = await uploadFile(file, formData.store_id);
+        if (filePath) {
+          uploadedPaths.push(filePath);
+        }
+      }
+
+      // Combinar URLs existentes com novos uploads
+      const finalAttachments = [...existingAttachments, ...uploadedPaths];
+
+      const employeeData = {
+        name: formData.name,
+        cpf: formData.cpf,
+        birth_date: formData.birth_date || null,
+        gender: formData.gender || null,
+        marital_status: formData.marital_status || null,
+        address: formData.address || null,
+        phone: formData.phone || null,
+        email: formData.email || null,
+        job_function_id: formData.job_function_id || null,
+        registration_date: formData.registration_date,
+        base_salary: parseFloat(formData.base_salary) || 0,
+        bank_account: formData.bank_account || null,
+        observations: formData.observations || null,
+        attachments: finalAttachments,
+        store_id: formData.store_id,
+        is_registered: formData.is_registered === 'sim'
+      };
+
+      if (editingEmployee) {
+        const { error } = await supabase
+          .from('employees')
+          .update(employeeData)
+          .eq('id', editingEmployee.id);
+
+        if (error) throw error;
+
+        toast({
+          title: "Sucesso",
+          description: "Funcionário atualizado com sucesso"
+        });
+      } else {
+        const { error } = await supabase
+          .from('employees')
+          .insert([employeeData]);
+
+        if (error) throw error;
+
+        toast({
+          title: "Sucesso",
+          description: "Funcionário cadastrado com sucesso"
+        });
+      }
+
+      resetForm();
+      fetchEmployees();
+    } catch (error) {
+      console.error('Erro ao salvar funcionário:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao salvar funcionário",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      cpf: '',
+      birth_date: '',
+      gender: '',
+      marital_status: '',
+      address: '',
+      phone: '',
+      email: '',
+      job_function_id: '',
+      registration_date: new Date().toISOString().split('T')[0],
+      base_salary: '',
+      bank_account: '',
+      observations: '',
+      store_id: '',
+      is_registered: 'nao'
+    });
+    setAttachments([]);
+    setExistingAttachments([]);
+    setEditingEmployee(null);
+    setShowForm(false);
+  };
+
+  const handleEdit = (employee: Employee) => {
+    setEditingEmployee(employee);
+    setFormData({
+      name: employee.name,
+      cpf: employee.cpf,
+      birth_date: employee.birth_date || '',
+      gender: employee.gender || '',
+      marital_status: employee.marital_status || '',
+      address: employee.address || '',
+      phone: employee.phone || '',
+      email: employee.email || '',
+      job_function_id: employee.job_function_id || '',
+      registration_date: employee.registration_date,
+      base_salary: employee.base_salary.toString(),
+      bank_account: employee.bank_account || '',
+      observations: employee.observations || '',
+      store_id: employee.store_id,
+      is_registered: employee.is_registered ? 'sim' : 'nao'
+    });
+    setExistingAttachments(Array.isArray(employee.attachments) ? employee.attachments : []);
+    setAttachments([]);
+    setShowForm(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    // Check if employee has movements
+    if (employeesWithMovements.has(id)) {
+      toast({
+        title: "Ação não permitida",
+        description: "Não é possível excluir funcionário com movimentações financeiras. Use a opção Inativar.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (confirm('Tem certeza que deseja excluir este funcionário?')) {
+      try {
+        const { error } = await supabase
+          .from('employees')
+          .delete()
+          .eq('id', id);
+
+        if (error) throw error;
+
+        toast({
+          title: "Sucesso",
+          description: "Funcionário excluído com sucesso"
+        });
+        fetchEmployees();
+      } catch (error) {
+        console.error('Erro ao excluir funcionário:', error);
+        toast({
+          title: "Erro",
+          description: "Erro ao excluir funcionário",
+          variant: "destructive"
+        });
+      }
+    }
+  };
+
+  const handleInactivate = async (id: string) => {
+    if (confirm('Tem certeza que deseja inativar este funcionário?')) {
+      try {
+        const { error } = await supabase
+          .from('employees')
+          .update({ is_active: false, dismissal_date: new Date().toISOString().split('T')[0] })
+          .eq('id', id);
+
+        if (error) throw error;
+
+        toast({
+          title: "Sucesso",
+          description: "Funcionário inativado com sucesso"
+        });
+        fetchEmployees();
+      } catch (error) {
+        console.error('Erro ao inativar funcionário:', error);
+        toast({
+          title: "Erro",
+          description: "Erro ao inativar funcionário",
+          variant: "destructive"
+        });
+      }
+    }
+  };
+
+  const handleReactivate = async (id: string) => {
+    if (confirm('Tem certeza que deseja reativar este funcionário?')) {
+      try {
+        const { error } = await supabase
+          .from('employees')
+          .update({ is_active: true, dismissal_date: null })
+          .eq('id', id);
+
+        if (error) throw error;
+
+        toast({
+          title: "Sucesso",
+          description: "Funcionário reativado com sucesso"
+        });
+        fetchEmployees();
+      } catch (error) {
+        console.error('Erro ao reativar funcionário:', error);
+        toast({
+          title: "Erro",
+          description: "Erro ao reativar funcionário",
+          variant: "destructive"
+        });
+      }
+    }
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachments(attachments.filter((_, i) => i !== index));
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-2xl">
+            <UserPlus className="w-6 h-6" />
+            Cadastro de Funcionários
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-6">
+          <div className="flex justify-between items-center flex-wrap gap-2">
+            <h3 className="text-lg font-semibold">Funcionários Cadastrados</h3>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline"
+                onClick={() => setShowFilters(!showFilters)}
+                className="flex items-center gap-2"
+              >
+                <Filter className="w-4 h-4" />
+                {showFilters ? 'Ocultar Filtros' : 'Exibir Filtros'}
+              </Button>
+              <Button 
+                onClick={() => {
+                  resetForm();
+                  setShowForm(true);
+                }}
+                className="flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Novo Funcionário
+              </Button>
+            </div>
+          </div>
+
+          {showFilters && (
+            <Card className="p-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                  <Label htmlFor="filterName">Nome</Label>
+                  <Input
+                    id="filterName"
+                    placeholder="Buscar por nome..."
+                    value={filterName}
+                    onChange={(e) => setFilterName(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label>Loja</Label>
+                  <Select value={filterStore} onValueChange={setFilterStore}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todas" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas</SelectItem>
+                      {stores.map((store) => (
+                        <SelectItem key={store.id} value={store.id}>
+                          {store.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Registrado</Label>
+                  <Select value={filterRegistered} onValueChange={setFilterRegistered}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="sim">Sim</SelectItem>
+                      <SelectItem value="nao">Não</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Status</Label>
+                  <Select value={filterActive} onValueChange={setFilterActive}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="ativo">Ativo</SelectItem>
+                      <SelectItem value="inativo">Inativo</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex justify-end mt-4">
+                <Button variant="outline" size="sm" onClick={clearFilters}>
+                  Limpar Filtros
+                </Button>
+              </div>
+            </Card>
+          )}
+
+          {showForm && (
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  {editingEmployee ? 'Editar Funcionário' : 'Novo Funcionário'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Tabs defaultValue="cadastro" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="cadastro">Cadastro</TabsTrigger>
+                    <TabsTrigger value="anexos">Anexos</TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="cadastro" className="space-y-4">
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                         <div>
+                           <Label htmlFor="name">Nome *</Label>
+                           <Input
+                             id="name"
+                             value={formData.name}
+                             onChange={(e) => setFormData({...formData, name: e.target.value})}
+                             required
+                           />
+                         </div>
+                         <div>
+                           <Label htmlFor="cpf">CPF *</Label>
+                           <Input
+                             id="cpf"
+                             value={formData.cpf}
+                             onChange={(e) => setFormData({...formData, cpf: e.target.value})}
+                             required
+                           />
+                         </div>
+                         <div>
+                           <Label>Loja *</Label>
+                           <Select value={formData.store_id} onValueChange={(value) => setFormData({...formData, store_id: value})} required>
+                             <SelectTrigger>
+                               <SelectValue placeholder="Selecionar loja" />
+                             </SelectTrigger>
+                             <SelectContent>
+                               {stores.map((store) => (
+                                 <SelectItem key={store.id} value={store.id}>
+                                   {store.name}
+                                 </SelectItem>
+                               ))}
+                             </SelectContent>
+                           </Select>
+                         </div>
+                         <div>
+                           <Label>Data de Nascimento</Label>
+                           <Popover>
+                             <PopoverTrigger asChild>
+                               <Button
+                                 variant="outline"
+                                 className={cn(
+                                   "w-full justify-start text-left font-normal",
+                                   !formData.birth_date && "text-muted-foreground"
+                                 )}
+                               >
+                                 <CalendarIcon className="mr-2 h-4 w-4" />
+                                 {formData.birth_date ? format(new Date(formData.birth_date + 'T00:00:00'), "dd/MM/yyyy") : "Selecionar data"}
+                               </Button>
+                             </PopoverTrigger>
+                             <PopoverContent className="w-auto p-0" align="start">
+                                <Calendar
+                                  mode="single"
+                                  selected={formData.birth_date ? new Date(formData.birth_date + 'T00:00:00') : undefined}
+                                  onSelect={(date) => {
+                                    if (date) {
+                                      const year = date.getFullYear();
+                                      const month = String(date.getMonth() + 1).padStart(2, '0');
+                                      const day = String(date.getDate()).padStart(2, '0');
+                                      setFormData({...formData, birth_date: `${year}-${month}-${day}`});
+                                    } else {
+                                      setFormData({...formData, birth_date: ''});
+                                    }
+                                  }}
+                                  initialFocus
+                                  className="pointer-events-auto"
+                                  defaultMonth={formData.birth_date ? new Date(formData.birth_date + 'T00:00:00') : new Date(1990, 0)}
+                                  fromYear={1900}
+                                  toYear={new Date().getFullYear()}
+                                  captionLayout="dropdown-buttons"
+                                  locale={ptBR}
+                                />
+                             </PopoverContent>
+                           </Popover>
+                         </div>
+                        <div>
+                          <Label>Sexo</Label>
+                          <Select value={formData.gender} onValueChange={(value) => setFormData({...formData, gender: value})}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecionar sexo" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="masculino">Masculino</SelectItem>
+                              <SelectItem value="feminino">Feminino</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label>Estado Civil</Label>
+                          <Select value={formData.marital_status} onValueChange={(value) => setFormData({...formData, marital_status: value})}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecionar estado civil" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="casado">Casado</SelectItem>
+                              <SelectItem value="solteiro">Solteiro</SelectItem>
+                              <SelectItem value="divorciado">Divorciado</SelectItem>
+                              <SelectItem value="viuvo">Viúvo</SelectItem>
+                              <SelectItem value="nao_informado">Não Informado</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label>Registrado</Label>
+                          <Select value={formData.is_registered} onValueChange={(value) => setFormData({...formData, is_registered: value})}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecionar" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="sim">Sim</SelectItem>
+                              <SelectItem value="nao">Não</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label htmlFor="phone">Telefone</Label>
+                          <Input
+                            id="phone"
+                            value={formData.phone}
+                            onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="email">E-mail</Label>
+                          <Input
+                            id="email"
+                            type="email"
+                            value={formData.email}
+                            onChange={(e) => setFormData({...formData, email: e.target.value})}
+                          />
+                        </div>
+                        <div>
+                          <Label>Função</Label>
+                          <Select value={formData.job_function_id} onValueChange={(value) => {
+                            const selectedFunction = jobFunctions.find(f => f.id === value);
+                            setFormData({
+                              ...formData, 
+                              job_function_id: value,
+                              base_salary: selectedFunction ? selectedFunction.base_salary.toString() : formData.base_salary
+                            });
+                          }}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecionar função" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {jobFunctions.map((func) => (
+                                <SelectItem key={func.id} value={func.id}>
+                                  {func.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label>Data de Registro *</Label>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                className="w-full justify-start text-left font-normal"
+                              >
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {format(new Date(formData.registration_date), "PPP", { locale: ptBR })}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                               <Calendar
+                                 mode="single"
+                                 selected={new Date(formData.registration_date)}
+                                 onSelect={(date) => setFormData({...formData, registration_date: date ? date.toISOString().split('T')[0] : new Date().toISOString().split('T')[0]})}
+                                 initialFocus
+                                 className="pointer-events-auto"
+                               />
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="address">Endereço</Label>
+                          <Textarea
+                            id="address"
+                            value={formData.address}
+                            onChange={(e) => setFormData({...formData, address: e.target.value})}
+                            rows={2}
+                          />
+                        </div>
+                        <div className="space-y-4">
+                          <div>
+                            <Label htmlFor="base_salary">Salário Base *</Label>
+                            <Input
+                              id="base_salary"
+                              type="number"
+                              step="0.01"
+                              value={formData.base_salary}
+                              onChange={(e) => setFormData({...formData, base_salary: e.target.value})}
+                              required
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="bank_account">Conta para Depósito</Label>
+                            <Input
+                              id="bank_account"
+                              value={formData.bank_account}
+                              onChange={(e) => setFormData({...formData, bank_account: e.target.value})}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="observations">Observações</Label>
+                        <Textarea
+                          id="observations"
+                          value={formData.observations}
+                          onChange={(e) => setFormData({...formData, observations: e.target.value})}
+                          rows={3}
+                        />
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button type="submit" disabled={loading}>
+                          {loading ? 'Salvando...' : editingEmployee ? 'Atualizar' : 'Salvar'}
+                        </Button>
+                        <Button type="button" variant="outline" onClick={resetForm}>
+                          Cancelar
+                        </Button>
+                      </div>
+                    </form>
+                  </TabsContent>
+
+                  <TabsContent value="anexos" className="space-y-4">
+                    {/* Anexos existentes */}
+                    {existingAttachments.length > 0 && (
+                      <div className="space-y-2">
+                        <Label className="text-sm text-muted-foreground">Anexos salvos:</Label>
+                        {existingAttachments.map((url, index) => (
+                          <div key={index} className="flex items-center justify-between bg-blue-50 p-2 rounded border">
+                            <span className="text-sm">Anexo {index + 1}</span>
+                            <div className="flex gap-2">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => viewAttachment(url)}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => viewAttachment(url, 'download')}
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setExistingAttachments(prev => prev.filter((_, i) => i !== index))}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* Upload de novos anexos */}
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                      <input
+                        type="file"
+                        multiple
+                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files || []);
+                          setAttachments(prev => [...prev, ...files]);
+                        }}
+                        className="hidden"
+                        id="file-upload"
+                      />
+                      <label
+                        htmlFor="file-upload"
+                        className="cursor-pointer flex flex-col items-center justify-center text-gray-500"
+                      >
+                        <Upload className="h-8 w-8 mb-2" />
+                        <span>Clique para adicionar anexos (PDF, JPG, PNG, DOC)</span>
+                      </label>
+                      
+                      {attachments.length > 0 && (
+                        <div className="mt-4 space-y-2">
+                          <Label className="text-sm text-muted-foreground">Novos anexos:</Label>
+                          {attachments.map((file, index) => (
+                            <div key={index} className="flex items-center justify-between bg-green-50 p-2 rounded border">
+                              <span className="text-sm">{file.name}</span>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeAttachment(index)}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>CPF</TableHead>
+                    <TableHead>Função</TableHead>
+                    <TableHead>Salário</TableHead>
+                    <TableHead>Data Registro</TableHead>
+                    <TableHead>Registrado</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedEmployees.map((employee) => {
+                    const hasMovements = employeesWithMovements.has(employee.id);
+                    const isInactive = !employee.is_active;
+                    
+                    return (
+                      <TableRow key={employee.id} className={isInactive ? "opacity-60" : ""}>
+                        <TableCell className="font-medium">{employee.name}</TableCell>
+                        <TableCell>{employee.cpf}</TableCell>
+                        <TableCell>{employee.job_functions?.name || '-'}</TableCell>
+                        <TableCell>
+                          {new Intl.NumberFormat('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL'
+                          }).format(employee.base_salary)}
+                        </TableCell>
+                        <TableCell>
+                          {new Date(employee.registration_date).toLocaleDateString('pt-BR')}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={employee.is_registered ? "default" : "secondary"}>
+                            {employee.is_registered ? "Sim" : "Não"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={isInactive ? "secondary" : "default"}>
+                            {isInactive ? "Inativo" : "Ativo"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            {isInactive ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleReactivate(employee.id)}
+                                title="Reativar funcionário"
+                              >
+                                <RotateCcw className="w-4 h-4" />
+                              </Button>
+                            ) : (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleEdit(employee)}
+                                  title="Editar funcionário"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleInactivate(employee.id)}
+                                  title="Inativar funcionário"
+                                >
+                                  <Ban className="w-4 h-4" />
+                                </Button>
+                                {!hasMovements && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleDelete(employee.id)}
+                                    title="Excluir funcionário"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {filteredEmployees.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center text-muted-foreground">
+                        {employees.length === 0 ? 'Nenhum funcionário cadastrado' : 'Nenhum funcionário encontrado com os filtros aplicados'}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t">
+                  <div className="text-sm text-muted-foreground">
+                    Exibindo {startIndex + 1} a {Math.min(endIndex, filteredEmployees.length)} de {filteredEmployees.length} funcionários
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </Button>
+                    <span className="text-sm">
+                      Página {currentPage} de {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      disabled={currentPage === totalPages}
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+export default EmployeeModal;

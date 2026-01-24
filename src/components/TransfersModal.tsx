@@ -1,0 +1,596 @@
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { CalendarIcon, Plus, Edit, Trash2, Eye } from "lucide-react";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
+import { TransferFormModal } from "./TransferFormModal";
+import { validateCashControlPeriod } from "@/utils/periodValidation";
+import { useFinanceiroPermissions } from "@/hooks/useFinanceiroPermissions";
+
+interface Transfer {
+  id: string;
+  store_id: string;
+  transfer_date: string;
+  source_account_id: string;
+  destination_account_id: string;
+  source_account_type: 'current' | 'cash' | 'card' | 'delivery';
+  destination_account_type: 'current' | 'cash' | 'card' | 'delivery';
+  amount: number;
+  description: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  source_account_name?: string;
+  destination_account_name?: string;
+}
+
+interface Store {
+  id: string;
+  name: string;
+}
+
+interface Account {
+  id: string;
+  name: string;
+  type: 'current' | 'cash' | 'card' | 'delivery';
+  store_name?: string;
+}
+
+interface TransfersModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
+  const [transfers, setTransfers] = useState<Transfer[]>([]);
+  const [stores, setStores] = useState<Store[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [editingTransfer, setEditingTransfer] = useState<Transfer | null>(null);
+  const [viewingTransfer, setViewingTransfer] = useState<Transfer | null>(null);
+  const { toast } = useToast();
+  const { canEdit } = useFinanceiroPermissions();
+
+  // Filtros
+  const [selectedStore, setSelectedStore] = useState<string>("ALL_STORES");
+  const [selectedAccount, setSelectedAccount] = useState<string>("ALL_ACCOUNTS");
+  const [startDate, setStartDate] = useState<Date>();
+  const [endDate, setEndDate] = useState<Date>();
+
+  useEffect(() => {
+    if (open) {
+      const loadData = async () => {
+        await fetchStores();
+        await fetchAccounts();
+      };
+      loadData();
+    }
+  }, [open]);
+
+  // Carregar transferências quando as contas estiverem prontas ou filtros mudarem
+  useEffect(() => {
+    if (open && accounts.length > 0) {
+      fetchTransfers();
+    }
+  }, [open, accounts, selectedStore, selectedAccount, startDate, endDate]);
+
+  const fetchStores = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Verificar se é admin
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, store_id')
+        .eq('id', user.id)
+        .single();
+
+      if (profile?.role === 'admin') {
+        // Admin vê todas as lojas
+        const { data, error } = await supabase
+          .from('stores')
+          .select('id, name')
+          .order('name');
+
+        if (error) throw error;
+        setStores(data || []);
+      } else {
+        // Usuário normal: buscar lojas autorizadas
+        const storeIds: string[] = [];
+        
+        if (profile?.store_id) {
+          storeIds.push(profile.store_id);
+        }
+        
+        const { data: userStores } = await supabase
+          .from('user_stores')
+          .select('store_id')
+          .eq('user_id', user.id);
+        
+        if (userStores) {
+          userStores.forEach(us => {
+            if (!storeIds.includes(us.store_id)) {
+              storeIds.push(us.store_id);
+            }
+          });
+        }
+
+        if (storeIds.length > 0) {
+          const { data, error } = await supabase
+            .from('stores')
+            .select('id, name')
+            .in('id', storeIds)
+            .order('name');
+
+          if (error) throw error;
+          setStores(data || []);
+        } else {
+          setStores([]);
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao carregar lojas:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar lojas",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const fetchAccounts = async () => {
+    try {
+      const accountPromises = [
+        // Buscar current accounts com lojas
+        supabase
+          .from('current_accounts')
+          .select(`
+            id, name,
+            current_account_stores!inner (
+              store_id,
+              stores!inner (name)
+            )
+          `)
+          .eq('is_active', true),
+        // Buscar cash accounts com lojas
+        supabase
+          .from('cash_accounts')
+          .select(`
+            id, name,
+            cash_account_stores!inner (
+              store_id,
+              stores!inner (name)
+            )
+          `)
+          .eq('is_active', true),
+        // Buscar card accounts com lojas
+        supabase
+          .from('card_accounts')
+          .select(`
+            id, name,
+            card_account_stores!inner (
+              store_id,
+              stores!inner (name)
+            )
+          `)
+          .eq('is_active', true),
+        // Buscar delivery accounts com lojas
+        supabase
+          .from('delivery_accounts')
+          .select(`
+            id, name,
+            delivery_account_stores!inner (
+              store_id,
+              stores!inner (name)
+            )
+          `)
+          .eq('is_active', true)
+      ];
+
+      const [currentResult, cashResult, cardResult, deliveryResult] = await Promise.all(accountPromises);
+
+      const allAccounts = [
+        ...(currentResult.data || []).map(acc => ({ 
+          id: acc.id, 
+          name: acc.name, 
+          type: 'current' as const,
+          store_name: acc.current_account_stores?.[0]?.stores?.name || ''
+        })),
+        ...(cashResult.data || []).map(acc => ({ 
+          id: acc.id, 
+          name: acc.name, 
+          type: 'cash' as const,
+          store_name: acc.cash_account_stores?.[0]?.stores?.name || ''
+        })),
+        ...(cardResult.data || []).map(acc => ({ 
+          id: acc.id, 
+          name: acc.name, 
+          type: 'card' as const,
+          store_name: acc.card_account_stores?.[0]?.stores?.name || ''
+        })),
+        ...(deliveryResult.data || []).map(acc => ({ 
+          id: acc.id, 
+          name: acc.name, 
+          type: 'delivery' as const,
+          store_name: acc.delivery_account_stores?.[0]?.stores?.name || ''
+        }))
+      ];
+
+      setAccounts(allAccounts);
+    } catch (error) {
+      console.error('Erro ao carregar contas:', error);
+    }
+  };
+
+  const fetchTransfers = async () => {
+    setLoading(true);
+    let query = supabase
+      .from('transfers')
+      .select('*')
+      .order('transfer_date', { ascending: false });
+
+    if (selectedStore && selectedStore !== "ALL_STORES") {
+      query = query.eq('store_id', selectedStore);
+    }
+
+    if (startDate) {
+      query = query.gte('transfer_date', format(startDate, 'yyyy-MM-dd'));
+    }
+
+    if (endDate) {
+      query = query.lte('transfer_date', format(endDate, 'yyyy-MM-dd'));
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar transferências",
+        variant: "destructive",
+      });
+      setLoading(false);
+      return;
+    }
+
+    // Enriquecer com nomes das contas
+    const enrichedTransfers = data?.map(transfer => {
+      const sourceAccount = accounts.find(acc => 
+        acc.id === transfer.source_account_id && acc.type === transfer.source_account_type
+      );
+      const destinationAccount = accounts.find(acc => 
+        acc.id === transfer.destination_account_id && acc.type === transfer.destination_account_type
+      );
+
+      return {
+        ...transfer,
+        source_account_name: sourceAccount?.name || 'Conta não encontrada',
+        destination_account_name: destinationAccount?.name || 'Conta não encontrada',
+      } as Transfer;
+    }) || [];
+
+    // Filtrar por conta se selecionada
+    let filteredTransfers = enrichedTransfers;
+    if (selectedAccount && selectedAccount !== "ALL_ACCOUNTS") {
+      filteredTransfers = enrichedTransfers.filter(transfer => 
+        transfer.source_account_id === selectedAccount || transfer.destination_account_id === selectedAccount
+      );
+    }
+
+    setTransfers(filteredTransfers);
+    setLoading(false);
+  };
+
+  const handleDelete = async (id: string, transferDate: string) => {
+    if (!confirm("Tem certeza que deseja excluir esta transferência?")) return;
+
+    // Verificar se o período está bloqueado para pagamento
+    console.log('🔍 Verificando bloqueio de período para exclusão de transferência:', {
+      transferDate,
+      year: new Date(transferDate + 'T12:00:00').getUTCFullYear(),
+      month: new Date(transferDate + 'T12:00:00').getUTCMonth() + 1
+    });
+
+    const paymentValidation = await validateCashControlPeriod.pagamento(transferDate);
+    
+    console.log('📊 Validação de período para exclusão de transferência:', {
+      paymentValidation
+    });
+
+    if (paymentValidation.blocked) {
+      toast({
+        title: "Período Bloqueado",
+        description: paymentValidation.message || "O período está bloqueado para operações de transferência",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const { error } = await supabase
+      .from('transfers')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      toast({
+        title: "Erro",
+        description: "Erro ao excluir transferência",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Sucesso",
+      description: "Transferência excluída com sucesso",
+    });
+
+    fetchTransfers();
+  };
+
+  const handleEdit = (transfer: Transfer) => {
+    setEditingTransfer(transfer);
+    setShowForm(true);
+  };
+
+  const handleView = (transfer: Transfer) => {
+    setViewingTransfer(transfer);
+    setShowForm(true);
+  };
+
+  const handleFormClose = () => {
+    setShowForm(false);
+    setEditingTransfer(null);
+    setViewingTransfer(null);
+    fetchTransfers();
+  };
+
+  const getAccountTypeLabel = (type: string) => {
+    const labels = {
+      current: 'Conta Corrente',
+      cash: 'Conta Caixa',
+      card: 'Conta Cartão',
+      delivery: 'Delivery'
+    };
+    return labels[type as keyof typeof labels] || type;
+  };
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(value);
+  };
+
+  return (
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Transferências</DialogTitle>
+            <DialogDescription>
+              Gerencie as transferências entre suas contas financeiras
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Filtros */}
+          <div className="space-y-4 border-b pb-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <label className="text-sm font-medium mb-2 block">Loja</label>
+                <Select value={selectedStore} onValueChange={setSelectedStore}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todas as lojas" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL_STORES">Todas as lojas</SelectItem>
+                    {stores.map((store) => (
+                      <SelectItem key={store.id} value={store.id}>
+                        {store.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium mb-2 block">Conta</label>
+                <Select value={selectedAccount} onValueChange={setSelectedAccount}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todas as contas" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL_ACCOUNTS">Todas as contas</SelectItem>
+                    {accounts.map((account) => (
+                      <SelectItem key={account.id} value={account.id}>
+                        {account.name} ({getAccountTypeLabel(account.type)}){account.store_name ? ` - ${account.store_name}` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium mb-2 block">Data Início</label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !startDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {startDate ? format(startDate, "PPP", { locale: ptBR }) : "Selecionar data"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={startDate}
+                      onSelect={setStartDate}
+                      initialFocus
+                      className="pointer-events-auto"
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium mb-2 block">Data Fim</label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !endDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {endDate ? format(endDate, "PPP", { locale: ptBR }) : "Selecionar data"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={endDate}
+                      onSelect={setEndDate}
+                      initialFocus
+                      className="pointer-events-auto"
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+          </div>
+
+          {/* Botão Cadastrar */}
+          {canEdit && (
+            <div className="flex justify-end">
+              <Button onClick={() => setShowForm(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                Cadastrar Transferência
+              </Button>
+            </div>
+          )}
+
+          {/* Tabela */}
+          <div className="border rounded-lg">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Data</TableHead>
+                  <TableHead>Conta Origem</TableHead>
+                  <TableHead>Conta Destino</TableHead>
+                  <TableHead className="text-right">Valor</TableHead>
+                  <TableHead>Histórico</TableHead>
+                  <TableHead className="text-center">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8">
+                      Carregando...
+                    </TableCell>
+                  </TableRow>
+                ) : transfers.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8">
+                      Nenhuma transferência encontrada
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  transfers.map((transfer) => (
+                    <TableRow key={transfer.id}>
+                      <TableCell>
+                        {(() => {
+                          // Debug: verificar como a data está sendo lida do banco
+                          console.log('Data do banco:', transfer.transfer_date);
+                          console.log('Data com T12:00:00:', transfer.transfer_date + 'T12:00:00');
+                          console.log('Data formatada:', format(new Date(transfer.transfer_date + 'T12:00:00'), 'dd/MM/yyyy', { locale: ptBR }));
+                          return format(new Date(transfer.transfer_date + 'T12:00:00'), 'dd/MM/yyyy', { locale: ptBR });
+                        })()}
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{transfer.source_account_name}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {getAccountTypeLabel(transfer.source_account_type)}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{transfer.destination_account_name}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {getAccountTypeLabel(transfer.destination_account_type)}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right font-medium">
+                        {formatCurrency(transfer.amount)}
+                      </TableCell>
+                      <TableCell>{transfer.description || '-'}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-2 justify-center">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleView(transfer)}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          {canEdit && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEdit(transfer)}
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDelete(transfer.id, transfer.transfer_date)}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <TransferFormModal
+        open={showForm}
+        onOpenChange={handleFormClose}
+        transfer={editingTransfer || viewingTransfer}
+        readonly={!!viewingTransfer}
+        stores={stores}
+        accounts={accounts}
+      />
+    </>
+  );
+}
