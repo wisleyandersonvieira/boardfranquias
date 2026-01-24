@@ -690,8 +690,8 @@ serve(async (req) => {
     const dataContext = `
 ## Dados Financeiros Disponíveis (${new Date().toLocaleDateString('pt-BR')})
 
-### Lojas Acessíveis (${financialData.stores.length}):
-${financialData.stores.map((s: any) => `- ${s.code}: ${s.name}`).join('\n')}
+### Lojas Acessíveis (${financialData.stores?.length || 0}):
+${financialData.stores?.map((s: any) => `- ${s.code}: ${s.name}`).join('\n') || 'Nenhuma loja encontrada'}
 
 ### FATURAMENTO (Período: ${financialData.faturamento.periodo.inicio} a ${financialData.faturamento.periodo.fim}):
 **IMPORTANTE: O faturamento é calculado com base nos grupos configurados no parâmetro "faturamento" do sistema.**
