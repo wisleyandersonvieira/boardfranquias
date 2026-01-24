@@ -40,6 +40,7 @@ interface Store {
   id: string;
   name: string;
   code: string;
+  matrix_id: string;
 }
 
 interface Profile {
@@ -121,7 +122,7 @@ const Users = () => {
     try {
       const { data, error } = await supabase
         .from('stores')
-        .select('id, name, code')
+        .select('id, name, code, matrix_id')
         .order('name');
 
       if (error) throw error;
