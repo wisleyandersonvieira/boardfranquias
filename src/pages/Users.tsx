@@ -3,16 +3,18 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Check, X, Store, Settings, UserCog, UserPlus, ShieldAlert, KeyRound, Loader2 } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ArrowLeft, Check, X, Store, Settings, UserCog, UserPlus, ShieldAlert, KeyRound, Loader2, Users as UsersIcon, Building2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import CreateUserModal from "@/components/CreateUserModal";
 import { ResetPasswordModal } from "@/components/ResetPasswordModal";
 import { useConfiguracoesPermissions } from "@/hooks/useConfiguracoesPermissions";
+import MatricesTab from "@/components/MatricesTab";
 
 interface User {
   id: string;
@@ -52,6 +54,7 @@ const Users = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
   const [resetPasswordUser, setResetPasswordUser] = useState<{ id: string; name: string; email: string } | null>(null);
+  const [activeTab, setActiveTab] = useState("users");
   const navigate = useNavigate();
   const { toast } = useToast();
   const { hasAccess, loading: permissionsLoading } = useConfiguracoesPermissions();
@@ -252,18 +255,6 @@ const Users = () => {
     setIsStoreDialogOpen(true);
   };
 
-  const getStoreNames = (user: User) => {
-    const userStoreIds = user.user_stores?.map(us => us.store_id) || [];
-    if (userStoreIds.length === 0) return "Nenhuma";
-    
-    const storeNames = userStoreIds.map(storeId => {
-      const store = stores.find(s => s.id === storeId);
-      return store ? `${store.name} (${store.code})` : "Loja não encontrada";
-    });
-    
-    return storeNames.join(", ");
-  };
-
   const handleStoreToggle = (storeId: string) => {
     setSelectedStoreIds(prev => 
       prev.includes(storeId) 
@@ -353,19 +344,21 @@ const Users = () => {
             <div>
               <h1 className="text-3xl font-bold">Gestão de Usuários</h1>
               <p className="text-muted-foreground">
-                Aprovar novos usuários e gerenciar lojas vinculadas
+                Gerenciar usuários, perfis e matrizes do sistema
               </p>
             </div>
           </div>
           
           <div className="flex gap-2">
-            <Button 
-              onClick={() => setIsCreateUserOpen(true)}
-              className="flex items-center gap-2"
-            >
-              <UserPlus className="h-4 w-4" />
-              Novo Usuário
-            </Button>
+            {activeTab === "users" && (
+              <Button 
+                onClick={() => setIsCreateUserOpen(true)}
+                className="flex items-center gap-2"
+              >
+                <UserPlus className="h-4 w-4" />
+                Novo Usuário
+              </Button>
+            )}
             <Button 
               onClick={() => navigate("/profiles")}
               variant="outline"
@@ -377,116 +370,136 @@ const Users = () => {
           </div>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Usuários do Sistema</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Perfil</TableHead>
-                  <TableHead>Data Cadastro</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {users.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      Nenhum usuário encontrado
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  users.map((user) => (
-                    <TableRow key={user.id}>
-                      <TableCell className="font-medium">{user.name}</TableCell>
-                      <TableCell>{user.email}</TableCell>
-                      <TableCell>
-                        <Badge variant={user.is_active ? "default" : "secondary"}>
-                          {user.is_active ? "Aprovado" : "Pendente"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {user.user_profiles?.name || "Nenhum perfil"}
-                      </TableCell>
-                      <TableCell>
-                        {new Date(user.created_at).toLocaleDateString('pt-BR')}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex gap-2 justify-end">
-                          {!user.is_active ? (
-                            <>
-                              <Button
-                                size="sm"
-                                onClick={() => handleApproveUser(user.id)}
-                                className="h-8"
-                              >
-                                <Check className="h-4 w-4 mr-1" />
-                                Aprovar
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => handleRejectUser(user.id)}
-                                className="h-8"
-                              >
-                                <X className="h-4 w-4 mr-1" />
-                                Rejeitar
-                              </Button>
-                            </>
-                          ) : (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleRejectUser(user.id)}
-                              className="h-8"
-                            >
-                              <X className="h-4 w-4 mr-1" />
-                              Desativar
-                            </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => openProfileDialog(user)}
-                            className="h-8"
-                          >
-                            <UserCog className="h-4 w-4 mr-1" />
-                            Perfil
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => openStoreDialog(user)}
-                            className="h-8"
-                          >
-                            <Store className="h-4 w-4 mr-1" />
-                            Loja
-                          </Button>
-                          {isAdmin && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openResetPasswordModal(user)}
-                              className="h-8"
-                            >
-                              <KeyRound className="h-4 w-4 mr-1" />
-                              Redefinir Senha
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
+        {/* Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="mb-4">
+            <TabsTrigger value="users" className="flex items-center gap-2">
+              <UsersIcon className="h-4 w-4" />
+              Usuários
+            </TabsTrigger>
+            <TabsTrigger value="matrices" className="flex items-center gap-2">
+              <Building2 className="h-4 w-4" />
+              Matriz
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="users">
+            <Card>
+              <CardHeader>
+                <CardTitle>Usuários do Sistema</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nome</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Perfil</TableHead>
+                      <TableHead>Data Cadastro</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {users.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                          Nenhum usuário encontrado
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      users.map((user) => (
+                        <TableRow key={user.id}>
+                          <TableCell className="font-medium">{user.name}</TableCell>
+                          <TableCell>{user.email}</TableCell>
+                          <TableCell>
+                            <Badge variant={user.is_active ? "default" : "secondary"}>
+                              {user.is_active ? "Aprovado" : "Pendente"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {user.user_profiles?.name || "Nenhum perfil"}
+                          </TableCell>
+                          <TableCell>
+                            {new Date(user.created_at).toLocaleDateString('pt-BR')}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex gap-2 justify-end">
+                              {!user.is_active ? (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleApproveUser(user.id)}
+                                    className="h-8"
+                                  >
+                                    <Check className="h-4 w-4 mr-1" />
+                                    Aprovar
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    onClick={() => handleRejectUser(user.id)}
+                                    className="h-8"
+                                  >
+                                    <X className="h-4 w-4 mr-1" />
+                                    Rejeitar
+                                  </Button>
+                                </>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleRejectUser(user.id)}
+                                  className="h-8"
+                                >
+                                  <X className="h-4 w-4 mr-1" />
+                                  Desativar
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openProfileDialog(user)}
+                                className="h-8"
+                              >
+                                <UserCog className="h-4 w-4 mr-1" />
+                                Perfil
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openStoreDialog(user)}
+                                className="h-8"
+                              >
+                                <Store className="h-4 w-4 mr-1" />
+                                Loja
+                              </Button>
+                              {isAdmin && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => openResetPasswordModal(user)}
+                                  className="h-8"
+                                >
+                                  <KeyRound className="h-4 w-4 mr-1" />
+                                  Redefinir Senha
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="matrices">
+            <MatricesTab />
+          </TabsContent>
+        </Tabs>
 
         {/* Dialog para vincular loja */}
         <Dialog open={isStoreDialogOpen} onOpenChange={setIsStoreDialogOpen}>
