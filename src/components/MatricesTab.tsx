@@ -29,6 +29,7 @@ import {
 
 interface Matrix {
   id: string;
+  code: number;
   name: string;
   cnpj: string | null;
   address: string | null;
@@ -82,7 +83,7 @@ const MatricesTab = () => {
       const { data, error } = await supabase
         .from('matrices')
         .select('*')
-        .order('name');
+        .order('code');
 
       if (error) throw error;
       setMatrices(data || []);
@@ -246,6 +247,7 @@ const MatricesTab = () => {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-16">Código</TableHead>
                 <TableHead>Nome</TableHead>
                 <TableHead>CNPJ</TableHead>
                 <TableHead>Cidade/UF</TableHead>
@@ -258,13 +260,14 @@ const MatricesTab = () => {
             <TableBody>
               {matrices.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     Nenhuma matriz cadastrada
                   </TableCell>
                 </TableRow>
               ) : (
                 matrices.map((matrix) => (
                   <TableRow key={matrix.id}>
+                    <TableCell className="font-medium">{matrix.code}</TableCell>
                     <TableCell className="font-medium">{matrix.name}</TableCell>
                     <TableCell>{matrix.cnpj || "-"}</TableCell>
                     <TableCell>

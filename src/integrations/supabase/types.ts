@@ -1960,6 +1960,7 @@ export type Database = {
           address: string | null
           city: string | null
           cnpj: string | null
+          code: number
           created_at: string
           email: string | null
           id: string
@@ -1973,6 +1974,7 @@ export type Database = {
           address?: string | null
           city?: string | null
           cnpj?: string | null
+          code?: number
           created_at?: string
           email?: string | null
           id?: string
@@ -1986,6 +1988,7 @@ export type Database = {
           address?: string | null
           city?: string | null
           cnpj?: string | null
+          code?: number
           created_at?: string
           email?: string | null
           id?: string
