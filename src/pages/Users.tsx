@@ -64,6 +64,7 @@ const Users = () => {
   const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
   const [resetPasswordUser, setResetPasswordUser] = useState<{ id: string; name: string; email: string } | null>(null);
   const [isMasterUser, setIsMasterUser] = useState(false);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | undefined>(undefined);
   const [activeTab, setActiveTab] = useState("users");
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -185,6 +186,7 @@ const Users = () => {
 
       setIsAdmin(profile?.role === 'admin');
       setIsMasterUser(profile?.email === 'wisley_anderson@hotmail.com');
+      setCurrentUserEmail(profile?.email);
     } catch (error) {
       console.error('Error checking admin status:', error);
     }
@@ -661,6 +663,7 @@ const Users = () => {
           stores={stores}
           profiles={profiles}
           matrices={matrices}
+          currentUserEmail={currentUserEmail}
         />
 
         {/* Modal para redefinir senha */}

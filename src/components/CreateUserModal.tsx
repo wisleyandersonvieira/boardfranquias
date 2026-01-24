@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,7 +43,10 @@ interface CreateUserModalProps {
   stores: Store[];
   profiles: Profile[];
   matrices: Matrix[];
+  currentUserEmail?: string;
 }
+
+const MASTER_USER_EMAIL = "wisley_anderson@hotmail.com";
 
 const CreateUserModal = ({
   isOpen,
@@ -52,6 +55,7 @@ const CreateUserModal = ({
   stores,
   profiles,
   matrices,
+  currentUserEmail,
 }: CreateUserModalProps) => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -60,7 +64,62 @@ const CreateUserModal = ({
   const [selectedProfileId, setSelectedProfileId] = useState("");
   const [selectedMatrixId, setSelectedMatrixId] = useState("");
   const [loading, setLoading] = useState(false);
+  const [matrixUsersCount, setMatrixUsersCount] = useState<Record<string, number>>({});
   const { toast } = useToast();
+
+  const isMasterUser = currentUserEmail === MASTER_USER_EMAIL;
+
+  // Buscar contagem de usuários com perfil "Matriz" por matriz
+  useEffect(() => {
+    const fetchMatrixUsersCount = async () => {
+      // Buscar o ID do perfil "Matriz"
+      const { data: matrizProfile } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('name', 'Matriz')
+        .maybeSingle();
+
+      if (!matrizProfile) return;
+
+      // Buscar quantos usuários com perfil "Matriz" existem por matriz
+      const { data: counts } = await supabase
+        .from('profiles')
+        .select('matrix_id')
+        .eq('profile_id', matrizProfile.id);
+
+      if (counts) {
+        const countMap: Record<string, number> = {};
+        counts.forEach(item => {
+          if (item.matrix_id) {
+            countMap[item.matrix_id] = (countMap[item.matrix_id] || 0) + 1;
+          }
+        });
+        setMatrixUsersCount(countMap);
+      }
+    };
+
+    if (isOpen) {
+      fetchMatrixUsersCount();
+    }
+  }, [isOpen]);
+
+  // Filtrar perfis disponíveis baseado no usuário atual
+  const availableProfiles = useMemo(() => {
+    if (isMasterUser) {
+      return profiles; // Usuário mestre pode ver todos os perfis
+    }
+    // Outros usuários não podem ver o perfil "Matriz"
+    return profiles.filter(p => p.name !== 'Matriz');
+  }, [profiles, isMasterUser]);
+
+  // Verificar se pode selecionar o perfil "Matriz" para a matriz selecionada
+  const canSelectMatrizProfile = useMemo(() => {
+    if (!selectedMatrixId) return true;
+    const matrizProfile = profiles.find(p => p.name === 'Matriz');
+    if (!matrizProfile) return true;
+    // Se já existe um usuário com perfil "Matriz" nesta matriz, não permitir
+    return (matrixUsersCount[selectedMatrixId] || 0) === 0;
+  }, [selectedMatrixId, matrixUsersCount, profiles]);
 
   const handleStoreToggle = (storeId: string) => {
     setSelectedStoreIds((prev) =>
@@ -105,6 +164,17 @@ const CreateUserModal = ({
         variant: "destructive",
         title: "Erro",
         description: "Selecione uma matriz.",
+      });
+      return;
+    }
+
+    // Validar se está tentando criar usuário com perfil "Matriz" e já existe um na matriz
+    const matrizProfile = profiles.find(p => p.name === 'Matriz');
+    if (matrizProfile && selectedProfileId === matrizProfile.id && !canSelectMatrizProfile) {
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: "Esta matriz já possui um usuário com perfil Matriz. Cada matriz só pode ter um usuário com este perfil.",
       });
       return;
     }
@@ -251,13 +321,27 @@ const CreateUserModal = ({
                 <SelectValue placeholder="Selecione um perfil" />
               </SelectTrigger>
               <SelectContent>
-                {profiles.map((profile) => (
-                  <SelectItem key={profile.id} value={profile.id}>
-                    {profile.name}
-                  </SelectItem>
-                ))}
+                {availableProfiles.map((profile) => {
+                  const isMatrizProfile = profile.name === 'Matriz';
+                  const isDisabled = isMatrizProfile && !canSelectMatrizProfile;
+                  return (
+                    <SelectItem 
+                      key={profile.id} 
+                      value={profile.id}
+                      disabled={isDisabled}
+                    >
+                      {profile.name}
+                      {isDisabled && " (matriz já possui usuário)"}
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
+            {isMasterUser && (
+              <p className="text-xs text-muted-foreground">
+                Como usuário mestre, você pode criar usuários com perfil "Matriz".
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
