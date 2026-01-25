@@ -617,6 +617,44 @@ export type Database = {
           },
         ]
       }
+      brands: {
+        Row: {
+          contact: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          matrix_id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          contact?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          matrix_id: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          contact?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          matrix_id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brands_matrix_id_fkey"
+            columns: ["matrix_id"]
+            isOneToOne: false
+            referencedRelation: "matrices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       card_account_stores: {
         Row: {
           account_id: string
