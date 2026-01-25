@@ -2050,6 +2050,7 @@ export type Database = {
       matrices: {
         Row: {
           address: string | null
+          brand_id: string | null
           city: string | null
           cnpj: string | null
           code: number
@@ -2064,6 +2065,7 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          brand_id?: string | null
           city?: string | null
           cnpj?: string | null
           code?: number
@@ -2078,6 +2080,7 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          brand_id?: string | null
           city?: string | null
           cnpj?: string | null
           code?: number
@@ -2090,7 +2093,15 @@ export type Database = {
           state?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "matrices_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: true
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       partner_transactions: {
         Row: {
