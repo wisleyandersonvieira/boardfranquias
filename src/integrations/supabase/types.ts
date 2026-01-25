@@ -3185,6 +3185,7 @@ export type Database = {
           user_name: string
         }[]
       }
+      get_user_matrix_id: { Args: never; Returns: string }
       get_user_role: {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
