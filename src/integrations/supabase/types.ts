@@ -3267,6 +3267,11 @@ export type Database = {
       }
       get_user_store_id: { Args: never; Returns: string }
       has_cadastros_write_permission: { Args: never; Returns: boolean }
+      is_matriz_user: { Args: never; Returns: boolean }
+      store_in_user_matrix: {
+        Args: { target_store_id: string }
+        Returns: boolean
+      }
       user_can_access_task: { Args: { p_task_id: string }; Returns: boolean }
       user_can_access_task_v2: { Args: { p_task_id: string }; Returns: boolean }
       user_has_access_to_account_stores: {
@@ -3282,6 +3287,10 @@ export type Database = {
           module_name: string
           required_permission: Database["public"]["Enums"]["permission_type"]
         }
+        Returns: boolean
+      }
+      user_in_same_matrix: {
+        Args: { target_user_id: string }
         Returns: boolean
       }
     }
