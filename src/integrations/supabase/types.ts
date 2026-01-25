@@ -2132,6 +2132,7 @@ export type Database = {
           email: string | null
           id: string
           is_active: boolean
+          matrix_id: string
           name: string
           updated_at: string
         }
@@ -2142,6 +2143,7 @@ export type Database = {
           email?: string | null
           id?: string
           is_active?: boolean
+          matrix_id: string
           name: string
           updated_at?: string
         }
@@ -2152,10 +2154,19 @@ export type Database = {
           email?: string | null
           id?: string
           is_active?: boolean
+          matrix_id?: string
           name?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "partners_matrix_id_fkey"
+            columns: ["matrix_id"]
+            isOneToOne: false
+            referencedRelation: "matrices"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       period_blocks: {
         Row: {

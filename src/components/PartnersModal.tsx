@@ -13,6 +13,7 @@ import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useUserMatrix } from "@/hooks/useUserMatrix";
 
 interface Partner {
   id: string;
@@ -20,6 +21,7 @@ interface Partner {
   cpf: string | null;
   birth_date: string | null;
   email: string | null;
+  matrix_id: string;
   is_active: boolean;
   created_at: string;
 }
@@ -43,6 +45,7 @@ export const PartnersModal = ({
   const [activeTab, setActiveTab] = useState("cadastro");
   const [editingPartner, setEditingPartner] = useState<Partner | null>(null);
   const [birthDate, setBirthDate] = useState<Date | undefined>(undefined);
+  const { matrixId, matrixName } = useUserMatrix();
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -133,9 +136,18 @@ export const PartnersModal = ({
           description: "Os dados do sócio foram atualizados com sucesso.",
         });
       } else {
+        if (!matrixId) {
+          toast({
+            variant: "destructive",
+            title: "Erro",
+            description: "Usuário não associado a uma matriz.",
+          });
+          return;
+        }
+
         const { error } = await supabase
           .from("partners")
-          .insert(partnerData);
+          .insert({ ...partnerData, matrix_id: matrixId } as any);
 
         if (error) throw error;
         toast({
@@ -256,6 +268,18 @@ export const PartnersModal = ({
 
           <TabsContent value="cadastro" className="space-y-4 mt-4">
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Campo Matriz (somente leitura) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Matriz</Label>
+                  <Input 
+                    value={matrixName || 'Carregando...'} 
+                    disabled 
+                    className="bg-muted"
+                  />
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="name">Nome *</Label>
