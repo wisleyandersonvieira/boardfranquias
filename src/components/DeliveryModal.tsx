@@ -12,6 +12,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { toast } from "sonner";
 import { Pencil, Trash2, Plus, ArrowLeft, Lock, Unlock, Search } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useUserMatrix } from "@/hooks/useUserMatrix";
 
 interface DeliveryAccount {
   id: string;
@@ -24,6 +25,7 @@ interface DeliveryAccount {
   is_active: boolean;
   is_blocked: boolean;
   created_at: string;
+  matrix_id: string;
   delivery_account_stores?: { store_id: string }[] | null;
 }
 
@@ -68,6 +70,7 @@ export const DeliveryModal = ({ open, onOpenChange, canEdit = true, canDelete = 
   const [loading, setLoading] = useState(false);
   const [searchName, setSearchName] = useState("");
   const [filterStoreId, setFilterStoreId] = useState<string>("all");
+  const { matrixId, matrixName, isLoading: matrixLoading } = useUserMatrix();
 
   const form = useForm({
     resolver: zodResolver(formSchema),
@@ -209,7 +212,12 @@ export const DeliveryModal = ({ open, onOpenChange, canEdit = true, canDelete = 
 
         toast.success('Conta delivery atualizada com sucesso!');
       } else {
-        // Create new account
+        // Create new account with matrix_id
+        if (!matrixId) {
+          toast.error('Matriz do usuário não encontrada');
+          return;
+        }
+
         const { data: newAccount, error: insertError } = await supabase
           .from('delivery_accounts')
           .insert({
@@ -219,6 +227,7 @@ export const DeliveryModal = ({ open, onOpenChange, canEdit = true, canDelete = 
             email: data.email || null,
             initial_balance: data.initial_balance,
             initial_balance_date: data.initial_balance_date,
+            matrix_id: matrixId,
           })
           .select()
           .single();
@@ -518,6 +527,18 @@ export const DeliveryModal = ({ open, onOpenChange, canEdit = true, canDelete = 
 
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                {/* Campo Matriz (somente leitura) */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Matriz</Label>
+                    <Input 
+                      value={matrixName || 'Carregando...'} 
+                      disabled 
+                      className="bg-muted"
+                    />
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}

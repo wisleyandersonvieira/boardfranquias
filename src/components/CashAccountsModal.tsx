@@ -12,6 +12,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { toast } from "sonner";
 import { Pencil, Trash2, Plus, ArrowLeft, Lock, Unlock, Search } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useUserMatrix } from "@/hooks/useUserMatrix";
+
 interface CashAccount {
   id: string;
   name: string;
@@ -20,33 +22,39 @@ interface CashAccount {
   is_active: boolean;
   is_blocked: boolean;
   created_at: string;
+  matrix_id: string;
   cash_account_stores?: {
     store_id: string;
   }[];
 }
+
 interface Store {
   id: string;
   name: string;
   code: string;
 }
+
 interface CashAccountsModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   canEdit?: boolean;
   canDelete?: boolean;
 }
+
 interface FormData {
   name: string;
   initial_balance: number;
   initial_balance_date: string;
   store_ids: string[];
 }
+
 const formSchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
   initial_balance: z.number().min(0, "Saldo inicial deve ser positivo"),
   initial_balance_date: z.string().min(1, "Data do saldo inicial é obrigatória"),
   store_ids: z.array(z.string()).min(1, "Selecione pelo menos uma loja")
 });
+
 export const CashAccountsModal = ({
   open,
   onOpenChange,
@@ -60,6 +68,8 @@ export const CashAccountsModal = ({
   const [loading, setLoading] = useState(false);
   const [searchName, setSearchName] = useState("");
   const [filterStoreId, setFilterStoreId] = useState<string>("all");
+  const { matrixId, matrixName, isLoading: matrixLoading } = useUserMatrix();
+
   const form = useForm({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -198,7 +208,12 @@ export const CashAccountsModal = ({
         }
         toast.success('Conta caixa atualizada com sucesso!');
       } else {
-        // Create new account
+        // Create new account with matrix_id
+        if (!matrixId) {
+          toast.error('Matriz do usuário não encontrada');
+          return;
+        }
+
         const {
           data: newAccount,
           error: insertError
@@ -207,7 +222,8 @@ export const CashAccountsModal = ({
           initial_balance: data.initial_balance,
           initial_balance_date: data.initial_balance_date,
           bank: null,
-          account_number: null
+          account_number: null,
+          matrix_id: matrixId
         }).select().single();
         if (insertError) throw insertError;
 
@@ -443,6 +459,18 @@ export const CashAccountsModal = ({
 
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                {/* Campo Matriz (somente leitura) */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Matriz</Label>
+                    <Input 
+                      value={matrixName || 'Carregando...'} 
+                      disabled 
+                      className="bg-muted"
+                    />
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField control={form.control} name="name" render={({
                 field
