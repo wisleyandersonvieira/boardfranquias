@@ -189,9 +189,11 @@ export const StoresModal = ({ open, onOpenChange }: StoresModalProps) => {
 
   const fetchPartners = async () => {
     try {
+      // Partners are already filtered by matrix via RLS policies
+      // This ensures only partners from the user's matrix are returned
       const { data, error } = await supabase
         .from("partners")
-        .select("id, name")
+        .select("id, name, matrix_id")
         .eq("is_active", true)
         .order("name");
 
@@ -298,11 +300,12 @@ export const StoresModal = ({ open, onOpenChange }: StoresModalProps) => {
       return;
     }
 
-    // Validar código duplicado
+    // Validar código duplicado - apenas dentro da mesma matriz
     const { data: existingStore, error: checkError } = await supabase
       .from("stores")
       .select("id")
       .eq("code", formData.code)
+      .eq("matrix_id", formData.matrix_id)
       .maybeSingle();
 
     if (checkError) {
@@ -318,7 +321,7 @@ export const StoresModal = ({ open, onOpenChange }: StoresModalProps) => {
       toast({
         variant: "destructive",
         title: "Erro",
-        description: "Já existe uma loja cadastrada com este código.",
+        description: "Já existe uma loja cadastrada com este código nesta matriz.",
       });
       return;
     }
