@@ -2607,6 +2607,7 @@ export type Database = {
           email: string | null
           id: string
           is_active: boolean
+          matrix_id: string
           name: string
           phone: string | null
           state: string | null
@@ -2622,6 +2623,7 @@ export type Database = {
           email?: string | null
           id?: string
           is_active?: boolean
+          matrix_id: string
           name: string
           phone?: string | null
           state?: string | null
@@ -2637,6 +2639,7 @@ export type Database = {
           email?: string | null
           id?: string
           is_active?: boolean
+          matrix_id?: string
           name?: string
           phone?: string | null
           state?: string | null
@@ -2649,6 +2652,13 @@ export type Database = {
             columns: ["store_id"]
             isOneToOne: false
             referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "suppliers_matrix_id_fkey"
+            columns: ["matrix_id"]
+            isOneToOne: false
+            referencedRelation: "matrices"
             referencedColumns: ["id"]
           },
         ]

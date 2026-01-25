@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowLeft, Edit, Trash2, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useUserMatrix } from "@/hooks/useUserMatrix";
 
 interface Supplier {
   id: string;
@@ -32,9 +33,9 @@ const Suppliers = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [activeTab, setActiveTab] = useState("register");
-  const [userStoreId, setUserStoreId] = useState<string | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { matrixId, matrixName } = useUserMatrix();
 
   // Form state
   const [formData, setFormData] = useState({
@@ -49,26 +50,9 @@ const Suppliers = () => {
   });
 
   useEffect(() => {
-    fetchUserStoreId();
     fetchSuppliers();
   }, []);
 
-  const fetchUserStoreId = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("store_id")
-          .eq("id", user.id)
-          .single();
-        
-        setUserStoreId(profile?.store_id || null);
-      }
-    } catch (error) {
-      console.error("Error fetching user store:", error);
-    }
-  };
 
   const formatCnpjCpf = (value: string) => {
     const cleaned = value.replace(/\D/g, "");
@@ -168,18 +152,18 @@ const Suppliers = () => {
           description: "Fornecedor atualizado com sucesso!",
         });
       } else {
-        if (!userStoreId) {
+        if (!matrixId) {
           toast({
             variant: "destructive",
             title: "Erro",
-            description: "Usuário não associado a uma loja.",
+            description: "Matriz do usuário não encontrada.",
           });
           return;
         }
         
         const { error } = await supabase
           .from("suppliers")
-          .insert([{ ...formData, store_id: userStoreId }]);
+          .insert([{ ...formData, matrix_id: matrixId }]);
 
         if (error) throw error;
         toast({
@@ -306,6 +290,18 @@ const Suppliers = () => {
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleSubmit} className="space-y-4">
+                  {/* Campo Matriz (somente leitura) */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Matriz</Label>
+                      <Input 
+                        value={matrixName || 'Carregando...'} 
+                        disabled 
+                        className="bg-muted"
+                      />
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="cnpj_cpf">CNPJ</Label>

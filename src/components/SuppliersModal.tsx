@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Edit, Trash2, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useUserMatrix } from "@/hooks/useUserMatrix";
 
 interface Supplier {
   id: string;
@@ -42,6 +43,7 @@ export const SuppliersModal = ({ open, onOpenChange, canEdit = true, canDelete =
   const [activeTab, setActiveTab] = useState("register");
   const [currentPage, setCurrentPage] = useState(1);
   const { toast } = useToast();
+  const { matrixId, matrixName } = useUserMatrix();
   
   const ITEMS_PER_PAGE = 10;
 
@@ -163,9 +165,18 @@ export const SuppliersModal = ({ open, onOpenChange, canEdit = true, canDelete =
           description: "Fornecedor atualizado com sucesso!",
         });
       } else {
+        if (!matrixId) {
+          toast({
+            variant: "destructive",
+            title: "Erro",
+            description: "Matriz do usuário não encontrada.",
+          });
+          return;
+        }
+
         const { error } = await supabase
           .from("suppliers")
-          .insert([formData]);
+          .insert([{ ...formData, matrix_id: matrixId }]);
 
         if (error) throw error;
         toast({
@@ -317,6 +328,18 @@ export const SuppliersModal = ({ open, onOpenChange, canEdit = true, canDelete =
               <CardContent>
                 <ScrollArea className="h-[400px] pr-4">
                   <form onSubmit={handleSubmit} className="space-y-4">
+                    {/* Campo Matriz (somente leitura) */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Matriz</Label>
+                        <Input 
+                          value={matrixName || 'Carregando...'} 
+                          disabled 
+                          className="bg-muted"
+                        />
+                      </div>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="cnpj_cpf">CNPJ</Label>
