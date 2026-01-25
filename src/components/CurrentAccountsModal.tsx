@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useForm } from "react-hook-form";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useUserMatrix } from "@/hooks/useUserMatrix";
 import { Pencil, Trash2, Lock, Unlock, Plus, Search } from "lucide-react";
 
 interface CurrentAccount {
@@ -22,6 +23,7 @@ interface CurrentAccount {
   initial_balance_date: string;
   is_active: boolean;
   is_blocked: boolean;
+  matrix_id: string;
   current_account_stores: { store_id: string }[];
 }
 
@@ -56,6 +58,7 @@ export function CurrentAccountsModal({ open, onOpenChange, canEdit = true, canDe
   const [searchName, setSearchName] = useState("");
   const [filterStoreId, setFilterStoreId] = useState<string>("all");
   const { toast } = useToast();
+  const { matrixId, matrixName, isLoading: matrixLoading } = useUserMatrix();
 
   const form = useForm<FormData>({
     defaultValues: {
@@ -200,7 +203,16 @@ export function CurrentAccountsModal({ open, onOpenChange, canEdit = true, canDe
           description: "Conta corrente atualizada com sucesso",
         });
       } else {
-        // Create new account
+        // Create new account with matrix_id
+        if (!matrixId) {
+          toast({
+            title: "Erro",
+            description: "Matriz do usuário não encontrada",
+            variant: "destructive",
+          });
+          return;
+        }
+
         const { data: accountData, error: insertError } = await supabase
           .from('current_accounts')
           .insert({
@@ -208,7 +220,8 @@ export function CurrentAccountsModal({ open, onOpenChange, canEdit = true, canDe
             bank: data.bank,
             account_number: data.account_number,
             initial_balance: data.initial_balance,
-            initial_balance_date: data.initial_balance_date
+            initial_balance_date: data.initial_balance_date,
+            matrix_id: matrixId
           })
           .select()
           .single();
@@ -522,6 +535,18 @@ export function CurrentAccountsModal({ open, onOpenChange, canEdit = true, canDe
           ) : (
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                {/* Campo Matriz (somente leitura) */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Matriz</Label>
+                    <Input 
+                      value={matrixName || 'Carregando...'} 
+                      disabled 
+                      className="bg-muted"
+                    />
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
