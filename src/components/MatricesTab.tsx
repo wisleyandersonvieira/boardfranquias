@@ -17,6 +17,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -26,6 +33,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+
+interface Brand {
+  id: string;
+  name: string;
+}
 
 interface Matrix {
   id: string;
@@ -37,6 +49,7 @@ interface Matrix {
   state: string | null;
   phone: string | null;
   email: string | null;
+  brand_id: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -50,6 +63,7 @@ interface MatrixFormData {
   state: string;
   phone: string;
   email: string;
+  brand_id: string;
   is_active: boolean;
 }
 
@@ -61,11 +75,13 @@ const initialFormData: MatrixFormData = {
   state: "",
   phone: "",
   email: "",
+  brand_id: "",
   is_active: true,
 };
 
 const MatricesTab = () => {
   const [matrices, setMatrices] = useState<Matrix[]>([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -76,7 +92,23 @@ const MatricesTab = () => {
 
   useEffect(() => {
     fetchMatrices();
+    fetchBrands();
   }, []);
+
+  const fetchBrands = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('brands')
+        .select('id, name')
+        .eq('is_active', true)
+        .order('name');
+
+      if (error) throw error;
+      setBrands(data || []);
+    } catch (error: any) {
+      console.error('Error fetching brands:', error);
+    }
+  };
 
   const fetchMatrices = async () => {
     try {
@@ -114,6 +146,7 @@ const MatricesTab = () => {
       state: matrix.state || "",
       phone: matrix.phone || "",
       email: matrix.email || "",
+      brand_id: matrix.brand_id || "",
       is_active: matrix.is_active,
     });
     setIsDialogOpen(true);
@@ -170,6 +203,7 @@ const MatricesTab = () => {
             state: formData.state || null,
             phone: formData.phone || null,
             email: formData.email || null,
+            brand_id: formData.brand_id || null,
             is_active: formData.is_active,
           });
 
@@ -383,6 +417,38 @@ const MatricesTab = () => {
                 placeholder="UF"
                 maxLength={2}
               />
+            </div>
+            <div className="col-span-2">
+              <Label htmlFor="brand_id">Marca</Label>
+              {selectedMatrix?.brand_id ? (
+                <Input
+                  id="brand_id"
+                  value={brands.find(b => b.id === formData.brand_id)?.name || "Marca vinculada"}
+                  disabled
+                  className="bg-muted"
+                />
+              ) : (
+                <Select
+                  value={formData.brand_id}
+                  onValueChange={(value) => setFormData({ ...formData, brand_id: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione uma marca (opcional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {brands.map((brand) => (
+                      <SelectItem key={brand.id} value={brand.id}>
+                        {brand.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              {selectedMatrix?.brand_id && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  O vínculo com a marca não pode ser alterado após definido.
+                </p>
+              )}
             </div>
             <div className="col-span-2 flex items-center gap-2">
               <Switch
