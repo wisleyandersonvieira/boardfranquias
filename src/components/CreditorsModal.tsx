@@ -198,7 +198,7 @@ export function CreditorsModal({ open, onOpenChange, canEdit = true, canDelete =
             city: formData.city || null,
             state: formData.state || null,
             matrix_id: matrixId,
-          });
+          } as any);
 
         if (error) throw error;
 
