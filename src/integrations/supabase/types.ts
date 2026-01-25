@@ -1484,6 +1484,7 @@ export type Database = {
           created_at: string
           id: string
           is_active: boolean
+          matrix_id: string | null
           name: string
           updated_at: string
         }
@@ -1492,6 +1493,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          matrix_id?: string | null
           name: string
           updated_at?: string
         }
@@ -1500,10 +1502,19 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          matrix_id?: string | null
           name?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "document_types_matrix_id_fkey"
+            columns: ["matrix_id"]
+            isOneToOne: false
+            referencedRelation: "matrices"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       dre_entries: {
         Row: {

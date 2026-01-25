@@ -6,9 +6,11 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Edit, Trash2, RefreshCw, X } from "lucide-react";
+import { Plus, Edit, Trash2, RefreshCw, X, Lock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useUserMatrix } from "@/hooks/useUserMatrix";
+import { Badge } from "@/components/ui/badge";
 
 interface DocumentTypesModalProps {
   open: boolean;
@@ -22,6 +24,7 @@ interface DocumentType {
   code: string;
   name: string;
   is_active: boolean;
+  matrix_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -31,6 +34,7 @@ export function DocumentTypesModal({ open, onOpenChange, canEdit = true, canDele
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("list");
   const { toast } = useToast();
+  const { matrixId, matrixName, isLoading: matrixLoading } = useUserMatrix();
 
   // Form state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -72,7 +76,13 @@ export function DocumentTypesModal({ open, onOpenChange, canEdit = true, canDele
     setIsActive(true);
   };
 
+  // Check if document type is a default (system) type
+  const isDefaultType = (docType: DocumentType) => docType.matrix_id === null;
+
   const handleEdit = (docType: DocumentType) => {
+    // Don't allow editing default types
+    if (isDefaultType(docType)) return;
+    
     setEditingId(docType.id);
     setCode(docType.code);
     setName(docType.name);
@@ -109,12 +119,17 @@ export function DocumentTypesModal({ open, onOpenChange, canEdit = true, canDele
           description: "Tipo de documento atualizado com sucesso.",
         });
       } else {
+        if (!matrixId) {
+          throw new Error("Usuário não está vinculado a uma matriz.");
+        }
+
         const { error } = await supabase
           .from("document_types")
           .insert({
             code: code.trim().toUpperCase(),
             name: name.trim(),
             is_active: isActive,
+            matrix_id: matrixId,
           });
 
         if (error) {
@@ -144,14 +159,24 @@ export function DocumentTypesModal({ open, onOpenChange, canEdit = true, canDele
     }
   };
 
-  const handleDelete = async (id: string, code: string) => {
+  const handleDelete = async (docType: DocumentType) => {
+    // Don't allow deleting default types
+    if (isDefaultType(docType)) {
+      toast({
+        variant: "destructive",
+        title: "Não permitido",
+        description: "Tipos de documento padrão não podem ser excluídos.",
+      });
+      return;
+    }
+
     setLoading(true);
     try {
       // Check if document type is linked to accounts payable
       const { count: payableCount, error: payableError } = await supabase
         .from("accounts_payable")
         .select("*", { count: "exact", head: true })
-        .eq("document_type", code);
+        .eq("document_type", docType.code);
 
       if (payableError) throw payableError;
 
@@ -159,7 +184,7 @@ export function DocumentTypesModal({ open, onOpenChange, canEdit = true, canDele
       const { count: receivableCount, error: receivableError } = await supabase
         .from("accounts_receivable")
         .select("*", { count: "exact", head: true })
-        .eq("document_type", code);
+        .eq("document_type", docType.code);
 
       if (receivableError) throw receivableError;
 
@@ -183,7 +208,7 @@ export function DocumentTypesModal({ open, onOpenChange, canEdit = true, canDele
       const { error } = await supabase
         .from("document_types")
         .delete()
-        .eq("id", id);
+        .eq("id", docType.id);
 
       if (error) throw error;
 
@@ -204,22 +229,32 @@ export function DocumentTypesModal({ open, onOpenChange, canEdit = true, canDele
     }
   };
 
-  const handleToggleActive = async (id: string, currentStatus: boolean) => {
+  const handleToggleActive = async (docType: DocumentType) => {
+    // Don't allow toggling default types
+    if (isDefaultType(docType)) {
+      toast({
+        variant: "destructive",
+        title: "Não permitido",
+        description: "Tipos de documento padrão não podem ser alterados.",
+      });
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from("document_types")
-        .update({ is_active: !currentStatus })
-        .eq("id", id);
+        .update({ is_active: !docType.is_active })
+        .eq("id", docType.id);
 
       if (error) throw error;
 
       setDocumentTypes(prev =>
-        prev.map(dt => (dt.id === id ? { ...dt, is_active: !currentStatus } : dt))
+        prev.map(dt => (dt.id === docType.id ? { ...dt, is_active: !docType.is_active } : dt))
       );
 
       toast({
         title: "Sucesso",
-        description: `Tipo de documento ${!currentStatus ? "ativado" : "desativado"} com sucesso.`,
+        description: `Tipo de documento ${!docType.is_active ? "ativado" : "desativado"} com sucesso.`,
       });
     } catch (error: any) {
       toast({
@@ -274,6 +309,7 @@ export function DocumentTypesModal({ open, onOpenChange, canEdit = true, canDele
                   <TableRow>
                     <TableHead>Código</TableHead>
                     <TableHead>Nome</TableHead>
+                    <TableHead>Tipo</TableHead>
                     <TableHead className="text-center">Ativo</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
@@ -281,44 +317,60 @@ export function DocumentTypesModal({ open, onOpenChange, canEdit = true, canDele
                 <TableBody>
                   {documentTypes.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-center text-muted-foreground">
+                      <TableCell colSpan={5} className="text-center text-muted-foreground">
                         Nenhum tipo de documento cadastrado
                       </TableCell>
                     </TableRow>
                   ) : (
-                    documentTypes.map((docType) => (
-                      <TableRow key={docType.id}>
-                        <TableCell className="font-mono font-medium">{docType.code}</TableCell>
-                        <TableCell>{docType.name}</TableCell>
-                        <TableCell className="text-center">
-                          <Switch
-                            checked={docType.is_active}
-                            onCheckedChange={() => handleToggleActive(docType.id, docType.is_active)}
-                            disabled={!canEdit}
-                          />
-                        </TableCell>
-                        <TableCell className="text-right space-x-2">
-                          {canEdit && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleEdit(docType)}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                          )}
-                          {canDelete && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDelete(docType.id, docType.code)}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))
+                    documentTypes.map((docType) => {
+                      const isDefault = isDefaultType(docType);
+                      return (
+                        <TableRow key={docType.id} className={isDefault ? "bg-muted/30" : ""}>
+                          <TableCell className="font-mono font-medium">{docType.code}</TableCell>
+                          <TableCell>{docType.name}</TableCell>
+                          <TableCell>
+                            {isDefault ? (
+                              <Badge variant="secondary" className="gap-1">
+                                <Lock className="h-3 w-3" />
+                                Padrão
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline">Personalizado</Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Switch
+                              checked={docType.is_active}
+                              onCheckedChange={() => handleToggleActive(docType)}
+                              disabled={!canEdit || isDefault}
+                            />
+                          </TableCell>
+                          <TableCell className="text-right space-x-2">
+                            {canEdit && !isDefault && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEdit(docType)}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {canDelete && !isDefault && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDelete(docType)}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            )}
+                            {isDefault && (
+                              <span className="text-xs text-muted-foreground px-2">Protegido</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
                   )}
                 </TableBody>
               </Table>
@@ -347,6 +399,15 @@ export function DocumentTypesModal({ open, onOpenChange, canEdit = true, canDele
                     placeholder="Ex: Nota Fiscal"
                   />
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Matriz</Label>
+                <Input
+                  value={matrixLoading ? "Carregando..." : matrixName || "Não vinculado"}
+                  disabled
+                  className="bg-muted"
+                />
               </div>
 
               <div className="flex items-center space-x-2">
