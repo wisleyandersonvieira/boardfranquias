@@ -56,6 +56,7 @@ export const StoresModal = ({ open, onOpenChange }: StoresModalProps) => {
   const [activeTab, setActiveTab] = useState("register");
   const [userMatrixId, setUserMatrixId] = useState<string>("");
   const [userMatrixName, setUserMatrixName] = useState<string>("");
+  const [isMasterUser, setIsMasterUser] = useState(false);
   const { toast } = useToast();
 
   // Form state
@@ -78,15 +79,25 @@ export const StoresModal = ({ open, onOpenChange }: StoresModalProps) => {
   useEffect(() => {
     if (open) {
       fetchUserMatrix();
-      fetchStores();
       fetchPartners();
     }
   }, [open]);
+
+  // Fetch stores after userMatrixId is set
+  useEffect(() => {
+    if (open && (userMatrixId || isMasterUser)) {
+      fetchStores();
+    }
+  }, [open, userMatrixId, isMasterUser]);
 
   const fetchUserMatrix = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+
+      // Check if master user
+      const masterUser = user.email === 'wisley_anderson@hotmail.com';
+      setIsMasterUser(masterUser);
 
       const { data: profile, error } = await supabase
         .from('profiles')
@@ -149,13 +160,16 @@ export const StoresModal = ({ open, onOpenChange }: StoresModalProps) => {
   const fetchStores = async () => {
     setLoading(true);
     try {
-      const userStoreIds = await fetchUserStoreIds();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const masterUser = user.email === 'wisley_anderson@hotmail.com';
       
       let query = supabase.from("stores").select("*").order("name");
       
-      // If user has specific stores, filter by them
-      if (userStoreIds.length > 0) {
-        query = query.in('id', userStoreIds);
+      // If not master user, filter by user's matrix
+      if (!masterUser && userMatrixId) {
+        query = query.eq('matrix_id', userMatrixId);
       }
       
       const { data, error } = await query;
