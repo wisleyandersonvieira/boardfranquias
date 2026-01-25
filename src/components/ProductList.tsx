@@ -30,6 +30,7 @@ interface Product {
   group?: { name: string };
   subgroup?: { name: string };
   unit?: { name: string; symbol: string };
+  matrix?: { name: string; code: number };
   cost_price?: number;
   barcode?: string;
   product_type?: string;
@@ -90,7 +91,8 @@ export const ProductList = ({ canEdit = true, canDelete = true }: ProductListPro
           group_id, subgroup_id, unit_id, product_type, function_type,
           group:account_groups!group_id(name),
           subgroup:account_groups!subgroup_id(name),
-          unit:units_of_measure!unit_id(name, symbol)
+          unit:units_of_measure!unit_id(name, symbol),
+          matrix:matrices!matrix_id(name, code)
         `)
         .order("code");
 
@@ -404,13 +406,14 @@ export const ProductList = ({ canEdit = true, canDelete = true }: ProductListPro
           <Table>
             <TableHeader className="bg-card">
               <TableRow className="hover:bg-transparent">
-                <TableHead className="w-[8%] h-9 py-1">Código</TableHead>
-                <TableHead className="w-[27%] h-9 py-1">Descrição</TableHead>
-                <TableHead className="w-[15%] h-9 py-1">Grupo</TableHead>
-                <TableHead className="w-[15%] h-9 py-1">Subgrupo</TableHead>
-                <TableHead className="w-[12%] h-9 py-1">Unidade</TableHead>
+                <TableHead className="w-[6%] h-9 py-1">Código</TableHead>
+                <TableHead className="w-[10%] h-9 py-1">Matriz</TableHead>
+                <TableHead className="w-[22%] h-9 py-1">Descrição</TableHead>
+                <TableHead className="w-[12%] h-9 py-1">Grupo</TableHead>
+                <TableHead className="w-[12%] h-9 py-1">Subgrupo</TableHead>
+                <TableHead className="w-[10%] h-9 py-1">Unidade</TableHead>
                 <TableHead className="w-[10%] h-9 py-1">Status</TableHead>
-                <TableHead className="text-right w-[13%] h-9 py-1">Ações</TableHead>
+                <TableHead className="text-right w-[10%] h-9 py-1">Ações</TableHead>
               </TableRow>
             </TableHeader>
           </Table>
@@ -420,21 +423,24 @@ export const ProductList = ({ canEdit = true, canDelete = true }: ProductListPro
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center h-12">
+                    <TableCell colSpan={8} className="text-center h-12">
                       Carregando...
                     </TableCell>
                   </TableRow>
                 ) : paginatedProducts.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground h-12">
+                    <TableCell colSpan={8} className="text-center text-muted-foreground h-12">
                       Nenhum produto encontrado
                     </TableCell>
                   </TableRow>
                 ) : (
                   paginatedProducts.map((product) => (
                     <TableRow key={product.id} className="h-10">
-                      <TableCell className="font-mono py-1 w-[8%]">{product.code}</TableCell>
-                      <TableCell className="py-1 w-[27%]">
+                      <TableCell className="font-mono py-1 w-[6%]">{product.code}</TableCell>
+                      <TableCell className="py-1 w-[10%]">
+                        {product.matrix ? `${product.matrix.code} - ${product.matrix.name}` : "-"}
+                      </TableCell>
+                      <TableCell className="py-1 w-[22%]">
                         <div>
                           <div className="font-medium">{product.name}</div>
                           {product.description && (
@@ -442,9 +448,9 @@ export const ProductList = ({ canEdit = true, canDelete = true }: ProductListPro
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="py-1 w-[15%]">{product.group?.name || "-"}</TableCell>
-                      <TableCell className="py-1 w-[15%]">{product.subgroup?.name || "-"}</TableCell>
-                      <TableCell className="py-1 w-[12%]">
+                      <TableCell className="py-1 w-[12%]">{product.group?.name || "-"}</TableCell>
+                      <TableCell className="py-1 w-[12%]">{product.subgroup?.name || "-"}</TableCell>
+                      <TableCell className="py-1 w-[10%]">
                         {product.unit ? `${product.unit.name} (${product.unit.symbol})` : "-"}
                       </TableCell>
                       <TableCell className="py-1 w-[10%]">
@@ -457,7 +463,7 @@ export const ProductList = ({ canEdit = true, canDelete = true }: ProductListPro
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right py-1 w-[13%]">
+                      <TableCell className="text-right py-1 w-[10%]">
                         <div className="flex gap-1 justify-end">
                           <Button
                             variant="ghost"
