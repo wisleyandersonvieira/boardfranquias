@@ -3274,6 +3274,10 @@ export type Database = {
         Returns: number
       }
       get_next_product_code: { Args: never; Returns: number }
+      get_next_product_code_by_matrix: {
+        Args: { p_matrix_id: string }
+        Returns: number
+      }
       get_store_members: {
         Args: { store_ids: string[] }
         Returns: {
