@@ -170,19 +170,26 @@ const MatricesTab = () => {
     setSaving(true);
     try {
       if (selectedMatrix) {
-        // Update
+        // Update - only include brand_id if matrix doesn't have one yet
+        const updateData: Record<string, any> = {
+          name: formData.name,
+          cnpj: formData.cnpj || null,
+          address: formData.address || null,
+          city: formData.city || null,
+          state: formData.state || null,
+          phone: formData.phone || null,
+          email: formData.email || null,
+          is_active: formData.is_active,
+        };
+        
+        // Only allow setting brand_id if it wasn't already set
+        if (!selectedMatrix.brand_id && formData.brand_id) {
+          updateData.brand_id = formData.brand_id;
+        }
+        
         const { error } = await supabase
           .from('matrices')
-          .update({
-            name: formData.name,
-            cnpj: formData.cnpj || null,
-            address: formData.address || null,
-            city: formData.city || null,
-            state: formData.state || null,
-            phone: formData.phone || null,
-            email: formData.email || null,
-            is_active: formData.is_active,
-          })
+          .update(updateData)
           .eq('id', selectedMatrix.id);
 
         if (error) throw error;
