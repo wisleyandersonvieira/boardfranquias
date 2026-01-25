@@ -3125,6 +3125,7 @@ export type Database = {
           created_at: string
           id: string
           is_active: boolean
+          matrix_id: string
           name: string
           symbol: string
           updated_at: string
@@ -3133,6 +3134,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          matrix_id: string
           name: string
           symbol: string
           updated_at?: string
@@ -3141,11 +3143,20 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          matrix_id?: string
           name?: string
           symbol?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "units_of_measure_matrix_id_fkey"
+            columns: ["matrix_id"]
+            isOneToOne: false
+            referencedRelation: "matrices"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_permissions: {
         Row: {
