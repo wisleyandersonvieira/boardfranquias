@@ -65,6 +65,8 @@ const Users = () => {
   const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
   const [resetPasswordUser, setResetPasswordUser] = useState<{ id: string; name: string; email: string } | null>(null);
   const [isMasterUser, setIsMasterUser] = useState(false);
+  const [isMatrixUser, setIsMatrixUser] = useState(false);
+  const [currentUserMatrixId, setCurrentUserMatrixId] = useState<string | null>(null);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | undefined>(undefined);
   const [activeTab, setActiveTab] = useState("users");
   const navigate = useNavigate();
@@ -181,13 +183,25 @@ const Users = () => {
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('role, email')
+        .select('role, email, matrix_id, profile_id')
         .eq('id', user.id)
         .single();
 
       setIsAdmin(profile?.role === 'admin');
       setIsMasterUser(profile?.email === 'wisley_anderson@hotmail.com');
       setCurrentUserEmail(profile?.email);
+      setCurrentUserMatrixId(profile?.matrix_id || null);
+
+      // Verificar se o usuário tem perfil "Matriz"
+      if (profile?.profile_id) {
+        const { data: userProfile } = await supabase
+          .from('user_profiles')
+          .select('name')
+          .eq('id', profile.profile_id)
+          .maybeSingle();
+        
+        setIsMatrixUser(userProfile?.name === 'Matriz');
+      }
     } catch (error) {
       console.error('Error checking admin status:', error);
     }
@@ -443,14 +457,29 @@ const Users = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {users.length === 0 ? (
+                    {users.filter(user => {
+                      // Usuário master vê todos
+                      if (isMasterUser) return true;
+                      // Usuário matriz vê apenas usuários da sua matriz
+                      if (isMatrixUser && currentUserMatrixId) {
+                        return user.matrix_id === currentUserMatrixId;
+                      }
+                      // Outros usuários não veem ninguém (ou apenas a si mesmos se necessário)
+                      return user.matrix_id === currentUserMatrixId;
+                    }).length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                           Nenhum usuário encontrado
                         </TableCell>
                       </TableRow>
                     ) : (
-                      users.map((user) => (
+                      users.filter(user => {
+                        if (isMasterUser) return true;
+                        if (isMatrixUser && currentUserMatrixId) {
+                          return user.matrix_id === currentUserMatrixId;
+                        }
+                        return user.matrix_id === currentUserMatrixId;
+                      }).map((user) => (
                         <TableRow key={user.id}>
                           <TableCell className="font-medium">{user.name}</TableCell>
                           <TableCell>{user.email}</TableCell>
@@ -562,7 +591,15 @@ const Users = () => {
               <div className="space-y-2">
                 <Label htmlFor="stores">Lojas</Label>
                 <div className="border rounded-md p-2 max-h-40 overflow-y-auto">
-                  {stores.map((store) => (
+                  {stores
+                    .filter(store => {
+                      // Filtrar lojas pela matriz do usuário selecionado
+                      if (selectedUser?.matrix_id) {
+                        return store.matrix_id === selectedUser.matrix_id;
+                      }
+                      return true;
+                    })
+                    .map((store) => (
                     <div key={store.id} className="flex items-center space-x-2 py-1">
                       <input
                         type="checkbox"
