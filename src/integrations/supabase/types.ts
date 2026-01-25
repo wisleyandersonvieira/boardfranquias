@@ -1209,6 +1209,7 @@ export type Database = {
           email: string | null
           id: string
           is_active: boolean
+          matrix_id: string
           name: string
           phone: string | null
           state: string | null
@@ -1224,6 +1225,7 @@ export type Database = {
           email?: string | null
           id?: string
           is_active?: boolean
+          matrix_id: string
           name: string
           phone?: string | null
           state?: string | null
@@ -1239,6 +1241,7 @@ export type Database = {
           email?: string | null
           id?: string
           is_active?: boolean
+          matrix_id?: string
           name?: string
           phone?: string | null
           state?: string | null
@@ -1246,6 +1249,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "creditors_matrix_id_fkey"
+            columns: ["matrix_id"]
+            isOneToOne: false
+            referencedRelation: "matrices"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "fk_creditors_store"
             columns: ["store_id"]
