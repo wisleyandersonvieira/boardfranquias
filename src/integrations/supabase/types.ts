@@ -2244,6 +2244,7 @@ export type Database = {
           id: string
           is_active: boolean
           is_blocked: boolean
+          matrix_id: string
           name: string
           product_type: string | null
           subgroup_id: string | null
@@ -2263,6 +2264,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           is_blocked?: boolean
+          matrix_id: string
           name: string
           product_type?: string | null
           subgroup_id?: string | null
@@ -2282,6 +2284,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           is_blocked?: boolean
+          matrix_id?: string
           name?: string
           product_type?: string | null
           subgroup_id?: string | null
@@ -2295,6 +2298,13 @@ export type Database = {
             columns: ["group_id"]
             isOneToOne: false
             referencedRelation: "account_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_matrix_id_fkey"
+            columns: ["matrix_id"]
+            isOneToOne: false
+            referencedRelation: "matrices"
             referencedColumns: ["id"]
           },
           {

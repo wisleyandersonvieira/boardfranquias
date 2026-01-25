@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Loader2 } from "lucide-react";
 import { ProductSupplierCodes } from "./ProductSupplierCodes";
+import { useUserMatrix } from "@/hooks/useUserMatrix";
 
 interface Unit {
   id: string;
@@ -62,6 +63,9 @@ export const ProductForm = ({ onUnitsModalOpen, editingProduct, onSaveSuccess }:
   const { toast } = useToast();
   const [initialDataLoaded, setInitialDataLoaded] = useState(false);
   const [previousGroupId, setPreviousGroupId] = useState<string | undefined>(undefined);
+  
+  // Hook para obter matriz do usuário logado
+  const { matrixId, matrixName, matrixCode, isLoading: matrixLoading } = useUserMatrix();
 
   useEffect(() => {
     fetchInitialData();
@@ -243,7 +247,7 @@ export const ProductForm = ({ onUnitsModalOpen, editingProduct, onSaveSuccess }:
         return;
       }
 
-      const productData = {
+      const productData: any = {
         code: nextCode,
         name: formData.name.trim(),
         description: formData.description || null,
@@ -256,6 +260,11 @@ export const ProductForm = ({ onUnitsModalOpen, editingProduct, onSaveSuccess }:
         function_type: formData.function_type,
         is_active: true
       };
+      
+      // Adicionar matrix_id apenas para novos produtos
+      if (!editingProduct && matrixId) {
+        productData.matrix_id = matrixId;
+      }
 
       let error;
       
@@ -362,6 +371,18 @@ export const ProductForm = ({ onUnitsModalOpen, editingProduct, onSaveSuccess }:
     <div>
       <form onSubmit={handleSubmit} className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {/* Matriz (readonly) */}
+        <div className="space-y-2">
+          <Label htmlFor="matrix">Matriz</Label>
+          <Input
+            id="matrix"
+            value={matrixLoading ? "Carregando..." : (matrixCode ? `${matrixCode} - ${matrixName}` : "Não definida")}
+            readOnly
+            disabled
+            className="bg-muted"
+          />
+        </div>
+
         {/* Código (readonly) */}
         <div className="space-y-2">
           <Label htmlFor="code">Código</Label>
