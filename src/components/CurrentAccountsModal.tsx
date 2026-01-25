@@ -74,9 +74,14 @@ export function CurrentAccountsModal({ open, onOpenChange, canEdit = true, canDe
   useEffect(() => {
     if (open) {
       fetchAccounts();
-      fetchStores();
     }
   }, [open]);
+
+  useEffect(() => {
+    if (open && matrixId) {
+      fetchStores();
+    }
+  }, [open, matrixId]);
 
   const fetchUserStoreIds = async (): Promise<string[]> => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -145,17 +150,28 @@ export function CurrentAccountsModal({ open, onOpenChange, canEdit = true, canDe
     try {
       const userStoreIds = await fetchUserStoreIds();
       
-      let query = supabase.from('stores').select('id, name, code').order('name');
+      // Build query filtering by matrix
+      let query = supabase
+        .from('stores')
+        .select('id, name, code, matrix_id')
+        .order('name');
       
-      // If user has specific stores, filter by them
-      if (userStoreIds.length > 0) {
-        query = query.in('id', userStoreIds);
+      // Filter by user's matrix
+      if (matrixId) {
+        query = query.eq('matrix_id', matrixId);
       }
       
       const { data, error } = await query;
 
       if (error) throw error;
-      setStores(data || []);
+      
+      // If user has specific stores (non-admin), filter by them as well
+      let filteredStores = data || [];
+      if (userStoreIds.length > 0) {
+        filteredStores = filteredStores.filter(store => userStoreIds.includes(store.id));
+      }
+      
+      setStores(filteredStores);
     } catch (error) {
       console.error('Error fetching stores:', error);
     }
