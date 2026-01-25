@@ -12,6 +12,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { toast } from "sonner";
 import { Pencil, Trash2, Plus, ArrowLeft, Lock, Unlock, Search } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useUserMatrix } from "@/hooks/useUserMatrix";
 
 interface DeliveryAccount {
@@ -146,15 +147,27 @@ export const DeliveryModal = ({ open, onOpenChange, canEdit = true, canDelete = 
     try {
       const userStoreIds = await fetchUserStoreIds();
       
-      let query = supabase.from('stores').select('*').order('name');
-      if (userStoreIds.length > 0) {
-        query = query.in('id', userStoreIds);
+      // Build query filtering by matrix
+      let query = supabase
+        .from('stores')
+        .select('id, name, code, matrix_id')
+        .order('name');
+      
+      // Filter by user's matrix
+      if (matrixId) {
+        query = query.eq('matrix_id', matrixId);
       }
       
       const { data, error } = await query;
-
       if (error) throw error;
-      setStores(data || []);
+      
+      // If user has specific stores (non-admin), filter by them as well
+      let filteredStores = data || [];
+      if (userStoreIds.length > 0) {
+        filteredStores = filteredStores.filter(store => userStoreIds.includes(store.id));
+      }
+      
+      setStores(filteredStores);
     } catch (error) {
       console.error('Erro ao buscar lojas:', error);
       toast.error('Erro ao carregar lojas');
@@ -164,9 +177,14 @@ export const DeliveryModal = ({ open, onOpenChange, canEdit = true, canDelete = 
   useEffect(() => {
     if (open) {
       fetchAccounts();
-      fetchStores();
     }
   }, [open]);
+
+  useEffect(() => {
+    if (open && matrixId) {
+      fetchStores();
+    }
+  }, [open, matrixId]);
 
   const onSubmit = async (data: any) => {
     try {
@@ -637,24 +655,33 @@ export const DeliveryModal = ({ open, onOpenChange, canEdit = true, canDelete = 
                       <FormItem>
                         <FormLabel>Lojas Vinculadas</FormLabel>
                         <FormControl>
-                          <Select 
-                            value={field.value.join(',')} 
-                            onValueChange={(value) => {
-                              const ids = value ? value.split(',') : [];
-                              field.onChange(ids);
-                            }}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione as lojas" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {stores.map((store) => (
-                                <SelectItem key={store.id} value={store.id}>
-                                  {store.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <div className="border rounded-md p-3 max-h-40 overflow-y-auto space-y-2">
+                            {stores.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">Nenhuma loja disponível</p>
+                            ) : (
+                              stores.map(store => (
+                                <div key={store.id} className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id={`delivery-store-${store.id}`}
+                                    checked={field.value.includes(store.id)}
+                                    onCheckedChange={(checked) => {
+                                      if (checked) {
+                                        field.onChange([...field.value, store.id]);
+                                      } else {
+                                        field.onChange(field.value.filter((id: string) => id !== store.id));
+                                      }
+                                    }}
+                                  />
+                                  <label
+                                    htmlFor={`delivery-store-${store.id}`}
+                                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                                  >
+                                    {store.name} ({store.code})
+                                  </label>
+                                </div>
+                              ))
+                            )}
+                          </div>
                         </FormControl>
                         <FormMessage />
                       </FormItem>
