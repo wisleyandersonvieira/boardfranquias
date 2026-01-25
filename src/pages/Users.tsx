@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Check, X, Store, Settings, UserCog, UserPlus, ShieldAlert, KeyRound, Loader2, Users as UsersIcon, Building2 } from "lucide-react";
+import { ArrowLeft, Check, X, Store, Settings, UserCog, UserPlus, ShieldAlert, KeyRound, Loader2, Users as UsersIcon, Building2, Tag } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,6 +15,7 @@ import CreateUserModal from "@/components/CreateUserModal";
 import { ResetPasswordModal } from "@/components/ResetPasswordModal";
 import { useConfiguracoesPermissions } from "@/hooks/useConfiguracoesPermissions";
 import MatricesTab from "@/components/MatricesTab";
+import BrandsTab from "@/components/BrandsTab";
 
 interface Matrix {
   id: string;
@@ -436,6 +437,12 @@ const Users = () => {
                 Matriz
               </TabsTrigger>
             )}
+            {isMasterUser && (
+              <TabsTrigger value="brands" className="flex items-center gap-2">
+                <Tag className="h-4 w-4" />
+                Marca
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="users">
@@ -572,6 +579,10 @@ const Users = () => {
 
           <TabsContent value="matrices">
             <MatricesTab />
+          </TabsContent>
+
+          <TabsContent value="brands">
+            <BrandsTab />
           </TabsContent>
         </Tabs>
 
