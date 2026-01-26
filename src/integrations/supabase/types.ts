@@ -3345,6 +3345,15 @@ export type Database = {
     }
     Functions: {
       can_access_task: { Args: { p_task_id: string }; Returns: boolean }
+      get_brand_by_id: {
+        Args: { p_brand_id: string }
+        Returns: {
+          authorized_group_users: string[]
+          authorized_subgroup_users: string[]
+          id: string
+          name: string
+        }[]
+      }
       get_next_job_function_code: {
         Args: { store_uuid: string }
         Returns: number
