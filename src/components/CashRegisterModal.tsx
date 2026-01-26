@@ -503,77 +503,68 @@ export const CashRegisterModal = ({ open, onOpenChange, date, storeId, mode = 'c
   // Função utilitária para visualização e download
   const viewAttachment = async (filePath: string, mode: 'inline' | 'download' = 'inline') => {
     try {
+      if (!filePath) {
+        toast.error('Caminho do anexo não encontrado');
+        return;
+      }
+
       // Detectar se é PDF para forçar download
       const fileExtension = filePath.split('.').pop()?.toLowerCase();
       const isPdf = fileExtension === 'pdf';
       
-      // Se já é uma URL completa (anexos antigos), abrir diretamente
+      // Se já é uma URL completa (anexos antigos), tentar abrir diretamente
       if (filePath.startsWith('http')) {
-        if (mode === 'inline' && !isPdf) {
-          window.open(filePath, '_blank');
-        } else {
-          // Para downloads, usar fetch + blob para evitar bloqueio
-          try {
-            const response = await fetch(filePath);
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = filePath.split('/').pop() || 'arquivo';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            window.URL.revokeObjectURL(url);
-            toast.success('Download realizado com sucesso');
-          } catch (fetchError) {
-            console.error('Erro no fetch:', fetchError);
-            // Fallback para método anterior
-            const link = document.createElement('a');
-            link.href = filePath;
-            link.download = filePath.split('/').pop() || 'arquivo';
-            link.click();
-          }
-        }
+        // URLs antigas podem não funcionar se apontarem para outro projeto
+        // Tentar abrir diretamente
+        window.open(filePath, '_blank');
         return;
       }
       
-      // Para paths do bucket, gerar signed URL
-      const { data, error } = await supabase.storage
+      // Para paths do bucket, fazer download direto e criar Blob URL
+      const { data: fileData, error: downloadError } = await supabase.storage
         .from('account-documents')
-        .createSignedUrl(filePath, 3600);
-      
-      if (error) {
-        console.error('Erro ao gerar URL do anexo:', error);
-        toast.error(`Erro ao abrir anexo: ${error.message}`);
+        .download(filePath);
+
+      if (downloadError) {
+        console.error('Erro ao baixar anexo:', downloadError, 'Path:', filePath);
+        toast.error('Erro ao fazer download do arquivo');
         return;
       }
-      
-      // Para PDFs, sempre fazer download. Para outros arquivos, seguir o mode
-      if (isPdf || mode === 'download') {
-        // Usar fetch + blob para evitar bloqueio do navegador
-        try {
-          const response = await fetch(data.signedUrl);
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-          }
-          
-          const blob = await response.blob();
-          const url = window.URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = filePath.split('/').pop() || 'arquivo';
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          window.URL.revokeObjectURL(url);
-          toast.success('Download realizado com sucesso');
-        } catch (fetchError) {
-          console.error('Erro no fetch do arquivo:', fetchError);
-          toast.error('Erro ao fazer download do arquivo');
-        }
-      } else {
-        window.open(data.signedUrl, '_blank');
+
+      // Determinar MIME type baseado na extensão
+      let mimeType = 'application/octet-stream';
+      if (isPdf) {
+        mimeType = 'application/pdf';
+      } else if (fileExtension === 'jpg' || fileExtension === 'jpeg') {
+        mimeType = 'image/jpeg';
+      } else if (fileExtension === 'png') {
+        mimeType = 'image/png';
+      } else if (fileExtension === 'gif') {
+        mimeType = 'image/gif';
+      } else if (fileExtension === 'webp') {
+        mimeType = 'image/webp';
       }
+
+      // Criar Blob URL
+      const blob = new Blob([fileData], { type: mimeType });
+      const blobUrl = URL.createObjectURL(blob);
+
+      if (isPdf || mode === 'download') {
+        // Para PDFs ou download explícito, usar link oculto
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = filePath.split('/').pop() || 'arquivo';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast.success('Download realizado com sucesso');
+      } else {
+        // Para imagens, abrir em nova aba
+        window.open(blobUrl, '_blank');
+      }
+
+      // Limpar Blob URL após delay
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
     } catch (error) {
       console.error('Erro ao visualizar anexo:', error);
       toast.error('Erro ao visualizar anexo');
