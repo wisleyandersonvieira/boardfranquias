@@ -102,12 +102,11 @@ export const GrupoModal = ({ open, onOpenChange, canEdit = true, canDelete = tru
         return;
       }
 
-      // Get brand details including authorized users
-      const { data: brand, error: brandError } = await supabase
-        .from("brands")
-        .select("id, name, authorized_group_users")
-        .eq("id", matrix.brand_id)
-        .single();
+      // Get brand details using security definer function to bypass RLS
+      const { data: brandData, error: brandError } = await supabase
+        .rpc("get_brand_by_id", { p_brand_id: matrix.brand_id });
+      
+      const brand = brandData?.[0];
 
       if (brandError || !brand) {
         toast({
