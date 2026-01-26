@@ -72,35 +72,7 @@ const AIAssistant = () => {
     }
   }, [messages]);
 
-  const streamChat = async (userMessages: Message[]) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      throw new Error("Not authenticated");
-    }
-
-    const resp = await fetch(CHAT_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({ messages: userMessages }),
-    });
-
-    if (!resp.ok) {
-      const errorData = await resp.json().catch(() => ({}));
-      if (resp.status === 429) {
-        throw new Error("Rate limit exceeded. Please wait a moment and try again.");
-      }
-      if (resp.status === 402) {
-        throw new Error("AI credits depleted. Please contact administrator.");
-      }
-      if (resp.status === 403) {
-        throw new Error("You don't have permission to access AI Analytics.");
-      }
-      throw new Error(errorData.error || "Failed to get response");
-    }
-
+  const processStreamResponse = async (resp: Response) => {
     if (!resp.body) throw new Error("No response body");
 
     const reader = resp.body.getReader();
@@ -174,6 +146,69 @@ const AIAssistant = () => {
         } catch { /* ignore */ }
       }
     }
+  };
+
+  const getValidSession = async () => {
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError || !session) {
+      // Try to refresh the session
+      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError || !refreshData.session) {
+        throw new Error("Sua sessão expirou. Por favor, faça login novamente.");
+      }
+      return refreshData.session;
+    }
+    
+    return session;
+  };
+
+  const streamChat = async (userMessages: Message[]) => {
+    const session = await getValidSession();
+
+    const resp = await fetch(CHAT_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ messages: userMessages }),
+    });
+
+    if (!resp.ok) {
+      const errorData = await resp.json().catch(() => ({}));
+      
+      if (resp.status === 401) {
+        // Token expired - try to refresh and retry once
+        const { data: refreshData } = await supabase.auth.refreshSession();
+        if (refreshData.session) {
+          const retryResp = await fetch(CHAT_URL, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${refreshData.session.access_token}`,
+            },
+            body: JSON.stringify({ messages: userMessages }),
+          });
+          if (retryResp.ok) {
+            return processStreamResponse(retryResp);
+          }
+        }
+        throw new Error("Sua sessão expirou. Por favor, faça login novamente.");
+      }
+      if (resp.status === 429) {
+        throw new Error("Limite de requisições excedido. Aguarde um momento e tente novamente.");
+      }
+      if (resp.status === 402) {
+        throw new Error("Créditos de IA esgotados. Contate o administrador.");
+      }
+      if (resp.status === 403) {
+        throw new Error("Você não tem permissão para acessar a IA Analítica.");
+      }
+      throw new Error(errorData.error || "Falha ao obter resposta");
+    }
+
+    await processStreamResponse(resp);
   };
 
   const handleSend = async (messageText?: string) => {
