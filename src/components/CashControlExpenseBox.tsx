@@ -246,18 +246,32 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
         // Clean up the blob URL after a delay
         setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
       } else {
-        // For other file types, use signed URL
-        const { data, error } = await supabase.storage
+        // For other file types, download and open like PDF
+        const { data: fileData, error: downloadError } = await supabase.storage
           .from("account-documents")
-          .createSignedUrl(pathOrUrl, 3600);
+          .download(pathOrUrl);
 
-        if (error) {
-          console.error("Erro ao gerar URL:", error, "Path:", pathOrUrl);
+        if (downloadError) {
+          console.error("Erro ao baixar anexo:", downloadError, "Path:", pathOrUrl);
           toast.error("Erro ao abrir anexo");
           return;
         }
 
-        window.open(data.signedUrl, "_blank");
+        // Determine MIME type based on extension
+        const ext = pathOrUrl.toLowerCase().split('.').pop();
+        let mimeType = 'application/octet-stream';
+        if (ext === 'jpg' || ext === 'jpeg') mimeType = 'image/jpeg';
+        else if (ext === 'png') mimeType = 'image/png';
+        else if (ext === 'gif') mimeType = 'image/gif';
+        else if (ext === 'webp') mimeType = 'image/webp';
+
+        // Create blob URL and open in new tab
+        const blob = new Blob([fileData], { type: mimeType });
+        const blobUrl = URL.createObjectURL(blob);
+        window.open(blobUrl, "_blank");
+        
+        // Clean up after delay
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
       }
     } catch (error) {
       console.error("Erro ao abrir anexo:", error);
