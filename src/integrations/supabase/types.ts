@@ -17,6 +17,7 @@ export type Database = {
       account_groups: {
         Row: {
           account_type: Database["public"]["Enums"]["account_type"]
+          brand_id: string | null
           code: string
           created_at: string
           id: string
@@ -25,6 +26,7 @@ export type Database = {
         }
         Insert: {
           account_type: Database["public"]["Enums"]["account_type"]
+          brand_id?: string | null
           code: string
           created_at?: string
           id?: string
@@ -33,6 +35,7 @@ export type Database = {
         }
         Update: {
           account_type?: Database["public"]["Enums"]["account_type"]
+          brand_id?: string | null
           code?: string
           created_at?: string
           id?: string
@@ -40,6 +43,13 @@ export type Database = {
           parent_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "account_groups_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "account_groups_parent_id_fkey"
             columns: ["parent_id"]
