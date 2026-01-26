@@ -619,6 +619,8 @@ export type Database = {
       }
       brands: {
         Row: {
+          authorized_group_users: string[] | null
+          authorized_subgroup_users: string[] | null
           contact: string | null
           created_at: string
           id: string
@@ -628,6 +630,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          authorized_group_users?: string[] | null
+          authorized_subgroup_users?: string[] | null
           contact?: string | null
           created_at?: string
           id?: string
@@ -637,6 +641,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          authorized_group_users?: string[] | null
+          authorized_subgroup_users?: string[] | null
           contact?: string | null
           created_at?: string
           id?: string
