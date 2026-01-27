@@ -4,13 +4,20 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Check, X, Store, Settings, UserCog, UserPlus, ShieldAlert, KeyRound, Loader2, Users as UsersIcon, Building2, Tag } from "lucide-react";
+import { ArrowLeft, Check, X, Store, Settings, UserCog, UserPlus, ShieldAlert, KeyRound, Loader2, Users as UsersIcon, Building2, Tag, Search, MoreVertical } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import CreateUserModal from "@/components/CreateUserModal";
 import { ResetPasswordModal } from "@/components/ResetPasswordModal";
 
@@ -70,6 +77,13 @@ const Users = () => {
   const [currentUserMatrixId, setCurrentUserMatrixId] = useState<string | null>(null);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | undefined>(undefined);
   const [activeTab, setActiveTab] = useState("users");
+  
+  // Filtros
+  const [filterMatrixId, setFilterMatrixId] = useState<string>("all");
+  const [filterProfileId, setFilterProfileId] = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterName, setFilterName] = useState<string>("");
+  
   const navigate = useNavigate();
   const { toast } = useToast();
   
@@ -447,6 +461,81 @@ const Users = () => {
           </TabsList>
 
           <TabsContent value="users">
+            {/* Quadro de Filtros */}
+            <Card className="mb-4">
+              <CardContent className="pt-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  {/* Filtro por Matriz - apenas para usuário mestre */}
+                  {isMasterUser && (
+                    <div className="space-y-2">
+                      <Label>Matriz</Label>
+                      <Select value={filterMatrixId} onValueChange={setFilterMatrixId}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Todas as matrizes" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todas as matrizes</SelectItem>
+                          {matrices.map((matrix) => (
+                            <SelectItem key={matrix.id} value={matrix.id}>
+                              {matrix.code} - {matrix.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  
+                  {/* Filtro por Perfil */}
+                  <div className="space-y-2">
+                    <Label>Perfil</Label>
+                    <Select value={filterProfileId} onValueChange={setFilterProfileId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todos os perfis" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos os perfis</SelectItem>
+                        <SelectItem value="none">Sem perfil</SelectItem>
+                        {profiles.map((profile) => (
+                          <SelectItem key={profile.id} value={profile.id}>
+                            {profile.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  {/* Filtro por Status */}
+                  <div className="space-y-2">
+                    <Label>Status</Label>
+                    <Select value={filterStatus} onValueChange={setFilterStatus}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todos os status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos os status</SelectItem>
+                        <SelectItem value="active">Aprovado</SelectItem>
+                        <SelectItem value="pending">Pendente</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  {/* Busca por Nome */}
+                  <div className="space-y-2">
+                    <Label>Buscar por nome</Label>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Digite o nome..."
+                        value={filterName}
+                        onChange={(e) => setFilterName(e.target.value)}
+                        className="pl-9"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <CardTitle>Usuários do Sistema</CardTitle>
@@ -466,14 +555,38 @@ const Users = () => {
                   </TableHeader>
                   <TableBody>
                     {users.filter(user => {
-                      // Usuário master vê todos
-                      if (isMasterUser) return true;
-                      // Usuário matriz vê apenas usuários da sua matriz
-                      if (isMatrixUser && currentUserMatrixId) {
-                        return user.matrix_id === currentUserMatrixId;
+                      // Primeiro: filtro por matriz (visibilidade)
+                      if (!isMasterUser) {
+                        if (isMatrixUser && currentUserMatrixId) {
+                          if (user.matrix_id !== currentUserMatrixId) return false;
+                        } else {
+                          if (user.matrix_id !== currentUserMatrixId) return false;
+                        }
                       }
-                      // Outros usuários não veem ninguém (ou apenas a si mesmos se necessário)
-                      return user.matrix_id === currentUserMatrixId;
+                      
+                      // Filtro por matriz (selecionado no dropdown) - apenas para usuário mestre
+                      if (isMasterUser && filterMatrixId !== "all" && user.matrix_id !== filterMatrixId) {
+                        return false;
+                      }
+                      
+                      // Filtro por perfil
+                      if (filterProfileId !== "all") {
+                        if (filterProfileId === "none" && user.profile_id !== null) return false;
+                        if (filterProfileId !== "none" && user.profile_id !== filterProfileId) return false;
+                      }
+                      
+                      // Filtro por status
+                      if (filterStatus !== "all") {
+                        if (filterStatus === "active" && !user.is_active) return false;
+                        if (filterStatus === "pending" && user.is_active) return false;
+                      }
+                      
+                      // Filtro por nome
+                      if (filterName.trim() !== "") {
+                        if (!user.name.toLowerCase().includes(filterName.toLowerCase())) return false;
+                      }
+                      
+                      return true;
                     }).length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
@@ -482,11 +595,38 @@ const Users = () => {
                       </TableRow>
                     ) : (
                       users.filter(user => {
-                        if (isMasterUser) return true;
-                        if (isMatrixUser && currentUserMatrixId) {
-                          return user.matrix_id === currentUserMatrixId;
+                        // Primeiro: filtro por matriz (visibilidade)
+                        if (!isMasterUser) {
+                          if (isMatrixUser && currentUserMatrixId) {
+                            if (user.matrix_id !== currentUserMatrixId) return false;
+                          } else {
+                            if (user.matrix_id !== currentUserMatrixId) return false;
+                          }
                         }
-                        return user.matrix_id === currentUserMatrixId;
+                        
+                        // Filtro por matriz (selecionado no dropdown) - apenas para usuário mestre
+                        if (isMasterUser && filterMatrixId !== "all" && user.matrix_id !== filterMatrixId) {
+                          return false;
+                        }
+                        
+                        // Filtro por perfil
+                        if (filterProfileId !== "all") {
+                          if (filterProfileId === "none" && user.profile_id !== null) return false;
+                          if (filterProfileId !== "none" && user.profile_id !== filterProfileId) return false;
+                        }
+                        
+                        // Filtro por status
+                        if (filterStatus !== "all") {
+                          if (filterStatus === "active" && !user.is_active) return false;
+                          if (filterStatus === "pending" && user.is_active) return false;
+                        }
+                        
+                        // Filtro por nome
+                        if (filterName.trim() !== "") {
+                          if (!user.name.toLowerCase().includes(filterName.toLowerCase())) return false;
+                        }
+                        
+                        return true;
                       }).map((user) => (
                         <TableRow key={user.id}>
                           <TableCell className="font-medium">{user.name}</TableCell>
@@ -506,7 +646,7 @@ const Users = () => {
                             {new Date(user.created_at).toLocaleDateString('pt-BR')}
                           </TableCell>
                           <TableCell className="text-right">
-                            <div className="flex gap-2 justify-end">
+                            <div className="flex gap-2 justify-end items-center">
                               {!user.is_active ? (
                                 <>
                                   <Button
@@ -527,46 +667,39 @@ const Users = () => {
                                     Rejeitar
                                   </Button>
                                 </>
-                              ) : (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleRejectUser(user.id)}
-                                  className="h-8"
-                                >
-                                  <X className="h-4 w-4 mr-1" />
-                                  Desativar
-                                </Button>
-                              )}
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => openProfileDialog(user)}
-                                className="h-8"
-                              >
-                                <UserCog className="h-4 w-4 mr-1" />
-                                Perfil
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => openStoreDialog(user)}
-                                className="h-8"
-                              >
-                                <Store className="h-4 w-4 mr-1" />
-                                Loja
-                              </Button>
-                              {isAdmin && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => openResetPasswordModal(user)}
-                                  className="h-8"
-                                >
-                                  <KeyRound className="h-4 w-4 mr-1" />
-                                  Redefinir Senha
-                                </Button>
-                              )}
+                              ) : null}
+                              
+                              {/* Dropdown de Configurações */}
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button size="sm" variant="outline" className="h-8">
+                                    <Settings className="h-4 w-4 mr-1" />
+                                    Configurações
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="bg-popover">
+                                  {user.is_active && (
+                                    <DropdownMenuItem onClick={() => handleRejectUser(user.id)}>
+                                      <X className="h-4 w-4 mr-2" />
+                                      Desativar
+                                    </DropdownMenuItem>
+                                  )}
+                                  <DropdownMenuItem onClick={() => openProfileDialog(user)}>
+                                    <UserCog className="h-4 w-4 mr-2" />
+                                    Perfil
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => openStoreDialog(user)}>
+                                    <Store className="h-4 w-4 mr-2" />
+                                    Loja
+                                  </DropdownMenuItem>
+                                  {(isMasterUser || isMatrixUser) && (
+                                    <DropdownMenuItem onClick={() => openResetPasswordModal(user)}>
+                                      <KeyRound className="h-4 w-4 mr-2" />
+                                      Redefinir Senha
+                                    </DropdownMenuItem>
+                                  )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </div>
                           </TableCell>
                         </TableRow>
