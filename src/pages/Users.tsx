@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import CreateUserModal from "@/components/CreateUserModal";
 import { ResetPasswordModal } from "@/components/ResetPasswordModal";
-import { useConfiguracoesPermissions } from "@/hooks/useConfiguracoesPermissions";
+
 import MatricesTab from "@/components/MatricesTab";
 import BrandsTab from "@/components/BrandsTab";
 
@@ -72,7 +72,7 @@ const Users = () => {
   const [activeTab, setActiveTab] = useState("users");
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { hasAccess, loading: permissionsLoading } = useConfiguracoesPermissions();
+  
 
   useEffect(() => {
     fetchUsers();
@@ -352,7 +352,7 @@ const Users = () => {
     }
   };
 
-  if (loading || permissionsLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
@@ -360,7 +360,8 @@ const Users = () => {
     );
   }
 
-  if (!hasAccess) {
+  // Somente usuário mestre ou com perfil Matriz podem acessar esta página
+  if (!isMasterUser && !isMatrixUser) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Card className="w-full max-w-md">
@@ -369,7 +370,7 @@ const Users = () => {
               <ShieldAlert className="h-16 w-16 text-destructive" />
               <h2 className="text-xl font-semibold">Acesso Negado</h2>
               <p className="text-muted-foreground">
-                Você não tem permissão para acessar o módulo de Configurações.
+                Somente usuários com perfil Matriz podem acessar esta página.
               </p>
               <Button onClick={() => navigate('/dashboard')}>
                 Voltar ao Dashboard
