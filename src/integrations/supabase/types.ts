@@ -3375,6 +3375,7 @@ export type Database = {
           name: string
         }[]
       }
+      get_current_user_matrix_id: { Args: never; Returns: string }
       get_next_job_function_code: {
         Args: { store_uuid: string }
         Returns: number
@@ -3398,6 +3399,7 @@ export type Database = {
       }
       get_user_store_id: { Args: never; Returns: string }
       has_cadastros_write_permission: { Args: never; Returns: boolean }
+      is_matriz_profile_user: { Args: never; Returns: boolean }
       is_matriz_user: { Args: never; Returns: boolean }
       store_in_user_matrix: {
         Args: { target_store_id: string }
