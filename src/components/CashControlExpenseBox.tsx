@@ -44,8 +44,9 @@ interface CashControlExpenseBoxProps {
   referenceYear: number;
 }
 
-type SortField = 'issue_date' | 'supplier' | 'description' | 'amount';
+type SortField = 'issue_date' | 'created_at' | 'supplier' | 'description' | 'amount';
 type SortDirection = 'asc' | 'desc';
+type LinkFilter = 'all' | 'linked' | 'unlinked';
 
 export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMonth, referenceYear }: CashControlExpenseBoxProps) => {
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -56,6 +57,7 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
   const [viewingExpense, setViewingExpense] = useState<Expense | null>(null);
   const [sortField, setSortField] = useState<SortField>('issue_date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [linkFilter, setLinkFilter] = useState<LinkFilter>('all');
   
   // Permissions
   const { canEdit, canApprove } = useCaixaPermissions();
@@ -416,12 +418,23 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
     }
   };
 
-  const sortedExpenses = [...expenses].sort((a, b) => {
+  // Filter by link status
+  const filteredExpenses = expenses.filter((expense) => {
+    if (linkFilter === 'all') return true;
+    if (linkFilter === 'linked') return !!expense.linked_account_payable_id;
+    if (linkFilter === 'unlinked') return !expense.linked_account_payable_id;
+    return true;
+  });
+
+  const sortedExpenses = [...filteredExpenses].sort((a, b) => {
     let comparison = 0;
     
     switch (sortField) {
       case 'issue_date':
         comparison = new Date(a.issue_date).getTime() - new Date(b.issue_date).getTime();
+        break;
+      case 'created_at':
+        comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
         break;
       case 'supplier':
         comparison = a.supplier.localeCompare(b.supplier, 'pt-BR');
@@ -443,6 +456,12 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
       ? <ArrowUp className="h-3 w-3 inline ml-1" />
       : <ArrowDown className="h-3 w-3 inline ml-1" />;
   };
+
+  const linkFilterOptions: { value: LinkFilter; label: string }[] = [
+    { value: 'all', label: 'Todos' },
+    { value: 'linked', label: 'Vinculados' },
+    { value: 'unlinked', label: 'Não Vinculados' },
+  ];
 
   return (
     <Card className="h-full">
@@ -467,38 +486,59 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
             Nenhuma despesa cadastrada
           </p>
         ) : (
+          <>
+          {/* Filter by link status */}
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-xs text-muted-foreground">Filtrar:</span>
+            <div className="flex gap-1">
+              {linkFilterOptions.map((option) => (
+                <Button
+                  key={option.value}
+                  variant={linkFilter === option.value ? "default" : "outline"}
+                  size="sm"
+                  className="h-6 text-xs px-2"
+                  onClick={() => setLinkFilter(option.value)}
+                >
+                  {option.label}
+                </Button>
+              ))}
+            </div>
+          </div>
           <div className="border rounded">
             <Table>
               <TableHeader className="sticky top-0 bg-card z-10">
                 <TableRow className="h-8">
                   <TableHead 
-                    className="text-xs py-1 cursor-pointer hover:bg-muted/50 select-none"
+                    className="text-xs py-1 text-left cursor-pointer hover:bg-muted/50 select-none"
                     onClick={() => handleSort('issue_date')}
                   >
                     Data <SortIcon field="issue_date" />
                   </TableHead>
-                  <TableHead className="text-xs py-1">
-                    Criado em
+                  <TableHead 
+                    className="text-xs py-1 text-left cursor-pointer hover:bg-muted/50 select-none"
+                    onClick={() => handleSort('created_at')}
+                  >
+                    Criado em <SortIcon field="created_at" />
                   </TableHead>
                   <TableHead 
-                    className="text-xs py-1 cursor-pointer hover:bg-muted/50 select-none"
+                    className="text-xs py-1 text-left cursor-pointer hover:bg-muted/50 select-none"
                     onClick={() => handleSort('supplier')}
                   >
                     Fornecedor <SortIcon field="supplier" />
                   </TableHead>
                   <TableHead 
-                    className="text-xs py-1 cursor-pointer hover:bg-muted/50 select-none"
+                    className="text-xs py-1 text-left cursor-pointer hover:bg-muted/50 select-none"
                     onClick={() => handleSort('description')}
                   >
                     Descrição <SortIcon field="description" />
                   </TableHead>
                   <TableHead 
-                    className="text-xs py-1 text-right cursor-pointer hover:bg-muted/50 select-none"
+                    className="text-xs py-1 text-left cursor-pointer hover:bg-muted/50 select-none"
                     onClick={() => handleSort('amount')}
                   >
                     Valor <SortIcon field="amount" />
                   </TableHead>
-                  <TableHead className="text-xs py-1 text-right">Ações</TableHead>
+                  <TableHead className="text-xs py-1 text-left">Ações</TableHead>
                 </TableRow>
               </TableHeader>
             </Table>
@@ -531,10 +571,10 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
                       <TableCell className="text-xs py-1 max-w-[200px] truncate">
                         {expense.description}
                       </TableCell>
-                      <TableCell className="text-xs py-1 text-right">
+                      <TableCell className="text-xs py-1 text-left">
                         {formatCurrency(expense.amount)}
                       </TableCell>
-                      <TableCell className="text-xs py-1 text-right">
+                      <TableCell className="text-xs py-1 text-left">
                         <div className="flex justify-end gap-0.5">
                           <Button 
                             variant="ghost" 
@@ -587,6 +627,7 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
               </Table>
             </div>
           </div>
+          </>
         )}
       </CardContent>
 
