@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2, ArrowUp, ArrowDown, Edit2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useUserMatrix } from "@/hooks/useUserMatrix";
+
 interface AccountGroup {
   id: string;
   name: string;
@@ -42,13 +44,44 @@ export const DREStructure: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [showDialog, setShowDialog] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [userBrandId, setUserBrandId] = useState<string | null>(null);
+  const { matrixId } = useUserMatrix();
   const {
     toast
   } = useToast();
+
+  // Buscar brand_id da matriz do usuário
+  useEffect(() => {
+    const fetchUserBrandId = async () => {
+      if (!matrixId) return;
+      try {
+        const { data: matrixData, error } = await supabase
+          .from("matrices")
+          .select("brand_id")
+          .eq("id", matrixId)
+          .maybeSingle();
+        
+        if (error) {
+          console.error("Error fetching matrix brand:", error);
+        }
+        setUserBrandId(matrixData?.brand_id || null);
+      } catch (error) {
+        console.error("Error fetching user brand:", error);
+        setUserBrandId(null);
+      }
+    };
+    fetchUserBrandId();
+  }, [matrixId]);
+
   useEffect(() => {
     fetchStructures();
-    fetchAccountGroups();
   }, []);
+
+  useEffect(() => {
+    if (userBrandId !== null) {
+      fetchAccountGroups();
+    }
+  }, [userBrandId]);
   const fetchStructures = async () => {
     try {
       const {
@@ -91,10 +124,14 @@ export const DREStructure: React.FC = () => {
   };
   const fetchAccountGroups = async () => {
     try {
-      const {
-        data,
-        error
-      } = await supabase.from('account_groups').select('id, name, parent_id').order('name');
+      let query = supabase.from('account_groups').select('id, name, parent_id').order('name');
+      
+      // Filtrar por brand_id do usuário
+      if (userBrandId) {
+        query = query.eq('brand_id', userBrandId);
+      }
+      
+      const { data, error } = await query;
       if (error) throw error;
       setAccountGroups(data || []);
     } catch (error: any) {
@@ -271,9 +308,32 @@ export const DREStructure: React.FC = () => {
     });
   };
 
-  // Função para obter apenas grupos (sem parent_id)
-  const getMainGroups = () => {
-    return accountGroups.filter(group => !group.parent_id);
+  // Obter IDs de grupos já selecionados na estrutura atual
+  const getSelectedGroupIds = () => {
+    return currentStructure.items
+      .filter(item => item.item_type === 'group' && item.account_group_id)
+      .map(item => item.account_group_id!);
+  };
+
+  // Função para obter apenas grupos (sem parent_id) - excluindo os já selecionados
+  const getMainGroups = (currentItemIndex?: number) => {
+    const selectedGroupIds = getSelectedGroupIds();
+    return accountGroups.filter(group => {
+      // Só grupos principais (sem parent_id)
+      if (group.parent_id) return false;
+      
+      // Se for o item atual sendo editado, permitir o próprio grupo
+      const currentItemGroupId = currentItemIndex !== undefined 
+        ? currentStructure.items[currentItemIndex]?.account_group_id 
+        : undefined;
+      
+      // Não exibir grupos já selecionados (exceto o do item atual)
+      if (selectedGroupIds.includes(group.id) && group.id !== currentItemGroupId) {
+        return false;
+      }
+      
+      return true;
+    });
   };
 
   // Função para obter subgrupos de um grupo específico
@@ -418,7 +478,7 @@ export const DREStructure: React.FC = () => {
                                    <SelectValue placeholder={item.item_type === 'group' ? "Selecione o grupo" : "Selecione o subgrupo"} />
                                  </SelectTrigger>
                                  <SelectContent>
-                                   {(item.item_type === 'group' ? getMainGroups() : item.item_type === 'subgroup' ? getSubgroups(findParentGroup(index) || '') : []).map(group => <SelectItem key={group.id} value={group.id}>
+                                   {(item.item_type === 'group' ? getMainGroups(index) : item.item_type === 'subgroup' ? getSubgroups(findParentGroup(index) || '') : []).map(group => <SelectItem key={group.id} value={group.id}>
                                        {group.name}
                                      </SelectItem>)}
                                  </SelectContent>
