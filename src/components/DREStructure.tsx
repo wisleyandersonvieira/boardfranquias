@@ -45,16 +45,20 @@ export const DREStructure: React.FC = () => {
   const [showDialog, setShowDialog] = useState(false);
   const [loading, setLoading] = useState(false);
   const [userBrandId, setUserBrandId] = useState<string | null>(null);
+  const [canManageStructures, setCanManageStructures] = useState(false);
   const { matrixId } = useUserMatrix();
   const {
     toast
   } = useToast();
 
-  // Buscar brand_id da matriz do usuário
+  // Buscar brand_id da matriz do usuário e verificar permissões
   useEffect(() => {
-    const fetchUserBrandId = async () => {
+    const fetchUserBrandAndPermissions = async () => {
       if (!matrixId) return;
       try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
         const { data: matrixData, error } = await supabase
           .from("matrices")
           .select("brand_id")
@@ -64,13 +68,30 @@ export const DREStructure: React.FC = () => {
         if (error) {
           console.error("Error fetching matrix brand:", error);
         }
-        setUserBrandId(matrixData?.brand_id || null);
+        
+        const brandId = matrixData?.brand_id || null;
+        setUserBrandId(brandId);
+
+        // Verificar se o usuário está autorizado a gerenciar estruturas
+        if (brandId) {
+          const { data: brandData, error: brandError } = await supabase
+            .rpc('get_brand_by_id', { p_brand_id: brandId });
+
+          if (brandError) {
+            console.error("Error fetching brand permissions:", brandError);
+            setCanManageStructures(false);
+          } else if (brandData && brandData.length > 0) {
+            const authorizedUsers = brandData[0].authorized_group_users || [];
+            setCanManageStructures(authorizedUsers.includes(user.id));
+          }
+        }
       } catch (error) {
         console.error("Error fetching user brand:", error);
         setUserBrandId(null);
+        setCanManageStructures(false);
       }
     };
-    fetchUserBrandId();
+    fetchUserBrandAndPermissions();
   }, [matrixId]);
 
   useEffect(() => {
@@ -390,22 +411,24 @@ export const DREStructure: React.FC = () => {
   };
   return <div className="space-y-6">
       <div className="flex justify-between items-center">
-        
+        <div />
         
         <Dialog open={showDialog} onOpenChange={setShowDialog}>
-          <DialogTrigger asChild>
-            <Button onClick={() => {
-            setCurrentStructure({
-              name: "",
-              items: []
-            });
-            setIsEditing(false);
-            setShowDialog(true);
-          }} className="flex items-center space-x-2">
-              <Plus className="h-4 w-4" />
-              <span>Nova Estrutura</span>
-            </Button>
-          </DialogTrigger>
+          {canManageStructures && (
+            <DialogTrigger asChild>
+              <Button onClick={() => {
+              setCurrentStructure({
+                name: "",
+                items: []
+              });
+              setIsEditing(false);
+              setShowDialog(true);
+            }} className="flex items-center space-x-2">
+                <Plus className="h-4 w-4" />
+                <span>Nova Estrutura</span>
+              </Button>
+            </DialogTrigger>
+          )}
           
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
@@ -572,14 +595,18 @@ export const DREStructure: React.FC = () => {
                       -
                     </TableCell>
                     <TableCell>
-                      <div className="flex space-x-2">
-                        <Button size="sm" variant="ghost" onClick={() => handleEditStructure(structure)}>
-                          <Edit2 className="h-4 w-4" />
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => structure.id && handleDeleteStructure(structure.id)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
+                      {canManageStructures ? (
+                        <div className="flex space-x-2">
+                          <Button size="sm" variant="ghost" onClick={() => handleEditStructure(structure)}>
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => structure.id && handleDeleteStructure(structure.id)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">-</span>
+                      )}
                     </TableCell>
                   </TableRow>)}
               </TableBody>

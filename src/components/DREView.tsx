@@ -18,6 +18,7 @@ import * as XLSX from 'xlsx';
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useUserMatrix } from "@/hooks/useUserMatrix";
 interface Store {
   id: string;
   name: string;
@@ -59,6 +60,8 @@ export const DREView: React.FC<DREViewProps> = ({
   const [selectedStructure, setSelectedStructure] = useState("");
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
   const [loading, setLoading] = useState(false);
+  const [userBrandId, setUserBrandId] = useState<string | null>(null);
+  const { matrixId } = useUserMatrix();
   const {
     toast
   } = useToast();
@@ -115,10 +118,39 @@ export const DREView: React.FC<DREViewProps> = ({
     value: "12",
     label: "Dezembro"
   }];
+  // Buscar brand_id da matriz do usuário
+  useEffect(() => {
+    const fetchUserBrandId = async () => {
+      if (!matrixId) return;
+      try {
+        const { data: matrixData, error } = await supabase
+          .from("matrices")
+          .select("brand_id")
+          .eq("id", matrixId)
+          .maybeSingle();
+        
+        if (error) {
+          console.error("Error fetching matrix brand:", error);
+        }
+        setUserBrandId(matrixData?.brand_id || null);
+      } catch (error) {
+        console.error("Error fetching user brand:", error);
+        setUserBrandId(null);
+      }
+    };
+    fetchUserBrandId();
+  }, [matrixId]);
+
   useEffect(() => {
     fetchStores();
-    fetchStructures();
   }, []);
+
+  useEffect(() => {
+    if (userBrandId) {
+      fetchStructures();
+    }
+  }, [userBrandId]);
+
   useEffect(() => {
     if (selectedStructure) {
       fetchStructureItems();
@@ -181,11 +213,18 @@ export const DREView: React.FC<DREViewProps> = ({
     }
   };
   const fetchStructures = async () => {
+    if (!userBrandId) return;
+    
     try {
       const {
         data,
         error
-      } = await supabase.from('dre_structures').select('id, name').eq('is_active', true).order('name');
+      } = await supabase
+        .from('dre_structures')
+        .select('id, name')
+        .eq('is_active', true)
+        .eq('brand_id', userBrandId)
+        .order('name');
       if (error) throw error;
       setStructures(data || []);
     } catch (error: any) {
