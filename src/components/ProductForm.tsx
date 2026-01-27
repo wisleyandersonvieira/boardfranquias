@@ -66,10 +66,19 @@ export const ProductForm = ({ onUnitsModalOpen, editingProduct, onSaveSuccess }:
   
   // Hook para obter matriz do usuário logado
   const { matrixId, matrixName, matrixCode, isLoading: matrixLoading } = useUserMatrix();
+  const [userBrandId, setUserBrandId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchInitialData();
-  }, []);
+    if (matrixId) {
+      fetchUserBrandId();
+    }
+  }, [matrixId]);
+
+  useEffect(() => {
+    if (userBrandId !== null) {
+      fetchInitialData();
+    }
+  }, [userBrandId]);
 
   // Carregar dados do produto para edição - só após dados iniciais carregados
   useEffect(() => {
@@ -176,6 +185,25 @@ export const ProductForm = ({ onUnitsModalOpen, editingProduct, onSaveSuccess }:
     }
   }, [formData.group_id]);
 
+  const fetchUserBrandId = async () => {
+    try {
+      // Buscar o brand_id da matriz do usuário
+      const { data: matrixData, error } = await supabase
+        .from("matrices")
+        .select("brand_id")
+        .eq("id", matrixId)
+        .maybeSingle();
+      
+      if (error) {
+        console.error("Error fetching matrix brand:", error);
+      }
+      setUserBrandId(matrixData?.brand_id || null);
+    } catch (error) {
+      console.error("Error fetching user brand:", error);
+      setUserBrandId(null);
+    }
+  };
+
   const fetchInitialData = async () => {
     try {
       // Fetch units
@@ -186,12 +214,18 @@ export const ProductForm = ({ onUnitsModalOpen, editingProduct, onSaveSuccess }:
         .order("name");
       setUnits(unitsData || []);
 
-      // Fetch groups (parent_id is null)
-      const { data: groupsData } = await supabase
+      // Fetch groups filtered by user's brand
+      let groupsQuery = supabase
         .from("account_groups")
         .select("id, name")
         .is("parent_id", null)
         .order("name");
+      
+      if (userBrandId) {
+        groupsQuery = groupsQuery.eq("brand_id", userBrandId);
+      }
+      
+      const { data: groupsData } = await groupsQuery;
       setGroups(groupsData || []);
       
       // Marcar que dados iniciais foram carregados
