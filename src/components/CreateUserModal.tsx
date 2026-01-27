@@ -226,6 +226,7 @@ const CreateUserModal = ({
           emailRedirectTo: `${window.location.origin}/`,
           data: {
             name: name,
+            matrix_id: selectedMatrixId,
           },
         },
       });
