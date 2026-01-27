@@ -509,19 +509,19 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
               <TableHeader className="sticky top-0 bg-card z-10">
                 <TableRow className="h-8">
                   <TableHead 
-                    className="text-xs py-1 text-left cursor-pointer hover:bg-muted/50 select-none"
+                    className="text-xs py-1 text-left cursor-pointer hover:bg-muted/50 select-none w-[90px]"
                     onClick={() => handleSort('issue_date')}
                   >
                     Data <SortIcon field="issue_date" />
                   </TableHead>
                   <TableHead 
-                    className="text-xs py-1 text-left cursor-pointer hover:bg-muted/50 select-none"
+                    className="text-xs py-1 text-left cursor-pointer hover:bg-muted/50 select-none w-[130px]"
                     onClick={() => handleSort('created_at')}
                   >
                     Criado em <SortIcon field="created_at" />
                   </TableHead>
                   <TableHead 
-                    className="text-xs py-1 text-left cursor-pointer hover:bg-muted/50 select-none"
+                    className="text-xs py-1 text-left cursor-pointer hover:bg-muted/50 select-none w-[200px]"
                     onClick={() => handleSort('supplier')}
                   >
                     Fornecedor <SortIcon field="supplier" />
@@ -533,12 +533,12 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
                     Descrição <SortIcon field="description" />
                   </TableHead>
                   <TableHead 
-                    className="text-xs py-1 text-left cursor-pointer hover:bg-muted/50 select-none"
+                    className="text-xs py-1 text-left cursor-pointer hover:bg-muted/50 select-none w-[100px]"
                     onClick={() => handleSort('amount')}
                   >
                     Valor <SortIcon field="amount" />
                   </TableHead>
-                  <TableHead className="text-xs py-1 text-left">Ações</TableHead>
+                  <TableHead className="text-xs py-1 text-left w-[100px]">Ações</TableHead>
                 </TableRow>
               </TableHeader>
             </Table>
@@ -558,24 +558,24 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
                       key={expense.id}
                       className={rowClassName}
                     >
-                      <TableCell className="text-xs py-1">
+                      <TableCell className="text-xs py-1 text-left w-[90px]">
                         {format(new Date(expense.issue_date + 'T12:00:00'), "dd/MM/yyyy")}
                       </TableCell>
-                      <TableCell className="text-xs py-1">
+                      <TableCell className="text-xs py-1 text-left w-[130px]">
                         {format(new Date(expense.created_at), "dd/MM/yyyy HH:mm")}
                       </TableCell>
-                      <TableCell className="text-xs py-1">
+                      <TableCell className="text-xs py-1 text-left w-[200px]">
                         {expense.supplier}
                         {expense.is_disabled && " (inabilitado)"}
                       </TableCell>
-                      <TableCell className="text-xs py-1 max-w-[200px] truncate">
+                      <TableCell className="text-xs py-1 text-left max-w-[200px] truncate">
                         {expense.description}
                       </TableCell>
-                      <TableCell className="text-xs py-1 text-left">
+                      <TableCell className="text-xs py-1 text-left w-[100px]">
                         {formatCurrency(expense.amount)}
                       </TableCell>
-                      <TableCell className="text-xs py-1 text-left">
-                        <div className="flex justify-end gap-0.5">
+                      <TableCell className="text-xs py-1 text-left w-[100px]">
+                        <div className="flex justify-start gap-0.5">
                           <Button 
                             variant="ghost" 
                             size="icon" 
