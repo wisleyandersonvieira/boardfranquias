@@ -1845,6 +1845,7 @@ export type Database = {
           created_at: string
           id: string
           is_active: boolean
+          matrix_id: string
           name: string
           recurrence_months: number | null
           recurrence_type: string
@@ -1856,6 +1857,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          matrix_id: string
           name: string
           recurrence_months?: number | null
           recurrence_type?: string
@@ -1867,13 +1869,22 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          matrix_id?: string
           name?: string
           recurrence_months?: number | null
           recurrence_type?: string
           store_id?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "employee_obligations_matrix_id_fkey"
+            columns: ["matrix_id"]
+            isOneToOne: false
+            referencedRelation: "matrices"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       employees: {
         Row: {
