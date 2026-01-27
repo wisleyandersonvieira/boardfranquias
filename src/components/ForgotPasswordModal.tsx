@@ -37,41 +37,6 @@ const ForgotPasswordModal = ({ open, onOpenChange }: ForgotPasswordModalProps) =
 
     setLoading(true);
     try {
-      // Verificar se o email existe na tabela profiles (usuário cadastrado e ativo)
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('id, is_active')
-        .eq('email', email.toLowerCase().trim())
-        .maybeSingle();
-
-      if (profileError) {
-        console.error('Erro ao verificar email:', profileError);
-        toast({
-          variant: "destructive",
-          title: "Erro",
-          description: "Ocorreu um erro ao verificar o email. Tente novamente.",
-        });
-        return;
-      }
-
-      if (!profile) {
-        toast({
-          variant: "destructive",
-          title: "Email não encontrado",
-          description: "Este email não está cadastrado no sistema.",
-        });
-        return;
-      }
-
-      if (!profile.is_active) {
-        toast({
-          variant: "destructive",
-          title: "Usuário inativo",
-          description: "Este usuário ainda não foi ativado pelo administrador.",
-        });
-        return;
-      }
-
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
         redirectTo: `${window.location.origin}/reset-password`,
       });
@@ -87,7 +52,7 @@ const ForgotPasswordModal = ({ open, onOpenChange }: ForgotPasswordModalProps) =
 
       toast({
         title: "Email enviado!",
-        description: "Verifique sua caixa de entrada para redefinir sua senha.",
+        description: "Se este email estiver cadastrado, você receberá um link para redefinir sua senha.",
         duration: 6000,
       });
       
