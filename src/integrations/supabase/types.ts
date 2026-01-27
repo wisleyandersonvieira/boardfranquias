@@ -1698,6 +1698,7 @@ export type Database = {
       }
       dre_structures: {
         Row: {
+          brand_id: string
           created_at: string
           created_by: string
           id: string
@@ -1706,6 +1707,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          brand_id: string
           created_at?: string
           created_by: string
           id?: string
@@ -1714,6 +1716,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          brand_id?: string
           created_at?: string
           created_by?: string
           id?: string
@@ -1722,6 +1725,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "dre_structures_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "dre_structures_created_by_fkey"
             columns: ["created_by"]
