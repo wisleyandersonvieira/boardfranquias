@@ -16,6 +16,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
+import { useUserMatrix } from "@/hooks/useUserMatrix";
 
 interface Product {
   id: string;
@@ -57,6 +58,9 @@ export const ProductList = ({ canEdit = true, canDelete = true }: ProductListPro
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [viewingProduct, setViewingProduct] = useState<Product | null>(null);
   const [viewModalOpen, setViewModalOpen] = useState(false);
+  const [userBrandId, setUserBrandId] = useState<string | null>(null);
+  
+  const { matrixId, isLoading: isLoadingMatrix } = useUserMatrix();
   
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -73,8 +77,32 @@ export const ProductList = ({ canEdit = true, canDelete = true }: ProductListPro
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchInitialData();
-  }, []);
+    if (matrixId) {
+      fetchUserBrand();
+    }
+  }, [matrixId]);
+
+  useEffect(() => {
+    if (userBrandId) {
+      fetchInitialData();
+    }
+  }, [userBrandId]);
+
+  const fetchUserBrand = async () => {
+    try {
+      const { data: matrixData } = await supabase
+        .from('matrices')
+        .select('brand_id')
+        .eq('id', matrixId)
+        .single();
+      
+      if (matrixData?.brand_id) {
+        setUserBrandId(matrixData.brand_id);
+      }
+    } catch (error) {
+      console.error('Error fetching user brand:', error);
+    }
+  };
 
   useEffect(() => {
     applyFilters();
@@ -106,19 +134,21 @@ export const ProductList = ({ canEdit = true, canDelete = true }: ProductListPro
       });
       setProducts(sortedProducts);
 
-      // Fetch groups for filters
+      // Fetch groups for filters - filter by user's brand
       const { data: groupsData } = await supabase
         .from("account_groups")
         .select("id, name")
         .is("parent_id", null)
+        .eq("brand_id", userBrandId)
         .order("name");
       setGroups(groupsData || []);
 
-      // Fetch subgroups for filters
+      // Fetch subgroups for filters - filter by user's brand
       const { data: subgroupsData } = await supabase
         .from("account_groups")
         .select("id, name")
         .not("parent_id", "is", null)
+        .eq("brand_id", userBrandId)
         .order("name");
       setSubgroups(subgroupsData || []);
 
@@ -406,14 +436,13 @@ export const ProductList = ({ canEdit = true, canDelete = true }: ProductListPro
           <Table>
             <TableHeader className="bg-card">
               <TableRow className="hover:bg-transparent">
-                <TableHead className="w-[6%] h-9 py-1">Código</TableHead>
-                <TableHead className="w-[10%] h-9 py-1">Matriz</TableHead>
-                <TableHead className="w-[22%] h-9 py-1">Descrição</TableHead>
-                <TableHead className="w-[12%] h-9 py-1">Grupo</TableHead>
-                <TableHead className="w-[12%] h-9 py-1">Subgrupo</TableHead>
-                <TableHead className="w-[10%] h-9 py-1">Unidade</TableHead>
-                <TableHead className="w-[10%] h-9 py-1">Status</TableHead>
-                <TableHead className="text-right w-[10%] h-9 py-1">Ações</TableHead>
+                <TableHead className="w-[8%] h-9 py-1">Código</TableHead>
+                <TableHead className="w-[28%] h-9 py-1">Descrição</TableHead>
+                <TableHead className="w-[14%] h-9 py-1">Grupo</TableHead>
+                <TableHead className="w-[14%] h-9 py-1">Subgrupo</TableHead>
+                <TableHead className="w-[12%] h-9 py-1">Unidade</TableHead>
+                <TableHead className="w-[12%] h-9 py-1">Status</TableHead>
+                <TableHead className="text-right w-[12%] h-9 py-1">Ações</TableHead>
               </TableRow>
             </TableHeader>
           </Table>
@@ -421,26 +450,23 @@ export const ProductList = ({ canEdit = true, canDelete = true }: ProductListPro
           <ScrollArea className="flex-1">
             <Table>
               <TableBody>
-                {loading ? (
+                {loading || isLoadingMatrix ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center h-12">
+                    <TableCell colSpan={7} className="text-center h-12">
                       Carregando...
                     </TableCell>
                   </TableRow>
                 ) : paginatedProducts.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-muted-foreground h-12">
+                    <TableCell colSpan={7} className="text-center text-muted-foreground h-12">
                       Nenhum produto encontrado
                     </TableCell>
                   </TableRow>
                 ) : (
                   paginatedProducts.map((product) => (
                     <TableRow key={product.id} className="h-10">
-                      <TableCell className="font-mono py-1 w-[6%]">{product.code}</TableCell>
-                      <TableCell className="py-1 w-[10%]">
-                        {product.matrix ? `${product.matrix.code} - ${product.matrix.name}` : "-"}
-                      </TableCell>
-                      <TableCell className="py-1 w-[22%]">
+                      <TableCell className="font-mono py-1 w-[8%]">{product.code}</TableCell>
+                      <TableCell className="py-1 w-[28%]">
                         <div>
                           <div className="font-medium">{product.name}</div>
                           {product.description && (
@@ -448,12 +474,12 @@ export const ProductList = ({ canEdit = true, canDelete = true }: ProductListPro
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="py-1 w-[12%]">{product.group?.name || "-"}</TableCell>
-                      <TableCell className="py-1 w-[12%]">{product.subgroup?.name || "-"}</TableCell>
-                      <TableCell className="py-1 w-[10%]">
+                      <TableCell className="py-1 w-[14%]">{product.group?.name || "-"}</TableCell>
+                      <TableCell className="py-1 w-[14%]">{product.subgroup?.name || "-"}</TableCell>
+                      <TableCell className="py-1 w-[12%]">
                         {product.unit ? `${product.unit.name} (${product.unit.symbol})` : "-"}
                       </TableCell>
-                      <TableCell className="py-1 w-[10%]">
+                      <TableCell className="py-1 w-[12%]">
                         <div className="flex gap-1">
                           <Badge variant={product.is_active ? "default" : "secondary"} className="text-xs">
                             {product.is_active ? "Ativo" : "Inativo"}
@@ -463,7 +489,7 @@ export const ProductList = ({ canEdit = true, canDelete = true }: ProductListPro
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right py-1 w-[10%]">
+                      <TableCell className="text-right py-1 w-[12%]">
                         <div className="flex gap-1 justify-end">
                           <Button
                             variant="ghost"
