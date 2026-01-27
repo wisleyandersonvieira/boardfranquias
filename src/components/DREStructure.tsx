@@ -74,15 +74,14 @@ export const DREStructure: React.FC = () => {
   }, [matrixId]);
 
   useEffect(() => {
-    fetchStructures();
-  }, []);
-
-  useEffect(() => {
-    if (userBrandId !== null) {
+    if (userBrandId) {
+      fetchStructures();
       fetchAccountGroups();
     }
   }, [userBrandId]);
   const fetchStructures = async () => {
+    if (!userBrandId) return;
+    
     try {
       const {
         data,
@@ -93,7 +92,10 @@ export const DREStructure: React.FC = () => {
             *,
             account_groups (id, name, parent_id)
           )
-        `).eq('is_active', true).order('created_at', {
+        `)
+        .eq('is_active', true)
+        .eq('brand_id', userBrandId)
+        .order('created_at', {
         ascending: false
       });
       if (error) throw error;
@@ -174,12 +176,22 @@ export const DREStructure: React.FC = () => {
         if (deleteError) throw deleteError;
       } else {
         // Criar nova estrutura
+        if (!userBrandId) {
+          toast({
+            title: "Erro",
+            description: "Não foi possível identificar a marca do usuário",
+            variant: "destructive"
+          });
+          return;
+        }
+        
         const {
           data: structureData,
           error: structureError
         } = await supabase.from('dre_structures').insert({
           name: currentStructure.name,
-          created_by: user.user.id
+          created_by: user.user.id,
+          brand_id: userBrandId
         }).select().single();
         if (structureError) throw structureError;
         structureId = structureData.id;
