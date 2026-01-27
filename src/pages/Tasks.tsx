@@ -8,6 +8,7 @@ import { ArrowLeft, Plus, MoreHorizontal, MessageSquare, Calendar, GripVertical,
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { useUserMatrix } from "@/hooks/useUserMatrix";
 import { ptBR } from "date-fns/locale";
 import {
   Dialog,
@@ -36,6 +37,7 @@ interface TaskColumn {
   name: string;
   position_order: number;
   created_by: string;
+  matrix_id: string;
 }
 
 interface Task {
@@ -56,6 +58,7 @@ interface Task {
 
 const Tasks = () => {
   const navigate = useNavigate();
+  const { matrixId, isLoading: isLoadingMatrix } = useUserMatrix();
   const [columns, setColumns] = useState<TaskColumn[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,14 +81,18 @@ const Tasks = () => {
   const [allUsers, setAllUsers] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
-    fetchData();
-    getCurrentUser();
-    fetchFiltersData();
-  }, []);
+    if (matrixId) {
+      fetchData();
+      getCurrentUser();
+      fetchFiltersData();
+    }
+  }, [matrixId]);
 
   useEffect(() => {
-    fetchTasks();
-  }, [statusFilter]);
+    if (matrixId) {
+      fetchTasks();
+    }
+  }, [statusFilter, matrixId]);
 
   const getCurrentUser = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -115,9 +122,12 @@ const Tasks = () => {
   };
 
   const fetchColumns = async () => {
+    if (!matrixId) return;
+    
     const { data, error } = await supabase
       .from("task_columns")
       .select("*")
+      .eq("matrix_id", matrixId)
       .order("position_order", { ascending: true });
 
     if (error) {
@@ -197,6 +207,11 @@ const Tasks = () => {
       return;
     }
 
+    if (!matrixId) {
+      toast.error("Matriz do usuário não identificada");
+      return;
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
@@ -205,7 +220,8 @@ const Tasks = () => {
     const { error } = await supabase.from("task_columns").insert({
       name: newColumnName.trim(),
       position_order: maxOrder,
-      created_by: user.id
+      created_by: user.id,
+      matrix_id: matrixId
     });
 
     if (error) {
@@ -399,7 +415,7 @@ const Tasks = () => {
     return filteredTasks;
   };
 
-  if (loading) {
+  if (loading || isLoadingMatrix) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
