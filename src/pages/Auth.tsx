@@ -8,90 +8,15 @@ import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import boardLogo from "@/assets/board-sistemas-logo.png";
 import boardTextLogo from "@/assets/board-sistemas-text-logo.png";
+import ForgotPasswordModal from "@/components/ForgotPasswordModal";
 
 const Auth = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [resetLoading, setResetLoading] = useState(false);
+  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
-
-  const handleForgotPassword = async () => {
-    if (!email) {
-      toast({
-        variant: "destructive",
-        title: "Email obrigatório",
-        description: "Por favor, informe seu email para recuperar a senha.",
-      });
-      return;
-    }
-
-    setResetLoading(true);
-    try {
-      // Verificar se o email existe na tabela profiles (usuário cadastrado e ativo)
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('id, is_active')
-        .eq('email', email.toLowerCase().trim())
-        .maybeSingle();
-
-      if (profileError) {
-        console.error('Erro ao verificar email:', profileError);
-        toast({
-          variant: "destructive",
-          title: "Erro",
-          description: "Ocorreu um erro ao verificar o email. Tente novamente.",
-        });
-        return;
-      }
-
-      if (!profile) {
-        toast({
-          variant: "destructive",
-          title: "Email não encontrado",
-          description: "Este email não está cadastrado no sistema.",
-        });
-        return;
-      }
-
-      if (!profile.is_active) {
-        toast({
-          variant: "destructive",
-          title: "Usuário inativo",
-          description: "Este usuário ainda não foi ativado pelo administrador.",
-        });
-        return;
-      }
-
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
-
-      if (error) {
-        toast({
-          variant: "destructive",
-          title: "Erro ao enviar email",
-          description: error.message,
-        });
-        return;
-      }
-
-      toast({
-        title: "Email enviado!",
-        description: "Verifique sua caixa de entrada para redefinir sua senha.",
-        duration: 6000,
-      });
-    } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Erro",
-        description: error.message,
-      });
-    } finally {
-      setResetLoading(false);
-    }
-  };
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -186,14 +111,18 @@ const Auth = () => {
               type="button"
               variant="link"
               className="w-full text-sm text-muted-foreground"
-              onClick={handleForgotPassword}
-              disabled={resetLoading}
+              onClick={() => setForgotPasswordOpen(true)}
             >
-              {resetLoading ? "Enviando..." : "Esqueci minha senha"}
+              Esqueci minha senha
             </Button>
           </form>
         </CardContent>
       </Card>
+
+      <ForgotPasswordModal
+        open={forgotPasswordOpen}
+        onOpenChange={setForgotPasswordOpen}
+      />
     </div>
   );
 };
