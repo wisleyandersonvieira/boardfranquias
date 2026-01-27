@@ -2971,6 +2971,7 @@ export type Database = {
           created_at: string
           created_by: string
           id: string
+          matrix_id: string
           name: string
           position_order: number
           updated_at: string
@@ -2979,6 +2980,7 @@ export type Database = {
           created_at?: string
           created_by: string
           id?: string
+          matrix_id: string
           name: string
           position_order?: number
           updated_at?: string
@@ -2987,11 +2989,20 @@ export type Database = {
           created_at?: string
           created_by?: string
           id?: string
+          matrix_id?: string
           name?: string
           position_order?: number
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "task_columns_matrix_id_fkey"
+            columns: ["matrix_id"]
+            isOneToOne: false
+            referencedRelation: "matrices"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       task_comments: {
         Row: {
