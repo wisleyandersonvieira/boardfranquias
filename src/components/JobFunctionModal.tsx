@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import JobFunctionObligationsModal from "./JobFunctionObligationsModal";
+import { useUserMatrix } from "@/hooks/useUserMatrix";
 
 interface JobFunction {
   id: string;
@@ -18,8 +19,10 @@ interface JobFunction {
   description: string | null;
   base_salary: number;
   store_id: string;
+  matrix_id: string;
   is_active: boolean;
   created_at: string;
+  employee_count?: number;
 }
 
 interface JobFunctionModalProps {
@@ -35,6 +38,7 @@ const JobFunctionModal = ({ isOpen, onClose }: JobFunctionModalProps) => {
   const [showObligationsModal, setShowObligationsModal] = useState(false);
   const [selectedFunctionForObligations, setSelectedFunctionForObligations] = useState<JobFunction | null>(null);
   const { toast } = useToast();
+  const { matrixId, matrixName, matrixCode } = useUserMatrix();
 
   const [formData, setFormData] = useState({
     name: '',
@@ -44,6 +48,7 @@ const JobFunctionModal = ({ isOpen, onClose }: JobFunctionModalProps) => {
 
   const fetchJobFunctions = async () => {
     try {
+      // RLS already filters by matrix_id
       const { data, error } = await supabase
         .from('job_functions')
         .select('*')
@@ -51,7 +56,21 @@ const JobFunctionModal = ({ isOpen, onClose }: JobFunctionModalProps) => {
         .order('code', { ascending: true });
 
       if (error) throw error;
-      setJobFunctions(data || []);
+
+      // Get employee counts for each function
+      const functionsWithCounts = await Promise.all(
+        (data || []).map(async (fn) => {
+          const { count } = await supabase
+            .from('employees')
+            .select('*', { count: 'exact', head: true })
+            .eq('job_function_id', fn.id)
+            .eq('is_active', true);
+          
+          return { ...fn, employee_count: count || 0 };
+        })
+      );
+
+      setJobFunctions(functionsWithCounts);
     } catch (error) {
       console.error('Erro ao carregar funções:', error);
       toast({
@@ -76,6 +95,15 @@ const JobFunctionModal = ({ isOpen, onClose }: JobFunctionModalProps) => {
       toast({
         title: "Erro",
         description: "O campo Função é obrigatório",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!matrixId) {
+      toast({
+        title: "Erro",
+        description: "Matriz não encontrada. Por favor, recarregue a página.",
         variant: "destructive"
       });
       return;
@@ -138,7 +166,8 @@ const JobFunctionModal = ({ isOpen, onClose }: JobFunctionModalProps) => {
             name: formData.name,
             description: formData.description,
             base_salary: parseFloat(formData.base_salary),
-            store_id: storeId
+            store_id: storeId,
+            matrix_id: matrixId
           }]);
 
         if (error) throw error;
@@ -175,13 +204,23 @@ const JobFunctionModal = ({ isOpen, onClose }: JobFunctionModalProps) => {
     setShowForm(true);
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (jobFunction: JobFunction) => {
+    // Check if function has linked employees
+    if (jobFunction.employee_count && jobFunction.employee_count > 0) {
+      toast({
+        title: "Não é possível excluir",
+        description: `Esta função possui ${jobFunction.employee_count} funcionário(s) vinculado(s). Remova os vínculos antes de excluir.`,
+        variant: "destructive"
+      });
+      return;
+    }
+
     if (confirm('Tem certeza que deseja excluir esta função?')) {
       try {
         const { error } = await supabase
           .from('job_functions')
           .update({ is_active: false })
-          .eq('id', id);
+          .eq('id', jobFunction.id);
 
         if (error) throw error;
 
@@ -236,7 +275,16 @@ const JobFunctionModal = ({ isOpen, onClose }: JobFunctionModalProps) => {
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <Label htmlFor="matrix">Matriz</Label>
+                      <Input
+                        id="matrix"
+                        value={matrixCode && matrixName ? `${matrixCode} - ${matrixName}` : 'Carregando...'}
+                        disabled
+                        className="bg-muted"
+                      />
+                    </div>
                     <div>
                       <Label htmlFor="name">Nome da Função *</Label>
                       <Input
@@ -292,12 +340,14 @@ const JobFunctionModal = ({ isOpen, onClose }: JobFunctionModalProps) => {
           <Card>
             <CardContent className="p-0">
               <Table>
-                <TableHeader>
+              <TableHeader>
                   <TableRow>
                     <TableHead>Código</TableHead>
+                    <TableHead>Matriz</TableHead>
                     <TableHead>Nome</TableHead>
                     <TableHead>Descrição</TableHead>
                     <TableHead>Salário Base</TableHead>
+                    <TableHead>Funcionários</TableHead>
                     <TableHead>Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -305,6 +355,7 @@ const JobFunctionModal = ({ isOpen, onClose }: JobFunctionModalProps) => {
                   {jobFunctions.map((jobFunction) => (
                     <TableRow key={jobFunction.id}>
                       <TableCell>{jobFunction.code}</TableCell>
+                      <TableCell>{matrixCode && matrixName ? `${matrixCode} - ${matrixName}` : '-'}</TableCell>
                       <TableCell className="font-medium">{jobFunction.name}</TableCell>
                       <TableCell>{jobFunction.description || '-'}</TableCell>
                       <TableCell>
@@ -313,6 +364,7 @@ const JobFunctionModal = ({ isOpen, onClose }: JobFunctionModalProps) => {
                           currency: 'BRL'
                         }).format(jobFunction.base_salary)}
                       </TableCell>
+                      <TableCell>{jobFunction.employee_count || 0}</TableCell>
                       <TableCell>
                         <div className="flex gap-2">
                           <Button
@@ -337,8 +389,11 @@ const JobFunctionModal = ({ isOpen, onClose }: JobFunctionModalProps) => {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => handleDelete(jobFunction.id)}
-                            title="Excluir"
+                            onClick={() => handleDelete(jobFunction)}
+                            title={jobFunction.employee_count && jobFunction.employee_count > 0 
+                              ? "Não é possível excluir - possui funcionários vinculados" 
+                              : "Excluir"}
+                            disabled={!!(jobFunction.employee_count && jobFunction.employee_count > 0)}
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
@@ -348,7 +403,7 @@ const JobFunctionModal = ({ isOpen, onClose }: JobFunctionModalProps) => {
                   ))}
                   {jobFunctions.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground">
+                      <TableCell colSpan={7} className="text-center text-muted-foreground">
                         Nenhuma função cadastrada
                       </TableCell>
                     </TableRow>
