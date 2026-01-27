@@ -2056,6 +2056,7 @@ export type Database = {
           description: string | null
           id: string
           is_active: boolean
+          matrix_id: string
           name: string
           store_id: string
           updated_at: string
@@ -2067,6 +2068,7 @@ export type Database = {
           description?: string | null
           id?: string
           is_active?: boolean
+          matrix_id: string
           name: string
           store_id: string
           updated_at?: string
@@ -2078,11 +2080,20 @@ export type Database = {
           description?: string | null
           id?: string
           is_active?: boolean
+          matrix_id?: string
           name?: string
           store_id?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "job_functions_matrix_id_fkey"
+            columns: ["matrix_id"]
+            isOneToOne: false
+            referencedRelation: "matrices"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       matrices: {
         Row: {
