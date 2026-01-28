@@ -2807,6 +2807,7 @@ export type Database = {
           created_at: string
           group_id: string | null
           id: string
+          matrix_id: string
           parameter_key: string
           product_id: string | null
           subgroup_id: string | null
@@ -2816,6 +2817,7 @@ export type Database = {
           created_at?: string
           group_id?: string | null
           id?: string
+          matrix_id: string
           parameter_key: string
           product_id?: string | null
           subgroup_id?: string | null
@@ -2825,6 +2827,7 @@ export type Database = {
           created_at?: string
           group_id?: string | null
           id?: string
+          matrix_id?: string
           parameter_key?: string
           product_id?: string | null
           subgroup_id?: string | null
@@ -2836,6 +2839,13 @@ export type Database = {
             columns: ["group_id"]
             isOneToOne: false
             referencedRelation: "account_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "system_parameters_matrix_id_fkey"
+            columns: ["matrix_id"]
+            isOneToOne: false
+            referencedRelation: "matrices"
             referencedColumns: ["id"]
           },
           {
