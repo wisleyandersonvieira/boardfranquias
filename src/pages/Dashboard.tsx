@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { User } from "@supabase/supabase-js";
@@ -19,12 +19,15 @@ interface PendingTask {
   title: string;
 }
 
+const POPUP_SHOWN_KEY = 'pendingTasksPopupShown';
+
 const Dashboard = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [pendingTasks, setPendingTasks] = useState<PendingTask[]>([]);
   const [showPendingPopup, setShowPendingPopup] = useState(false);
   const navigate = useNavigate();
+  const hasShownPopupRef = useRef(false);
 
   const fetchPendingTasks = async (userId: string) => {
     try {
@@ -55,13 +58,34 @@ const Dashboard = () => {
     }
   };
 
+  const showPopupIfNeeded = async (userId: string) => {
+    // Verificar se o popup já foi mostrado nesta sessão do navegador
+    const alreadyShown = sessionStorage.getItem(POPUP_SHOWN_KEY);
+    
+    if (alreadyShown || hasShownPopupRef.current) {
+      // Apenas atualizar as tarefas sem mostrar o popup
+      await fetchPendingTasks(userId);
+      return;
+    }
+
+    const count = await fetchPendingTasks(userId);
+    if (count > 0) {
+      setShowPendingPopup(true);
+      sessionStorage.setItem(POPUP_SHOWN_KEY, 'true');
+      hasShownPopupRef.current = true;
+    }
+  };
+
   useEffect(() => {
     const getSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         setUser(session.user);
-        await fetchPendingTasks(session.user.id);
+        // Mostrar popup apenas no primeiro carregamento após login
+        await showPopupIfNeeded(session.user.id);
       } else {
+        // Limpar flag ao não ter sessão (logout)
+        sessionStorage.removeItem(POPUP_SHOWN_KEY);
         navigate("/auth");
       }
       setLoading(false);
@@ -73,15 +97,21 @@ const Dashboard = () => {
       (event, session) => {
         if (session?.user) {
           setUser(session.user);
+          
+          // Mostrar popup APENAS no evento SIGNED_IN real (não em TOKEN_REFRESHED ou visibilitychange)
           if (event === 'SIGNED_IN') {
-            setTimeout(async () => {
-              const count = await fetchPendingTasks(session.user.id);
-              if (count > 0) {
-                setShowPendingPopup(true);
-              }
-            }, 0);
+            // Verificar se é um login genuíno (não apenas refresh de token)
+            const alreadyShown = sessionStorage.getItem(POPUP_SHOWN_KEY);
+            if (!alreadyShown && !hasShownPopupRef.current) {
+              setTimeout(async () => {
+                await showPopupIfNeeded(session.user.id);
+              }, 100);
+            }
           }
-        } else {
+        } else if (event === 'SIGNED_OUT') {
+          // Limpar flag ao fazer logout
+          sessionStorage.removeItem(POPUP_SHOWN_KEY);
+          hasShownPopupRef.current = false;
           navigate("/auth");
         }
       }
