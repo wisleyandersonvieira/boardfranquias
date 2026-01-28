@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Settings, Plus, ArrowUp, ArrowDown, Wallet } from "lucide-react";
+import { Settings, Plus, ArrowUp, ArrowDown, Wallet, ShieldAlert } from "lucide-react";
 import { ProductParameterModal } from "./ProductParameterModal";
 import { SubgroupParameterModal } from "./SubgroupParameterModal";
 import { GrupoParameterModal } from "./GrupoParameterModal";
@@ -12,6 +12,8 @@ import { AcrescimoParameterModal } from "./AcrescimoParameterModal";
 import { DescontoParameterModal } from "./DescontoParameterModal";
 import { AportesRetiradaParameterModal } from "./AportesRetiradaParameterModal";
 import { supabase } from "@/integrations/supabase/client";
+import { useParametersAccess } from "@/hooks/useParametersAccess";
+import { useUserMatrix } from "@/hooks/useUserMatrix";
 
 interface ParametersModalProps {
   open: boolean;
@@ -42,6 +44,9 @@ export const ParametersModal = ({ open, onOpenChange }: ParametersModalProps) =>
   const [descontoParameterOpen, setDescontoParameterOpen] = useState(false);
   const [aportesRetiradaParameterOpen, setAportesRetiradaParameterOpen] = useState(false);
   const [configuredParameters, setConfiguredParameters] = useState<Record<string, { productId?: string; productName?: string; subgroupId?: string; subgroupName?: string; groupId?: string; groupName?: string }>>({});
+
+  const { hasAccess, isLoading: accessLoading } = useParametersAccess();
+  const { matrixId } = useUserMatrix();
 
   // Parâmetros padrão do sistema
   const systemParameters: Parameter[] = [
@@ -118,10 +123,10 @@ export const ParametersModal = ({ open, onOpenChange }: ParametersModalProps) =>
   ];
 
   useEffect(() => {
-    if (open) {
+    if (open && hasAccess) {
       loadConfiguredParameters();
     }
-  }, [open, productParameterOpen, subgroupParameterOpen, groupParameterOpen, faturamentoParameterOpen, acrescimoParameterOpen, descontoParameterOpen, aportesRetiradaParameterOpen]);
+  }, [open, hasAccess, productParameterOpen, subgroupParameterOpen, groupParameterOpen, faturamentoParameterOpen, acrescimoParameterOpen, descontoParameterOpen, aportesRetiradaParameterOpen]);
 
   const loadConfiguredParameters = async () => {
     try {
@@ -249,6 +254,33 @@ export const ParametersModal = ({ open, onOpenChange }: ParametersModalProps) =>
         return 'bg-blue-100 hover:bg-blue-200';
     }
   };
+
+  // Show access denied if user doesn't have permission
+  if (!accessLoading && !hasAccess) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <ShieldAlert className="h-5 w-5" />
+              Acesso Negado
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-6 text-center">
+            <p className="text-muted-foreground">
+              Você não tem permissão para acessar os parâmetros do sistema.
+            </p>
+            <p className="text-sm text-muted-foreground mt-2">
+              Apenas usuários com perfil <strong>Matriz</strong> podem configurar parâmetros.
+            </p>
+          </div>
+          <div className="flex justify-center">
+            <Button onClick={() => onOpenChange(false)}>Fechar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <>
@@ -408,6 +440,18 @@ export const ParametersModal = ({ open, onOpenChange }: ParametersModalProps) =>
         } : null}
       />
 
+      <FaturamentoParameterModal
+        open={faturamentoParameterOpen}
+        onOpenChange={setFaturamentoParameterOpen}
+        parameter={selectedParameter?.category === 'faturamento' ? {
+          id: selectedParameter.id,
+          name: selectedParameter.name,
+          description: selectedParameter.description,
+          type: selectedParameter.type as 'faturamento',
+          category: selectedParameter.category
+        } : null}
+      />
+
       <AcrescimoParameterModal
         open={acrescimoParameterOpen}
         onOpenChange={setAcrescimoParameterOpen}
@@ -421,18 +465,6 @@ export const ParametersModal = ({ open, onOpenChange }: ParametersModalProps) =>
       <AportesRetiradaParameterModal
         open={aportesRetiradaParameterOpen}
         onOpenChange={setAportesRetiradaParameterOpen}
-      />
-
-      <FaturamentoParameterModal
-        open={faturamentoParameterOpen}
-        onOpenChange={setFaturamentoParameterOpen}
-        parameter={selectedParameter?.category === 'faturamento' ? {
-          id: selectedParameter.id,
-          name: selectedParameter.name,
-          description: selectedParameter.description,
-          type: selectedParameter.type as 'faturamento',
-          category: selectedParameter.category
-        } : null}
       />
     </>
   );

@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Wallet, Package, Check, ArrowUpCircle, ArrowDownCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useUserMatrix } from "@/hooks/useUserMatrix";
 
 interface AportesRetiradaParameterModalProps {
   open: boolean;
@@ -28,6 +29,7 @@ export const AportesRetiradaParameterModal = ({ open, onOpenChange }: AportesRet
   const [currentRetiradaProductId, setCurrentRetiradaProductId] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const { matrixId } = useUserMatrix();
 
   useEffect(() => {
     if (open) {
@@ -98,6 +100,15 @@ export const AportesRetiradaParameterModal = ({ open, onOpenChange }: AportesRet
   };
 
   const handleSave = async () => {
+    if (!matrixId) {
+      toast({
+        title: "Erro",
+        description: "Matriz não identificada",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
     try {
       // Salvar parâmetro para Aporte
@@ -118,7 +129,8 @@ export const AportesRetiradaParameterModal = ({ open, onOpenChange }: AportesRet
             .from('system_parameters')
             .insert({
               parameter_key: 'aporte_socios',
-              product_id: selectedAporteProductId
+              product_id: selectedAporteProductId,
+              matrix_id: matrixId
             });
         }
       }
@@ -141,7 +153,8 @@ export const AportesRetiradaParameterModal = ({ open, onOpenChange }: AportesRet
             .from('system_parameters')
             .insert({
               parameter_key: 'retirada_socios',
-              product_id: selectedRetiradaProductId
+              product_id: selectedRetiradaProductId,
+              matrix_id: matrixId
             });
         }
       }
