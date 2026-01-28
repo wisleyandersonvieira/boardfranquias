@@ -7,8 +7,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Progress } from "@/components/ui/progress";
 import { ArrowLeft, CalendarIcon, Loader2, FileDown, Download } from "lucide-react";
-import { format, subDays } from "date-fns";
+import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -28,6 +29,8 @@ interface Account {
   type: 'current' | 'cash' | 'card' | 'delivery';
   store_id: string;
   store_name: string;
+  initial_balance?: number;
+  initial_balance_date?: string;
 }
 
 interface BalanceResult {
@@ -50,6 +53,8 @@ const BalancePositionReport = () => {
   const [balanceResults, setBalanceResults] = useState<BalanceResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [loadingMessage, setLoadingMessage] = useState("");
 
   useEffect(() => {
     fetchStores();
@@ -112,19 +117,52 @@ const BalancePositionReport = () => {
     try {
       const allAccounts: Account[] = [];
 
-      // Fetch current accounts
-      const { data: currentData } = await supabase
-        .from('current_accounts')
-        .select(`
-          id, name,
-          current_account_stores!inner (
-            store_id,
-            stores!inner (name)
-          )
-        `)
-        .eq('is_active', true);
+      // Fetch all account types in parallel with initial balance data
+      const [currentResult, cashResult, cardResult, deliveryResult] = await Promise.all([
+        supabase
+          .from('current_accounts')
+          .select(`
+            id, name, initial_balance, initial_balance_date,
+            current_account_stores!inner (
+              store_id,
+              stores!inner (name)
+            )
+          `)
+          .eq('is_active', true),
+        supabase
+          .from('cash_accounts')
+          .select(`
+            id, name, initial_balance, initial_balance_date,
+            cash_account_stores!inner (
+              store_id,
+              stores!inner (name)
+            )
+          `)
+          .eq('is_active', true),
+        supabase
+          .from('card_accounts')
+          .select(`
+            id, name, initial_balance, initial_balance_date,
+            card_account_stores!inner (
+              store_id,
+              stores!inner (name)
+            )
+          `)
+          .eq('is_active', true),
+        supabase
+          .from('delivery_accounts')
+          .select(`
+            id, name, initial_balance, initial_balance_date,
+            delivery_account_stores!inner (
+              store_id,
+              stores!inner (name)
+            )
+          `)
+          .eq('is_active', true)
+      ]);
 
-      currentData?.forEach(acc => {
+      // Process current accounts
+      currentResult.data?.forEach(acc => {
         acc.current_account_stores?.forEach((store_rel: any) => {
           if (selectedStores.includes(store_rel.store_id)) {
             allAccounts.push({
@@ -132,25 +170,16 @@ const BalancePositionReport = () => {
               name: acc.name,
               type: 'current',
               store_id: store_rel.store_id,
-              store_name: store_rel.stores?.name || ''
+              store_name: store_rel.stores?.name || '',
+              initial_balance: acc.initial_balance || 0,
+              initial_balance_date: acc.initial_balance_date
             });
           }
         });
       });
 
-      // Fetch cash accounts
-      const { data: cashData } = await supabase
-        .from('cash_accounts')
-        .select(`
-          id, name,
-          cash_account_stores!inner (
-            store_id,
-            stores!inner (name)
-          )
-        `)
-        .eq('is_active', true);
-
-      cashData?.forEach(acc => {
+      // Process cash accounts
+      cashResult.data?.forEach(acc => {
         acc.cash_account_stores?.forEach((store_rel: any) => {
           if (selectedStores.includes(store_rel.store_id)) {
             allAccounts.push({
@@ -158,25 +187,16 @@ const BalancePositionReport = () => {
               name: acc.name,
               type: 'cash',
               store_id: store_rel.store_id,
-              store_name: store_rel.stores?.name || ''
+              store_name: store_rel.stores?.name || '',
+              initial_balance: acc.initial_balance || 0,
+              initial_balance_date: acc.initial_balance_date
             });
           }
         });
       });
 
-      // Fetch card accounts
-      const { data: cardData } = await supabase
-        .from('card_accounts')
-        .select(`
-          id, name,
-          card_account_stores!inner (
-            store_id,
-            stores!inner (name)
-          )
-        `)
-        .eq('is_active', true);
-
-      cardData?.forEach(acc => {
+      // Process card accounts
+      cardResult.data?.forEach(acc => {
         acc.card_account_stores?.forEach((store_rel: any) => {
           if (selectedStores.includes(store_rel.store_id)) {
             allAccounts.push({
@@ -184,25 +204,16 @@ const BalancePositionReport = () => {
               name: acc.name,
               type: 'card',
               store_id: store_rel.store_id,
-              store_name: store_rel.stores?.name || ''
+              store_name: store_rel.stores?.name || '',
+              initial_balance: acc.initial_balance || 0,
+              initial_balance_date: acc.initial_balance_date
             });
           }
         });
       });
 
-      // Fetch delivery accounts
-      const { data: deliveryData } = await supabase
-        .from('delivery_accounts')
-        .select(`
-          id, name,
-          delivery_account_stores!inner (
-            store_id,
-            stores!inner (name)
-          )
-        `)
-        .eq('is_active', true);
-
-      deliveryData?.forEach(acc => {
+      // Process delivery accounts
+      deliveryResult.data?.forEach(acc => {
         acc.delivery_account_stores?.forEach((store_rel: any) => {
           if (selectedStores.includes(store_rel.store_id)) {
             allAccounts.push({
@@ -210,7 +221,9 @@ const BalancePositionReport = () => {
               name: acc.name,
               type: 'delivery',
               store_id: store_rel.store_id,
-              store_name: store_rel.stores?.name || ''
+              store_name: store_rel.stores?.name || '',
+              initial_balance: acc.initial_balance || 0,
+              initial_balance_date: acc.initial_balance_date
             });
           }
         });
@@ -244,241 +257,6 @@ const BalancePositionReport = () => {
     }).format(value);
   };
 
-  const calculateBalance = async (account: Account, targetDate: Date): Promise<number> => {
-    // Get account initial balance and date
-    let initialBalance = 0;
-    let initialBalanceDate: string | null = null;
-
-    // Fetch account data based on type
-    if (account.type === 'current') {
-      const { data } = await supabase
-        .from('current_accounts')
-        .select('initial_balance, initial_balance_date')
-        .eq('id', account.id)
-        .maybeSingle();
-      if (data) {
-        initialBalance = data.initial_balance || 0;
-        initialBalanceDate = data.initial_balance_date;
-      }
-    } else if (account.type === 'cash') {
-      const { data } = await supabase
-        .from('cash_accounts')
-        .select('initial_balance, initial_balance_date')
-        .eq('id', account.id)
-        .maybeSingle();
-      if (data) {
-        initialBalance = data.initial_balance || 0;
-        initialBalanceDate = data.initial_balance_date;
-      }
-    } else if (account.type === 'card') {
-      const { data } = await supabase
-        .from('card_accounts')
-        .select('initial_balance, initial_balance_date')
-        .eq('id', account.id)
-        .maybeSingle();
-      if (data) {
-        initialBalance = data.initial_balance || 0;
-        initialBalanceDate = data.initial_balance_date;
-      }
-    } else if (account.type === 'delivery') {
-      const { data } = await supabase
-        .from('delivery_accounts')
-        .select('initial_balance, initial_balance_date')
-        .eq('id', account.id)
-        .maybeSingle();
-      if (data) {
-        initialBalance = data.initial_balance || 0;
-        initialBalanceDate = data.initial_balance_date;
-      }
-    }
-
-    let balance = initialBalance;
-
-    if (!initialBalanceDate) {
-      return balance;
-    }
-
-    // Parse the initial balance date properly (adding T12:00:00 to avoid timezone issues)
-    const inicialDate = new Date(initialBalanceDate + 'T12:00:00');
-    
-    // If target date is before initial balance date, return initial balance
-    if (targetDate < inicialDate) {
-      return balance;
-    }
-
-    // Calculate all movements from initial date to target date
-    // Use the original string date for queries
-    const formattedInitialDate = initialBalanceDate;
-    const formattedTargetDate = format(targetDate, 'yyyy-MM-dd');
-
-    // 1. Transfers
-    const { data: transfers } = await supabase
-      .from('transfers')
-      .select('*')
-      .gte('transfer_date', formattedInitialDate)
-      .lte('transfer_date', formattedTargetDate)
-      .or(`source_account_id.eq.${account.id},destination_account_id.eq.${account.id}`);
-
-    transfers?.forEach(transfer => {
-      if (transfer.source_account_id === account.id) {
-        balance -= transfer.amount;
-      } else {
-        balance += transfer.amount;
-      }
-    });
-
-    // 2. Financial transactions (payables - saida)
-    if (account.type === 'current' || account.type === 'cash' || account.type === 'card') {
-      const { data: payableTransactions } = await supabase
-        .from('financial_transactions')
-        .select('amount')
-        .eq('store_id', account.store_id)
-        .eq('account_id', account.id)
-        .eq('transaction_type', 'saida')
-        .gte('transaction_date', formattedInitialDate)
-        .lte('transaction_date', formattedTargetDate);
-
-      payableTransactions?.forEach(t => {
-        balance -= t.amount;
-      });
-
-      // 3. Financial transactions (receivables - entrada)
-      const { data: receivableTransactions } = await supabase
-        .from('financial_transactions')
-        .select('amount')
-        .eq('store_id', account.store_id)
-        .eq('account_id', account.id)
-        .eq('transaction_type', 'entrada')
-        .gte('transaction_date', formattedInitialDate)
-        .lte('transaction_date', formattedTargetDate);
-
-      receivableTransactions?.forEach(t => {
-        balance += t.amount;
-      });
-    }
-
-    // 4. Cash control items for cash accounts
-    if (account.type === 'cash') {
-      const { data: cashItems } = await supabase
-        .from('cash_control_cash_items')
-        .select('valor, cash_control_id')
-        .eq('cash_account_id', account.id);
-
-      if (cashItems) {
-        for (const item of cashItems) {
-          const { data: cashControl } = await supabase
-            .from('cash_control')
-            .select('date')
-            .eq('id', item.cash_control_id)
-            .eq('store_id', account.store_id)
-            .gte('date', formattedInitialDate)
-            .lte('date', formattedTargetDate)
-            .maybeSingle();
-
-          if (cashControl) {
-            balance += item.valor;
-          }
-        }
-      }
-    }
-
-    // 5. Cash control items for delivery accounts
-    if (account.type === 'delivery') {
-      const { data: deliveryItems } = await supabase
-        .from('cash_control_delivery_items')
-        .select('valor, cash_control_id')
-        .eq('delivery_account_id', account.id);
-
-      if (deliveryItems) {
-        for (const item of deliveryItems) {
-          const { data: cashControl } = await supabase
-            .from('cash_control')
-            .select('date')
-            .eq('id', item.cash_control_id)
-            .eq('store_id', account.store_id)
-            .gte('date', formattedInitialDate)
-            .lte('date', formattedTargetDate)
-            .maybeSingle();
-
-          if (cashControl) {
-            balance += item.valor;
-          }
-        }
-      }
-    }
-
-    // 6. Cash control items for card accounts
-    if (account.type === 'card') {
-      const { data: cardItems } = await supabase
-        .from('cash_control_card_items')
-        .select('valor, cash_control_id')
-        .eq('card_account_id', account.id);
-
-      if (cardItems) {
-        for (const item of cardItems) {
-          const { data: cashControl } = await supabase
-            .from('cash_control')
-            .select('date')
-            .eq('id', item.cash_control_id)
-            .eq('store_id', account.store_id)
-            .gte('date', formattedInitialDate)
-            .lte('date', formattedTargetDate)
-            .maybeSingle();
-
-          if (cashControl) {
-            balance += item.valor;
-          }
-        }
-      }
-    }
-
-    // 7. Cash control items for current accounts
-    if (account.type === 'current') {
-      const { data: accountItems } = await supabase
-        .from('cash_control_account_items')
-        .select('valor, cash_control_id')
-        .eq('current_account_id', account.id);
-
-      if (accountItems) {
-        for (const item of accountItems) {
-          const { data: cashControl } = await supabase
-            .from('cash_control')
-            .select('date')
-            .eq('id', item.cash_control_id)
-            .eq('store_id', account.store_id)
-            .gte('date', formattedInitialDate)
-            .lte('date', formattedTargetDate)
-            .maybeSingle();
-
-          if (cashControl) {
-            balance += item.valor;
-          }
-        }
-      }
-    }
-
-    // 8. Partner transactions (aportes and retiradas)
-    const { data: partnerTransactions } = await supabase
-      .from('partner_transactions')
-      .select('amount, transaction_type')
-      .eq('store_id', account.store_id)
-      .eq('account_id', account.id)
-      .gte('payment_date', formattedInitialDate)
-      .lte('payment_date', formattedTargetDate);
-
-    partnerTransactions?.forEach(transaction => {
-      if (transaction.transaction_type === 'aporte') {
-        // Aporte é crédito na conta
-        balance += transaction.amount;
-      } else if (transaction.transaction_type === 'retirada') {
-        // Retirada é débito na conta
-        balance -= transaction.amount;
-      }
-    });
-
-    return balance;
-  };
-
   const generateReport = async () => {
     if (!selectedDate) {
       toast({
@@ -500,15 +278,269 @@ const BalancePositionReport = () => {
 
     setLoading(true);
     setShowResults(false);
+    setLoadingProgress(0);
 
     try {
+      const selectedAccountsData = accounts.filter(a => selectedAccounts.includes(a.id));
+      const formattedTargetDate = format(selectedDate, 'yyyy-MM-dd');
+      
+      // Get all unique account IDs by type
+      const currentAccountIds = [...new Set(selectedAccountsData.filter(a => a.type === 'current').map(a => a.id))];
+      const cashAccountIds = [...new Set(selectedAccountsData.filter(a => a.type === 'cash').map(a => a.id))];
+      const cardAccountIds = [...new Set(selectedAccountsData.filter(a => a.type === 'card').map(a => a.id))];
+      const deliveryAccountIds = [...new Set(selectedAccountsData.filter(a => a.type === 'delivery').map(a => a.id))];
+      const allAccountIds = [...new Set(selectedAccountsData.map(a => a.id))];
+      const allStoreIds = [...new Set(selectedAccountsData.map(a => a.store_id))];
+
+      setLoadingMessage("Buscando transferências...");
+      setLoadingProgress(10);
+
+      // Step 1: Fetch all transfers for all accounts in one query
+      const transfersPromise = allAccountIds.length > 0 
+        ? supabase
+            .from('transfers')
+            .select('*')
+            .lte('transfer_date', formattedTargetDate)
+        : Promise.resolve({ data: [] });
+
+      setLoadingMessage("Buscando transações financeiras...");
+      setLoadingProgress(20);
+
+      // Step 2: Fetch all financial transactions in parallel (one for entrada, one for saida)
+      const financialTransSaidaPromise = allAccountIds.length > 0
+        ? supabase
+            .from('financial_transactions')
+            .select('amount, account_id, store_id, transaction_date, transaction_type')
+            .in('account_id', allAccountIds)
+            .in('store_id', allStoreIds)
+            .lte('transaction_date', formattedTargetDate)
+        : Promise.resolve({ data: [] });
+
+      setLoadingMessage("Buscando itens de caixa...");
+      setLoadingProgress(30);
+
+      // Step 3: Fetch all cash control items in parallel
+      const cashControlItemsPromise = cashAccountIds.length > 0
+        ? supabase
+            .from('cash_control_cash_items')
+            .select('valor, cash_control_id, cash_account_id')
+            .in('cash_account_id', cashAccountIds)
+        : Promise.resolve({ data: [] });
+
+      const deliveryItemsPromise = deliveryAccountIds.length > 0
+        ? supabase
+            .from('cash_control_delivery_items')
+            .select('valor, cash_control_id, delivery_account_id')
+            .in('delivery_account_id', deliveryAccountIds)
+        : Promise.resolve({ data: [] });
+
+      const cardItemsPromise = cardAccountIds.length > 0
+        ? supabase
+            .from('cash_control_card_items')
+            .select('valor, cash_control_id, card_account_id')
+            .in('card_account_id', cardAccountIds)
+        : Promise.resolve({ data: [] });
+
+      const accountItemsPromise = currentAccountIds.length > 0
+        ? supabase
+            .from('cash_control_account_items')
+            .select('valor, cash_control_id, current_account_id')
+            .in('current_account_id', currentAccountIds)
+        : Promise.resolve({ data: [] });
+
+      setLoadingMessage("Buscando transações de sócios...");
+      setLoadingProgress(40);
+
+      // Step 4: Fetch partner transactions
+      const partnerTransPromise = allAccountIds.length > 0
+        ? supabase
+            .from('partner_transactions')
+            .select('amount, transaction_type, account_id, store_id, payment_date')
+            .in('account_id', allAccountIds)
+            .in('store_id', allStoreIds)
+            .lte('payment_date', formattedTargetDate)
+        : Promise.resolve({ data: [] });
+
+      setLoadingMessage("Processando dados...");
+      setLoadingProgress(50);
+
+      // Execute all queries in parallel
+      const [
+        transfersResult,
+        financialTransResult,
+        cashControlItemsResult,
+        deliveryItemsResult,
+        cardItemsResult,
+        accountItemsResult,
+        partnerTransResult
+      ] = await Promise.all([
+        transfersPromise,
+        financialTransSaidaPromise,
+        cashControlItemsPromise,
+        deliveryItemsPromise,
+        cardItemsPromise,
+        accountItemsPromise,
+        partnerTransPromise
+      ]);
+
+      setLoadingProgress(60);
+
+      // Collect all cash_control_ids to fetch dates in one query
+      const allCashControlIds = new Set<string>();
+      (cashControlItemsResult.data || []).forEach((item: any) => allCashControlIds.add(item.cash_control_id));
+      (deliveryItemsResult.data || []).forEach((item: any) => allCashControlIds.add(item.cash_control_id));
+      (cardItemsResult.data || []).forEach((item: any) => allCashControlIds.add(item.cash_control_id));
+      (accountItemsResult.data || []).forEach((item: any) => allCashControlIds.add(item.cash_control_id));
+
+      setLoadingMessage("Buscando datas de controle de caixa...");
+      setLoadingProgress(70);
+
+      // Fetch all cash control dates in one query
+      let cashControlMap = new Map<string, { date: string; store_id: string }>();
+      if (allCashControlIds.size > 0) {
+        const { data: cashControlData } = await supabase
+          .from('cash_control')
+          .select('id, date, store_id')
+          .in('id', Array.from(allCashControlIds))
+          .lte('date', formattedTargetDate);
+        
+        (cashControlData || []).forEach((cc: any) => {
+          cashControlMap.set(cc.id, { date: cc.date, store_id: cc.store_id });
+        });
+      }
+
+      setLoadingMessage("Calculando saldos...");
+      setLoadingProgress(80);
+
+      // Create lookup maps for fast access
+      const transfersData = transfersResult.data || [];
+      const financialTransData = financialTransResult.data || [];
+      const cashControlItemsData = cashControlItemsResult.data || [];
+      const deliveryItemsData = deliveryItemsResult.data || [];
+      const cardItemsData = cardItemsResult.data || [];
+      const accountItemsData = accountItemsResult.data || [];
+      const partnerTransData = partnerTransResult.data || [];
+
+      // Calculate balance for each selected account
       const results: BalanceResult[] = [];
 
-      for (const accountId of selectedAccounts) {
-        const account = accounts.find(a => a.id === accountId);
-        if (!account) continue;
+      for (const account of selectedAccountsData) {
+        let balance = account.initial_balance || 0;
+        const initialBalanceDate = account.initial_balance_date;
 
-        const balance = await calculateBalance(account, selectedDate);
+        if (!initialBalanceDate) {
+          results.push({
+            accountId: account.id,
+            accountName: account.name,
+            accountType: getAccountTypeLabel(account.type),
+            storeName: account.store_name,
+            balance
+          });
+          continue;
+        }
+
+        const inicialDate = new Date(initialBalanceDate + 'T12:00:00');
+        
+        if (selectedDate < inicialDate) {
+          results.push({
+            accountId: account.id,
+            accountName: account.name,
+            accountType: getAccountTypeLabel(account.type),
+            storeName: account.store_name,
+            balance
+          });
+          continue;
+        }
+
+        // 1. Process transfers
+        transfersData.forEach(transfer => {
+          if (transfer.transfer_date >= initialBalanceDate && transfer.transfer_date <= formattedTargetDate) {
+            if (transfer.source_account_id === account.id) {
+              balance -= transfer.amount;
+            } else if (transfer.destination_account_id === account.id) {
+              balance += transfer.amount;
+            }
+          }
+        });
+
+        // 2. Process financial transactions
+        if (account.type === 'current' || account.type === 'cash' || account.type === 'card') {
+          financialTransData.forEach(t => {
+            if (t.account_id === account.id && 
+                t.store_id === account.store_id &&
+                t.transaction_date >= initialBalanceDate && 
+                t.transaction_date <= formattedTargetDate) {
+              if (t.transaction_type === 'saida') {
+                balance -= t.amount;
+              } else if (t.transaction_type === 'entrada') {
+                balance += t.amount;
+              }
+            }
+          });
+        }
+
+        // 3. Process cash control items based on account type
+        if (account.type === 'cash') {
+          cashControlItemsData.forEach((item: any) => {
+            if (item.cash_account_id === account.id) {
+              const cc = cashControlMap.get(item.cash_control_id);
+              if (cc && cc.store_id === account.store_id && 
+                  cc.date >= initialBalanceDate && cc.date <= formattedTargetDate) {
+                balance += item.valor;
+              }
+            }
+          });
+        }
+
+        if (account.type === 'delivery') {
+          deliveryItemsData.forEach((item: any) => {
+            if (item.delivery_account_id === account.id) {
+              const cc = cashControlMap.get(item.cash_control_id);
+              if (cc && cc.store_id === account.store_id && 
+                  cc.date >= initialBalanceDate && cc.date <= formattedTargetDate) {
+                balance += item.valor;
+              }
+            }
+          });
+        }
+
+        if (account.type === 'card') {
+          cardItemsData.forEach((item: any) => {
+            if (item.card_account_id === account.id) {
+              const cc = cashControlMap.get(item.cash_control_id);
+              if (cc && cc.store_id === account.store_id && 
+                  cc.date >= initialBalanceDate && cc.date <= formattedTargetDate) {
+                balance += item.valor;
+              }
+            }
+          });
+        }
+
+        if (account.type === 'current') {
+          accountItemsData.forEach((item: any) => {
+            if (item.current_account_id === account.id) {
+              const cc = cashControlMap.get(item.cash_control_id);
+              if (cc && cc.store_id === account.store_id && 
+                  cc.date >= initialBalanceDate && cc.date <= formattedTargetDate) {
+                balance += item.valor;
+              }
+            }
+          });
+        }
+
+        // 4. Process partner transactions
+        partnerTransData.forEach(transaction => {
+          if (transaction.account_id === account.id && 
+              transaction.store_id === account.store_id &&
+              transaction.payment_date >= initialBalanceDate && 
+              transaction.payment_date <= formattedTargetDate) {
+            if (transaction.transaction_type === 'aporte') {
+              balance += transaction.amount;
+            } else if (transaction.transaction_type === 'retirada') {
+              balance -= transaction.amount;
+            }
+          }
+        });
 
         results.push({
           accountId: account.id,
@@ -518,6 +550,9 @@ const BalancePositionReport = () => {
           balance
         });
       }
+
+      setLoadingProgress(100);
+      setLoadingMessage("Concluído!");
 
       // Sort by store name, then account name
       results.sort((a, b) => {
@@ -537,6 +572,8 @@ const BalancePositionReport = () => {
       });
     } finally {
       setLoading(false);
+      setLoadingProgress(0);
+      setLoadingMessage("");
     }
   };
 
@@ -726,6 +763,17 @@ const BalancePositionReport = () => {
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Loading Progress */}
+            {loading && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">{loadingMessage}</span>
+                  <span className="font-medium">{loadingProgress}%</span>
+                </div>
+                <Progress value={loadingProgress} className="h-2" />
               </div>
             )}
 
