@@ -525,8 +525,8 @@ const Tasks = () => {
                     </div>
                   </CardHeader>
                   <CardContent className="p-2">
-                    <ScrollArea className="max-h-[calc(100vh-250px)]">
-                      <div className="space-y-2 pr-2">
+                    <ScrollArea className="h-[calc(100vh-280px)]">
+                      <div className="space-y-2 pr-3">
                         {getColumnTasks(column.id).map((task) => (
                           <Card
                             key={task.id}
@@ -589,6 +589,7 @@ const Tasks = () => {
                           </Card>
                         ))}
                       </div>
+                      <ScrollBar orientation="vertical" />
                     </ScrollArea>
 
                     <Button
