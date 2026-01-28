@@ -55,6 +55,7 @@ interface TransfersModalProps {
 const ITEMS_PER_PAGE = 20;
 
 export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
+  const [userStoreIds, setUserStoreIds] = useState<string[]>([]);
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -70,7 +71,7 @@ export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
   const [currentPage, setCurrentPage] = useState(1);
 
   // Filtros
-  const [selectedAccount, setSelectedAccount] = useState<string>("ALL_ACCOUNTS");
+  const [selectedAccount, setSelectedAccount] = useState<string>("");
   const [startDate, setStartDate] = useState<Date>();
   const [endDate, setEndDate] = useState<Date>();
 
@@ -87,40 +88,48 @@ export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
       setTransfers([]);
       setHasSearched(false);
       setCurrentPage(1);
+      setSelectedAccount("");
+      setStartDate(undefined);
+      setEndDate(undefined);
       
       const loadData = async () => {
-        await fetchStores();
-        await fetchAccounts();
+        await fetchUserStores();
       };
       loadData();
     }
   }, [open]);
 
-  const fetchStores = async () => {
+  // Carregar contas após obter as lojas do usuário
+  useEffect(() => {
+    if (open && userStoreIds.length > 0) {
+      fetchAccounts();
+    }
+  }, [open, userStoreIds]);
+
+  const fetchUserStores = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Verificar se é admin
       const { data: profile } = await supabase
         .from('profiles')
         .select('role, store_id')
         .eq('id', user.id)
         .single();
 
+      const storeIds: string[] = [];
+
       if (profile?.role === 'admin') {
         // Admin vê todas as lojas
-        const { data, error } = await supabase
+        const { data: allStores } = await supabase
           .from('stores')
-          .select('id, name')
-          .order('name');
-
-        if (error) throw error;
-        setStores(data || []);
+          .select('id');
+        
+        if (allStores) {
+          allStores.forEach(s => storeIds.push(s.id));
+        }
       } else {
         // Usuário normal: buscar lojas autorizadas
-        const storeIds: string[] = [];
-        
         if (profile?.store_id) {
           storeIds.push(profile.store_id);
         }
@@ -137,22 +146,22 @@ export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
             }
           });
         }
+      }
 
-        if (storeIds.length > 0) {
-          const { data, error } = await supabase
-            .from('stores')
-            .select('id, name')
-            .in('id', storeIds)
-            .order('name');
+      setUserStoreIds(storeIds);
 
-          if (error) throw error;
-          setStores(data || []);
-        } else {
-          setStores([]);
-        }
+      // Também carregar lojas para o formulário
+      if (storeIds.length > 0) {
+        const { data: storesData } = await supabase
+          .from('stores')
+          .select('id, name')
+          .in('id', storeIds)
+          .order('name');
+        
+        setStores(storesData || []);
       }
     } catch (error) {
-      console.error('Erro ao carregar lojas:', error);
+      console.error('Erro ao carregar lojas do usuário:', error);
       toast({
         title: "Erro",
         description: "Erro ao carregar lojas",
@@ -162,9 +171,11 @@ export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
   };
 
   const fetchAccounts = async () => {
+    if (userStoreIds.length === 0) return;
+
     try {
       const accountPromises = [
-        // Buscar current accounts com lojas
+        // Buscar current accounts vinculadas às lojas do usuário
         supabase
           .from('current_accounts')
           .select(`
@@ -175,7 +186,7 @@ export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
             )
           `)
           .eq('is_active', true),
-        // Buscar cash accounts com lojas
+        // Buscar cash accounts vinculadas às lojas do usuário
         supabase
           .from('cash_accounts')
           .select(`
@@ -186,7 +197,7 @@ export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
             )
           `)
           .eq('is_active', true),
-        // Buscar card accounts com lojas
+        // Buscar card accounts vinculadas às lojas do usuário
         supabase
           .from('card_accounts')
           .select(`
@@ -197,7 +208,7 @@ export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
             )
           `)
           .eq('is_active', true),
-        // Buscar delivery accounts com lojas
+        // Buscar delivery accounts vinculadas às lojas do usuário
         supabase
           .from('delivery_accounts')
           .select(`
@@ -212,26 +223,40 @@ export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
 
       const [currentResult, cashResult, cardResult, deliveryResult] = await Promise.all(accountPromises);
 
+      // Filtrar apenas contas vinculadas às lojas do usuário
+      const filterByUserStores = (accounts: any[], storeRelation: string) => {
+        return accounts.filter(acc => {
+          const storeAssociations = acc[storeRelation];
+          if (!storeAssociations || !Array.isArray(storeAssociations)) return false;
+          return storeAssociations.some((sa: any) => userStoreIds.includes(sa.store_id));
+        });
+      };
+
+      const filteredCurrentAccounts = filterByUserStores(currentResult.data || [], 'current_account_stores');
+      const filteredCashAccounts = filterByUserStores(cashResult.data || [], 'cash_account_stores');
+      const filteredCardAccounts = filterByUserStores(cardResult.data || [], 'card_account_stores');
+      const filteredDeliveryAccounts = filterByUserStores(deliveryResult.data || [], 'delivery_account_stores');
+
       const allAccounts = [
-        ...(currentResult.data || []).map(acc => ({ 
+        ...filteredCurrentAccounts.map(acc => ({ 
           id: acc.id, 
           name: acc.name, 
           type: 'current' as const,
           store_name: acc.current_account_stores?.[0]?.stores?.name || ''
         })),
-        ...(cashResult.data || []).map(acc => ({ 
+        ...filteredCashAccounts.map(acc => ({ 
           id: acc.id, 
           name: acc.name, 
           type: 'cash' as const,
           store_name: acc.cash_account_stores?.[0]?.stores?.name || ''
         })),
-        ...(cardResult.data || []).map(acc => ({ 
+        ...filteredCardAccounts.map(acc => ({ 
           id: acc.id, 
           name: acc.name, 
           type: 'card' as const,
           store_name: acc.card_account_stores?.[0]?.stores?.name || ''
         })),
-        ...(deliveryResult.data || []).map(acc => ({ 
+        ...filteredDeliveryAccounts.map(acc => ({ 
           id: acc.id, 
           name: acc.name, 
           type: 'delivery' as const,
@@ -246,6 +271,16 @@ export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
   };
 
   const fetchTransfers = async () => {
+    // Validar que a conta foi selecionada
+    if (!selectedAccount) {
+      toast({
+        title: "Atenção",
+        description: "Selecione uma conta ou 'Todas as contas' para filtrar",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (accounts.length === 0) {
       toast({
         title: "Aguarde",
@@ -501,10 +536,10 @@ export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
           <div className="space-y-4 border-b pb-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="text-sm font-medium mb-2 block">Conta</label>
+                <label className="text-sm font-medium mb-2 block">Conta <span className="text-destructive">*</span></label>
                 <Select value={selectedAccount} onValueChange={setSelectedAccount}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todas as contas" />
+                  <SelectTrigger className={cn(!selectedAccount && "border-destructive")}>
+                    <SelectValue placeholder="Selecione uma conta" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ALL_ACCOUNTS">Todas as contas</SelectItem>
