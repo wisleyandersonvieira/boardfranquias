@@ -3431,6 +3431,7 @@ export type Database = {
       }
       get_user_store_id: { Args: never; Returns: string }
       has_cadastros_write_permission: { Args: never; Returns: boolean }
+      is_master_user: { Args: never; Returns: boolean }
       is_matriz_profile_user: { Args: never; Returns: boolean }
       is_matriz_user: { Args: never; Returns: boolean }
       store_in_user_matrix: {
