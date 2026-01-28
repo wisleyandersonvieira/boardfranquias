@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { Trash2, Plus, Calendar, Shield, ChevronDown } from "lucide-react";
 import { format } from "date-fns";
+import { useUserMatrix } from "@/hooks/useUserMatrix";
 
 interface PeriodControlModalProps {
   open: boolean;
@@ -21,6 +22,8 @@ interface PeriodControlModalProps {
 interface PeriodBlock {
   id: string;
   store_id: string;
+  matrix_id: string;
+  matrix_name?: string;
   year: number;
   month: number;
   block_type: 'competencia' | 'pagamento';
@@ -61,6 +64,9 @@ export const PeriodControlModal = ({ open, onOpenChange }: PeriodControlModalPro
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   
+  // User matrix data
+  const { matrixId, matrixName, isLoading: matrixLoading } = useUserMatrix();
+  
   // Filter state
   const [filterYear, setFilterYear] = useState<number>(new Date().getFullYear());
   const [filterMonths, setFilterMonths] = useState<number[]>([]);
@@ -82,12 +88,22 @@ export const PeriodControlModal = ({ open, onOpenChange }: PeriodControlModalPro
       setLoading(true);
       const { data, error } = await supabase
         .from("period_blocks")
-        .select("*")
+        .select(`
+          *,
+          matrices:matrix_id (name)
+        `)
         .order("year", { ascending: false })
         .order("month", { ascending: false });
 
       if (error) throw error;
-      setPeriodBlocks(data || []);
+      
+      // Map data to include matrix_name
+      const mappedData = (data || []).map(block => ({
+        ...block,
+        matrix_name: block.matrices?.name || 'N/A'
+      }));
+      
+      setPeriodBlocks(mappedData);
     } catch (error: any) {
       toast({
         title: "Erro ao carregar períodos bloqueados",
@@ -104,6 +120,15 @@ export const PeriodControlModal = ({ open, onOpenChange }: PeriodControlModalPro
       toast({
         title: "Dados incompletos",
         description: "Selecione o mês, tipo de bloqueio e pelo menos um módulo.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!matrixId) {
+      toast({
+        title: "Erro",
+        description: "Usuário não está associado a uma matriz.",
         variant: "destructive",
       });
       return;
@@ -127,6 +152,7 @@ export const PeriodControlModal = ({ open, onOpenChange }: PeriodControlModalPro
         .from("period_blocks")
         .insert({
           store_id: profile.store_id,
+          matrix_id: matrixId,
           year: selectedYear,
           month: selectedMonth,
           block_type: selectedBlockType,
@@ -270,6 +296,17 @@ export const PeriodControlModal = ({ open, onOpenChange }: PeriodControlModalPro
                 <CardTitle className="text-lg">Criar Novo Bloqueio</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Campo Matriz - readonly, preenchido automaticamente */}
+                <div>
+                  <Label htmlFor="matrix">Matriz</Label>
+                  <Input
+                    id="matrix"
+                    value={matrixLoading ? "Carregando..." : matrixName || "Não definida"}
+                    disabled
+                    className="bg-muted"
+                  />
+                </div>
+
                 <div className="grid grid-cols-3 gap-4">
                   <div>
                     <Label htmlFor="year">Ano</Label>
@@ -335,7 +372,7 @@ export const PeriodControlModal = ({ open, onOpenChange }: PeriodControlModalPro
                 </div>
 
                 <div className="flex gap-2">
-                  <Button onClick={handleCreateBlock} disabled={loading}>
+                  <Button onClick={handleCreateBlock} disabled={loading || matrixLoading || !matrixId}>
                     Criar Bloqueio
                   </Button>
                   <Button variant="outline" onClick={() => setShowForm(false)}>
@@ -422,7 +459,10 @@ export const PeriodControlModal = ({ open, onOpenChange }: PeriodControlModalPro
                 <div className="space-y-2">
                   {filteredPeriodBlocks.map((block) => (
                     <div key={block.id} className="border rounded-lg p-3 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <Badge variant="outline" className="bg-primary/10">
+                          {block.matrix_name}
+                        </Badge>
                         <Badge variant="outline">
                           {getMonthName(block.month)}/{block.year}
                         </Badge>
