@@ -26,6 +26,8 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { useCadastrosPermissions } from "@/hooks/useCadastrosPermissions";
+import { toast } from "sonner";
 
 
 interface SubMenuItem {
@@ -101,6 +103,7 @@ const AppSidebar = ({
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [stores, setStores] = useState<StoreData[]>([]);
   const [loadingStores, setLoadingStores] = useState(false);
+  const { canAccess: canAccessCadastros, loading: loadingCadastros } = useCadastrosPermissions();
   
 
   useEffect(() => {
@@ -308,6 +311,12 @@ const AppSidebar = ({
   const filteredMenuItems = menuItems;
 
   const handleMenuClick = (item: MenuItem) => {
+    // Block access to Cadastros if user doesn't have permission
+    if (item.id === "cadastros" && !loadingCadastros && !canAccessCadastros) {
+      toast.error("Acesso negado ao módulo Cadastros");
+      return;
+    }
+
     if (item.route) {
       navigate(item.route);
       setActiveModule(null);
