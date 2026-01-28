@@ -2283,6 +2283,7 @@ export type Database = {
           created_at: string
           created_by: string
           id: string
+          matrix_id: string
           month: number
           store_id: string
           updated_at: string
@@ -2294,6 +2295,7 @@ export type Database = {
           created_at?: string
           created_by: string
           id?: string
+          matrix_id: string
           month: number
           store_id: string
           updated_at?: string
@@ -2305,12 +2307,21 @@ export type Database = {
           created_at?: string
           created_by?: string
           id?: string
+          matrix_id?: string
           month?: number
           store_id?: string
           updated_at?: string
           year?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "period_blocks_matrix_id_fkey"
+            columns: ["matrix_id"]
+            isOneToOne: false
+            referencedRelation: "matrices"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       product_supplier_codes: {
         Row: {
