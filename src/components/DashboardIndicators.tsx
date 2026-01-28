@@ -199,35 +199,29 @@ const DashboardIndicators = () => {
       return;
     }
 
-    let total = 0;
-    
-    for (const month of selectedMonths) {
-      const startDate = `${selectedYear}-${String(month).padStart(2, "0")}-01`;
-      const endDate = new Date(selectedYear, month, 0).toISOString().split("T")[0];
-      
-      const { data } = await supabase
-        .from("cash_control")
-        .select("faturamento_total")
-        .gte("date", startDate)
-        .lte("date", endDate)
-        .in("store_id", storeIdsToFilter);
-
-      if (data) {
-        total += data.reduce((sum, item) => sum + (item.faturamento_total || 0), 0);
-      }
-    }
-    
-    setTotalRevenue(total);
-
-    // Fetch yearly revenue
+    // Fetch all yearly data in a single query (instead of one query per month)
     const { data: yearlyData } = await supabase
       .from("cash_control")
-      .select("faturamento_total")
+      .select("date, faturamento_total")
       .gte("date", `${selectedYear}-01-01`)
       .lte("date", `${selectedYear}-12-31`)
       .in("store_id", storeIdsToFilter);
 
-    const yearlyTotal = yearlyData?.reduce((sum, item) => sum + (item.faturamento_total || 0), 0) || 0;
+    // Calculate total for selected months in-memory
+    let total = 0;
+    let yearlyTotal = 0;
+    
+    yearlyData?.forEach((item) => {
+      const month = parseInt(item.date.split('-')[1], 10);
+      const value = item.faturamento_total || 0;
+      yearlyTotal += value;
+      
+      if (selectedMonths.includes(month)) {
+        total += value;
+      }
+    });
+    
+    setTotalRevenue(total);
     setYearlyRevenue(yearlyTotal);
   };
 
