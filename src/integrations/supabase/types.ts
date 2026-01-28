@@ -2285,7 +2285,7 @@ export type Database = {
           id: string
           matrix_id: string
           month: number
-          store_id: string
+          store_id: string | null
           updated_at: string
           year: number
         }
@@ -2297,7 +2297,7 @@ export type Database = {
           id?: string
           matrix_id: string
           month: number
-          store_id: string
+          store_id?: string | null
           updated_at?: string
           year: number
         }
@@ -2309,7 +2309,7 @@ export type Database = {
           id?: string
           matrix_id?: string
           month?: number
-          store_id?: string
+          store_id?: string | null
           updated_at?: string
           year?: number
         }

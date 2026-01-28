@@ -137,27 +137,17 @@ export const PeriodControlModal = ({ open, onOpenChange }: PeriodControlModalPro
     try {
       setLoading(true);
       
-      // Buscar store_id do usuário
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("store_id")
-        .eq("id", (await supabase.auth.getUser()).data.user?.id)
-        .single();
-
-      if (!profile?.store_id) {
-        throw new Error("Usuário não associado a uma loja");
-      }
+      const { data: { user } } = await supabase.auth.getUser();
 
       const { error } = await supabase
         .from("period_blocks")
         .insert({
-          store_id: profile.store_id,
           matrix_id: matrixId,
           year: selectedYear,
           month: selectedMonth,
           block_type: selectedBlockType,
           blocked_modules: selectedModules,
-          created_by: (await supabase.auth.getUser()).data.user?.id
+          created_by: user?.id
         });
 
       if (error) {
