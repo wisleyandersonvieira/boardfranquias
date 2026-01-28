@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Calculator, 
@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { useCadastrosPermissions } from "@/hooks/useCadastrosPermissions";
+
 
 interface SubMenuItem {
   id: string;
@@ -101,7 +101,7 @@ const AppSidebar = ({
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [stores, setStores] = useState<StoreData[]>([]);
   const [loadingStores, setLoadingStores] = useState(false);
-  const { canAccess: canAccessCadastros, loading: loadingCadastrosPermissions } = useCadastrosPermissions();
+  
 
   useEffect(() => {
     const fetchStores = async () => {
@@ -304,16 +304,8 @@ const AppSidebar = ({
     },
   ];
 
-  // Filter menu items based on permissions
-  const filteredMenuItems = useMemo(() => {
-    return menuItems.filter(item => {
-      // Hide "cadastros" menu if user doesn't have access
-      if (item.id === "cadastros" && !canAccessCadastros) {
-        return false;
-      }
-      return true;
-    });
-  }, [canAccessCadastros]);
+  // Show all menu items - permission check happens on click/access
+  const filteredMenuItems = menuItems;
 
   const handleMenuClick = (item: MenuItem) => {
     if (item.route) {

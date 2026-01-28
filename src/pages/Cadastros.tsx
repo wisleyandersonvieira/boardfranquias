@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,7 +35,28 @@ const Cadastros = () => {
   const [partnersModalOpen, setPartnersModalOpen] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { canAccess, canEdit, canDelete, canAccessParameters, canAccessStores, permissionLevel } = useCadastrosPermissions();
+  const { canAccess, canEdit, canDelete, canAccessParameters, canAccessStores, permissionLevel, loading } = useCadastrosPermissions();
+
+  // Redirect if user has no access at all (after loading)
+  useEffect(() => {
+    if (!loading && !canAccess) {
+      toast({
+        variant: "destructive",
+        title: "Acesso negado",
+        description: "Você não tem permissão para acessar o módulo Cadastros.",
+      });
+      navigate("/dashboard");
+    }
+  }, [loading, canAccess, navigate, toast]);
+
+  // Show loading state while checking permissions
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   const handleMenuClick = (menuId: string, openModal: () => void) => {
     // Read permission: can see menus but cannot access
