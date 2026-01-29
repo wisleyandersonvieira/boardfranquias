@@ -498,6 +498,9 @@ export function LinkToAccountsPayableModal({
   };
 
   const handleSave = async () => {
+    // Prevent double-click by checking loading state first
+    if (loading) return;
+    
     // Validar fornecedor ou funcionário dependendo do modo
     if (isEmployeeMode) {
       if (!employeeId || !documentType || !documentNumber || !issueDate || !dueDate || !dataCompetencia) {
@@ -541,58 +544,60 @@ export function LinkToAccountsPayableModal({
       return;
     }
 
-    // Validate period
-    const competenceValidation = await validateAccountsPayablePeriod.competencia(dataCompetencia);
-    if (competenceValidation.blocked) {
-      toast({
-        title: "Período Bloqueado",
-        description: competenceValidation.message,
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Check for duplicate account payable (same supplier/employee, document number and document type)
-    let duplicateQuery = supabase
-      .from("accounts_payable")
-      .select("id, issue_date, amount")
-      .eq("document_number", documentNumber)
-      .eq("document_type", documentType);
-
-    if (isEmployeeMode) {
-      duplicateQuery = duplicateQuery.eq("employee_id", employeeId);
-    } else {
-      duplicateQuery = duplicateQuery.eq("supplier_id", supplierId);
-    }
-
-    const { data: existingPayable, error: duplicateCheckError } = await duplicateQuery
-      .limit(1)
-      .maybeSingle();
-
-    if (duplicateCheckError) {
-      console.error("Erro ao verificar duplicidade:", duplicateCheckError);
-    }
-
-    if (existingPayable) {
-      const formattedDate = existingPayable.issue_date 
-        ? new Date(existingPayable.issue_date + 'T00:00:00').toLocaleDateString('pt-BR')
-        : 'N/A';
-      const formattedValue = new Intl.NumberFormat('pt-BR', { 
-        style: 'currency', 
-        currency: 'BRL' 
-      }).format(existingPayable.amount || 0);
-      
-      toast({
-        title: "Título Duplicado",
-        description: `Já existe um título igual com data de emissão ${formattedDate} e valor ${formattedValue}`,
-        variant: "destructive",
-      });
-      return;
-    }
-
+    // Set loading BEFORE async operations to prevent double-click
     setLoading(true);
 
     try {
+      // Validate period
+      const competenceValidation = await validateAccountsPayablePeriod.competencia(dataCompetencia);
+      if (competenceValidation.blocked) {
+        toast({
+          title: "Período Bloqueado",
+          description: competenceValidation.message,
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Check for duplicate account payable (same supplier/employee, document number and document type)
+      let duplicateQuery = supabase
+        .from("accounts_payable")
+        .select("id, issue_date, amount")
+        .eq("document_number", documentNumber)
+        .eq("document_type", documentType);
+
+      if (isEmployeeMode) {
+        duplicateQuery = duplicateQuery.eq("employee_id", employeeId);
+      } else {
+        duplicateQuery = duplicateQuery.eq("supplier_id", supplierId);
+      }
+
+      const { data: existingPayable, error: duplicateCheckError } = await duplicateQuery
+        .limit(1)
+        .maybeSingle();
+
+      if (duplicateCheckError) {
+        console.error("Erro ao verificar duplicidade:", duplicateCheckError);
+      }
+
+      if (existingPayable) {
+        const formattedDate = existingPayable.issue_date 
+          ? new Date(existingPayable.issue_date + 'T00:00:00').toLocaleDateString('pt-BR')
+          : 'N/A';
+        const formattedValue = new Intl.NumberFormat('pt-BR', { 
+          style: 'currency', 
+          currency: 'BRL' 
+        }).format(existingPayable.amount || 0);
+        
+        toast({
+          title: "Título Duplicado",
+          description: `Já existe um título igual com data de emissão ${formattedDate} e valor ${formattedValue}`,
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError || !user) throw new Error("Usuário não autenticado");
 
