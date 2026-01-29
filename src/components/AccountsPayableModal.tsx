@@ -214,6 +214,8 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
   const [filterDueDateFrom, setFilterDueDateFrom] = useState("");
   const [filterDueDateTo, setFilterDueDateTo] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [filterCreatedAtFrom, setFilterCreatedAtFrom] = useState("");
+  const [filterCreatedAtTo, setFilterCreatedAtTo] = useState("");
   const [showFilteredData, setShowFilteredData] = useState(false);
 
   // Payment tab filters
@@ -711,6 +713,14 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
           query = query.eq("status", "partial");
         }
       }
+      
+      // Apply created_at filter (data de cadastro)
+      if (filterCreatedAtFrom) {
+        query = query.gte("created_at", `${filterCreatedAtFrom}T00:00:00`);
+      }
+      if (filterCreatedAtTo) {
+        query = query.lte("created_at", `${filterCreatedAtTo}T23:59:59`);
+      }
 
       query = query.order("created_at", { ascending: false });
 
@@ -753,6 +763,8 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
     setFilterDueDateFrom("");
     setFilterDueDateTo("");
     setFilterStatus("all");
+    setFilterCreatedAtFrom("");
+    setFilterCreatedAtTo("");
     fetchLatestAccounts(); // Voltar para as 5 últimas contas
   };
 
@@ -3697,7 +3709,7 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
                   </CardTitle>
                   <p className="text-sm text-muted-foreground">
                     {showFilteredData ? 
-                      (filterDateFrom || filterDateTo || filterSupplier !== "" || filterEmployee !== "" || filterStore !== "" || filterDocumentNumber || filterDueDateFrom || filterDueDateTo || filterStatus !== "all" || filterPaymentAccount !== "" 
+                      (filterDateFrom || filterDateTo || filterSupplier !== "" || filterEmployee !== "" || filterStore !== "" || filterDocumentNumber || filterDueDateFrom || filterDueDateTo || filterStatus !== "all" || filterPaymentAccount !== "" || filterCreatedAtFrom || filterCreatedAtTo
                         ? `${accountsPayable.length} conta(s) encontrada(s) com os filtros aplicados`
                         : `Exibindo as 5 contas mais recentes`
                       )
@@ -3833,6 +3845,24 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
                           <SelectItem value="paid">Pago</SelectItem>
                         </SelectContent>
                       </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="filter-created-at-from">Data Cadastro (De)</Label>
+                      <Input
+                        id="filter-created-at-from"
+                        type="date"
+                        value={filterCreatedAtFrom}
+                        onChange={(e) => setFilterCreatedAtFrom(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="filter-created-at-to">Data Cadastro (Até)</Label>
+                      <Input
+                        id="filter-created-at-to"
+                        type="date"
+                        value={filterCreatedAtTo}
+                        onChange={(e) => setFilterCreatedAtTo(e.target.value)}
+                      />
                     </div>
                   </div>
                   <div className="flex gap-2 mt-4">
