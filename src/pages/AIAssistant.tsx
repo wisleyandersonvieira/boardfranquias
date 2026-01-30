@@ -22,7 +22,7 @@ interface PendingTask {
   title: string;
 }
 
-const CHAT_URL = "https://qyqohixqddotjgijftcw.supabase.co/functions/v1/ai-analytics";
+const CHAT_URL = "https://odmqiojfqmqauzedaosa.supabase.co/functions/v1/ai-analytics";
 
 const suggestedQuestions = [
   "Qual o total de contas a pagar pendentes?",
