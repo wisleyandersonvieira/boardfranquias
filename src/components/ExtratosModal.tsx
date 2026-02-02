@@ -317,13 +317,15 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
         .eq('account_id', selectedAccount);
 
       // Dados de referência para validação
+      // Para contas delivery, buscar dados de todas as lojas vinculadas
       const payableInstallmentsPromise = supabase
         .from('accounts_payable_installments')
         .select('id, installment_number, payment_date, account_payable_id');
 
       const payablesPromise = supabase
         .from('accounts_payable')
-        .select('id, document_number, description, payment_date, status, employee_id, supplier_id');
+        .select('id, document_number, description, payment_date, status, employee_id, supplier_id, store_id')
+        .in('store_id', linkedStoreIds);
 
       const receivableInstallmentsPromise = supabase
         .from('accounts_receivable_installments')
@@ -331,7 +333,8 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
 
       const receivablesPromise = supabase
         .from('accounts_receivable')
-        .select('id, document_number, description, payment_date, status, creditor_id');
+        .select('id, document_number, description, payment_date, status, creditor_id, store_id')
+        .in('store_id', linkedStoreIds);
 
       // Fornecedores, credores e funcionários
       const suppliersPromise = supabase.from('suppliers').select('id, name');
