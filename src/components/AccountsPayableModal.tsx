@@ -3396,10 +3396,11 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
           if (updateInstallmentError) throw updateInstallmentError;
 
           // Create financial transaction for each installment
+          // O store_id deve SEMPRE ser o store_id do contas a pagar para manter a integridade dos relatórios
           const { error: transactionError } = await supabase
             .from("financial_transactions")
             .insert({
-              store_id: userProfile?.store_id || paymentAccount.store_id || null,
+              store_id: paymentAccount.store_id,
               account_id: selectedAccountId,
               transaction_type: "saida",
               amount: finalAmount,
@@ -3503,10 +3504,11 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
         if (updateError) throw updateError;
 
         // Create financial transaction
+        // O store_id deve SEMPRE ser o store_id do contas a pagar para manter a integridade dos relatórios
         const { error: transactionError } = await supabase
           .from("financial_transactions")
           .insert({
-            store_id: userProfile?.store_id || paymentAccount.store_id || null,
+            store_id: paymentAccount.store_id,
             account_id: selectedAccountId,
             transaction_type: "saida",
             amount: finalAmount,
