@@ -719,17 +719,56 @@ export function AccountsReceivableModal({ open, onOpenChange }: AccountsReceivab
             .maybeSingle();
           
           if (paymentData?.payment_account_id) {
-            // Fetch account name based on type
-            const { data: accountData } = await supabase
-              .from("current_accounts")
-              .select("name, bank, account_number")
-              .eq("id", paymentData.payment_account_id)
-              .maybeSingle();
+            const accountType = paymentData.payment_account_type || 'current';
+            let accountName = '';
             
-            if (accountData) {
+            // Fetch account name based on type
+            if (accountType === 'current') {
+              const { data: accountData } = await supabase
+                .from("current_accounts")
+                .select("name, bank, account_number")
+                .eq("id", paymentData.payment_account_id)
+                .maybeSingle();
+              
+              if (accountData) {
+                accountName = `${accountData.name} - ${accountData.bank} (${accountData.account_number})`;
+              }
+            } else if (accountType === 'cash') {
+              const { data: accountData } = await supabase
+                .from("cash_accounts")
+                .select("name")
+                .eq("id", paymentData.payment_account_id)
+                .maybeSingle();
+              
+              if (accountData) {
+                accountName = `${accountData.name} (Caixa)`;
+              }
+            } else if (accountType === 'card') {
+              const { data: accountData } = await supabase
+                .from("card_accounts")
+                .select("name, bank")
+                .eq("id", paymentData.payment_account_id)
+                .maybeSingle();
+              
+              if (accountData) {
+                accountName = `${accountData.name} - ${accountData.bank} (Cartão)`;
+              }
+            } else if (accountType === 'delivery') {
+              const { data: accountData } = await supabase
+                .from("delivery_accounts")
+                .select("name")
+                .eq("id", paymentData.payment_account_id)
+                .maybeSingle();
+              
+              if (accountData) {
+                accountName = `${accountData.name} (Delivery)`;
+              }
+            }
+            
+            if (accountName) {
               return {
                 ...inst,
-                payment_account_name: `${accountData.name} - ${accountData.bank} (${accountData.account_number})`
+                payment_account_name: accountName
               };
             }
           }
