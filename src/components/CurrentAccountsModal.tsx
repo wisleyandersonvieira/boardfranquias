@@ -318,21 +318,20 @@ export function CurrentAccountsModal({ open, onOpenChange, canEdit = true, canDe
 
   const handleDelete = async (account: CurrentAccount) => {
     try {
-      // Verificar se existem pagamentos de contas a pagar vinculados
-      const { data: payablePayments, error: payablePaymentsError } = await supabase
-        .from('accounts_payable_payments')
+      // Verificar se existem transações financeiras vinculadas
+      const { data: financialTransactions, error: financialTransactionsError } = await supabase
+        .from('financial_transactions')
         .select('id')
-        .eq('payment_account_type', 'current_account')
-        .eq('payment_account_id', account.id)
+        .eq('account_id', account.id)
         .limit(1);
 
-      if (payablePaymentsError) throw payablePaymentsError;
+      if (financialTransactionsError) throw financialTransactionsError;
 
-      if (payablePayments && payablePayments.length > 0) {
+      if (financialTransactions && financialTransactions.length > 0) {
         toast({
           variant: "destructive",
           title: "Exclusão não permitida",
-          description: "Esta conta corrente possui pagamentos de contas a pagar vinculados e não pode ser excluída.",
+          description: "Esta conta corrente possui transações financeiras vinculadas e não pode ser excluída.",
         });
         return;
       }
