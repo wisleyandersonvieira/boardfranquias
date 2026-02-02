@@ -45,15 +45,24 @@ interface StorePartner {
 interface StoresModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  canEdit?: boolean;
+  canDelete?: boolean;
+  viewOnlyUserStores?: boolean; // When true, show only stores linked to logged user
 }
 
-export const StoresModal = ({ open, onOpenChange }: StoresModalProps) => {
+export const StoresModal = ({ 
+  open, 
+  onOpenChange, 
+  canEdit = true, 
+  canDelete = true,
+  viewOnlyUserStores = false 
+}: StoresModalProps) => {
   const [stores, setStores] = useState<Store[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [editingStore, setEditingStore] = useState<Store | null>(null);
-  const [activeTab, setActiveTab] = useState("register");
+  const [activeTab, setActiveTab] = useState(canEdit ? "register" : "list");
   const [userMatrixId, setUserMatrixId] = useState<string>("");
   const [userMatrixName, setUserMatrixName] = useState<string>("");
   const [isMasterUser, setIsMasterUser] = useState(false);
@@ -165,17 +174,37 @@ export const StoresModal = ({ open, onOpenChange }: StoresModalProps) => {
 
       const masterUser = user.email === 'wisley_anderson@hotmail.com';
       
-      let query = supabase.from("stores").select("*").order("name");
-      
-      // If not master user, filter by user's matrix
-      if (!masterUser && userMatrixId) {
-        query = query.eq('matrix_id', userMatrixId);
-      }
-      
-      const { data, error } = await query;
+      // If viewOnlyUserStores is true, filter by user's linked stores
+      if (viewOnlyUserStores) {
+        const userStoreIds = await fetchUserStoreIds();
+        
+        if (userStoreIds.length === 0) {
+          setStores([]);
+          setLoading(false);
+          return;
+        }
+        
+        const { data, error } = await supabase
+          .from("stores")
+          .select("*")
+          .in("id", userStoreIds)
+          .order("name");
+        
+        if (error) throw error;
+        setStores(data || []);
+      } else {
+        let query = supabase.from("stores").select("*").order("name");
+        
+        // If not master user, filter by user's matrix
+        if (!masterUser && userMatrixId) {
+          query = query.eq('matrix_id', userMatrixId);
+        }
+        
+        const { data, error } = await query;
 
-      if (error) throw error;
-      setStores(data || []);
+        if (error) throw error;
+        setStores(data || []);
+      }
     } catch (error) {
       toast({
         variant: "destructive",
@@ -568,7 +597,7 @@ export const StoresModal = ({ open, onOpenChange }: StoresModalProps) => {
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="register">Cadastro</TabsTrigger>
+            <TabsTrigger value="register" disabled={!canEdit}>Cadastro</TabsTrigger>
             <TabsTrigger value="list">Exibir Cadastros</TabsTrigger>
           </TabsList>
 
@@ -804,7 +833,7 @@ export const StoresModal = ({ open, onOpenChange }: StoresModalProps) => {
                         <TableHead>Telefone</TableHead>
                         <TableHead>Gerente</TableHead>
                         <TableHead>Data Abertura</TableHead>
-                        <TableHead className="text-right">Ações</TableHead>
+                        {(canEdit || canDelete) && <TableHead className="text-right">Ações</TableHead>}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -841,24 +870,30 @@ export const StoresModal = ({ open, onOpenChange }: StoresModalProps) => {
                             <TableCell>
                               {store.opening_date ? new Date(store.opening_date).toLocaleDateString('pt-BR') : "-"}
                             </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex justify-end space-x-2">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleEdit(store)}
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleDelete(store)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </TableCell>
+                            {(canEdit || canDelete) && (
+                              <TableCell className="text-right">
+                                <div className="flex justify-end space-x-2">
+                                  {canEdit && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleEdit(store)}
+                                    >
+                                      <Edit className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                  {canDelete && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleDelete(store)}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                </div>
+                              </TableCell>
+                            )}
                           </TableRow>
                         ))
                       )}

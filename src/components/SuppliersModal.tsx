@@ -40,7 +40,7 @@ export const SuppliersModal = ({ open, onOpenChange, canEdit = true, canDelete =
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
-  const [activeTab, setActiveTab] = useState("register");
+  const [activeTab, setActiveTab] = useState(canEdit ? "register" : "list");
   const [currentPage, setCurrentPage] = useState(1);
   const { toast } = useToast();
   const { matrixId, matrixName } = useUserMatrix();
