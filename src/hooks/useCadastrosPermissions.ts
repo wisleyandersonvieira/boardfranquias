@@ -47,6 +47,9 @@ export const useCadastrosPermissions = () => {
             .eq("module", "cadastros");
 
           console.log('Cadastros Permission Check:', { 
+            userId: user.id,
+            userEmail: user.email,
+            profileRole: profile.role,
             profileId: profile.profile_id, 
             profilePermissions, 
             permError 
@@ -54,26 +57,36 @@ export const useCadastrosPermissions = () => {
 
           if (profilePermissions && profilePermissions.length > 0) {
             const perms = profilePermissions.map(p => p.permission);
+            console.log('Cadastros Permissions Found:', perms);
             
             // Check if disabled - user should not see the module
             if (perms.includes('disabled')) {
+              console.log('Setting permission to NONE (disabled)');
               setPermissionLevel('none');
               setLoading(false);
               return;
             }
             if (perms.includes('admin')) {
+              console.log('Setting permission to ADMIN');
               setPermissionLevel('admin');
             } else if (perms.includes('write')) {
+              console.log('Setting permission to WRITE');
               setPermissionLevel('write');
             } else if (perms.includes('read')) {
+              console.log('Setting permission to READ');
               setPermissionLevel('read');
             } else {
+              console.log('Setting permission to NONE (no match)');
               // No recognized permission, set to none
               setPermissionLevel('none');
             }
             setLoading(false);
             return;
+          } else {
+            console.log('No profile permissions found for cadastros');
           }
+        } else {
+          console.log('No profile_id found for user');
         }
 
         // Check user-specific permissions
