@@ -14,7 +14,7 @@ interface Account {
   name: string;
   bank: string | null;
   account_number: string | null;
-  type: "cash" | "current" | "card";
+  type: "cash" | "current" | "card" | "delivery";
 }
 
 interface AccountPayable {
@@ -51,7 +51,7 @@ export function CashPaymentModal({
 }: CashPaymentModalProps) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState("");
-  const [selectedAccountType, setSelectedAccountType] = useState<"cash" | "current" | "card">("cash");
+  const [selectedAccountType, setSelectedAccountType] = useState<"cash" | "current" | "card" | "delivery">("cash");
   const [paymentDate, setPaymentDate] = useState("");
   const [surcharge, setSurcharge] = useState<number>(0);
   const [discount, setDiscount] = useState<number>(0);
@@ -236,11 +236,12 @@ export function CashPaymentModal({
     }
   };
 
-  const getAccountTypeLabel = (type: "cash" | "current" | "card") => {
+  const getAccountTypeLabel = (type: "cash" | "current" | "card" | "delivery") => {
     switch (type) {
       case "cash": return "Caixa";
       case "current": return "Conta Corrente";
       case "card": return "Cartão";
+      case "delivery": return "Delivery";
     }
   };
 
@@ -416,11 +417,26 @@ export function CashPaymentModal({
 
       if (updateError) throw updateError;
 
+      // Determinar o store_id correto para a transação financeira
+      // Para contas delivery, usar a primeira loja vinculada à conta
+      let transactionStoreId = accountPayable.store_id;
+      const selectedAccount = accounts.find(a => a.id === selectedAccountId);
+      if (selectedAccount?.type === 'delivery') {
+        const { data: deliveryStores } = await supabase
+          .from('delivery_account_stores')
+          .select('store_id')
+          .eq('account_id', selectedAccountId)
+          .limit(1);
+        if (deliveryStores && deliveryStores.length > 0) {
+          transactionStoreId = deliveryStores[0].store_id;
+        }
+      }
+
       // Create financial transaction
       const { error: transactionError } = await supabase
         .from("financial_transactions")
         .insert({
-          store_id: accountPayable.store_id,
+          store_id: transactionStoreId,
           account_id: selectedAccountId,
           transaction_type: "saida",
           amount: finalAmount,
