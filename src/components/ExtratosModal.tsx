@@ -262,6 +262,18 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
 
       // ========== ETAPA 1: Buscar todos os dados em paralelo ==========
       
+      // Buscar todas as lojas vinculadas à conta selecionada para filtrar transações
+      let linkedStoreIds: string[] = [selectedStore];
+      if (account.type === 'delivery') {
+        const { data: deliveryStores } = await supabase
+          .from('delivery_account_stores')
+          .select('store_id')
+          .eq('account_id', selectedAccount);
+        if (deliveryStores && deliveryStores.length > 0) {
+          linkedStoreIds = deliveryStores.map(s => s.store_id);
+        }
+      }
+      
       // Transferências
       const transfersPromise = supabase
         .from('transfers')
@@ -270,10 +282,11 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
         .order('transfer_date');
 
       // Financial transactions (inclui todos os tipos de conta)
+      // Para contas delivery, busca transações de todas as lojas vinculadas
       const financialTransPromise = supabase
         .from('financial_transactions')
         .select('id, amount, transaction_date, description, reference_id, reference_type, transaction_type')
-        .eq('store_id', selectedStore)
+        .in('store_id', linkedStoreIds)
         .eq('account_id', selectedAccount);
 
       // Cash control items baseado no tipo de conta
