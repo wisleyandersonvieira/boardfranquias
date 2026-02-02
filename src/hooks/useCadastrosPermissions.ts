@@ -124,12 +124,23 @@ export const useCadastrosPermissions = () => {
     checkPermissions();
   }, []);
 
+  const canEdit = permissionLevel === 'write' || permissionLevel === 'admin';
+  const canDelete = permissionLevel === 'admin';
+  
+  // Debug: log the actual values being returned
+  console.log('useCadastrosPermissions RETURN:', { 
+    permissionLevel, 
+    loading, 
+    canEdit, 
+    canDelete 
+  });
+
   return {
     permissionLevel,
     loading,
     canAccess: permissionLevel !== 'none', // Can see menus
-    canEdit: permissionLevel === 'write' || permissionLevel === 'admin', // Can create/edit
-    canDelete: permissionLevel === 'admin', // Only admin can delete
+    canEdit, // Can create/edit
+    canDelete, // Only admin can delete
     canAccessParameters: permissionLevel === 'admin', // Only admin can access Parameters
     canAccessStores: permissionLevel === 'admin', // Only admin can access Stores
   };
