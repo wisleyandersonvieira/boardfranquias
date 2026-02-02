@@ -463,21 +463,19 @@ const BalancePositionReport = () => {
           }
         });
 
-        // 2. Process financial transactions
-        if (account.type === 'current' || account.type === 'cash' || account.type === 'card') {
-          financialTransData.forEach(t => {
-            if (t.account_id === account.id && 
-                t.store_id === account.store_id &&
-                t.transaction_date >= initialBalanceDate && 
-                t.transaction_date <= formattedTargetDate) {
-              if (t.transaction_type === 'saida') {
-                balance -= t.amount;
-              } else if (t.transaction_type === 'entrada') {
-                balance += t.amount;
-              }
+        // 2. Process financial transactions (inclui todos os tipos de conta, incluindo delivery)
+        financialTransData.forEach(t => {
+          if (t.account_id === account.id && 
+              t.store_id === account.store_id &&
+              t.transaction_date >= initialBalanceDate && 
+              t.transaction_date <= formattedTargetDate) {
+            if (t.transaction_type === 'saida') {
+              balance -= t.amount;
+            } else if (t.transaction_type === 'entrada') {
+              balance += t.amount;
             }
-          });
-        }
+          }
+        });
 
         // 3. Process cash control items based on account type
         if (account.type === 'cash') {
