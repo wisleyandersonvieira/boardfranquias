@@ -238,15 +238,23 @@ const DashboardLayout = ({ children, user, pendingTasks }: DashboardLayoutProps)
         canDelete={cadastrosCanDelete}
       />
       
-      <SuppliersModal 
-        open={suppliersModalOpen} 
-        onOpenChange={setSuppliersModalOpen}
-      />
+      {!cadastrosLoading && (
+        <SuppliersModal 
+          open={suppliersModalOpen} 
+          onOpenChange={setSuppliersModalOpen}
+          canEdit={cadastrosCanEdit}
+          canDelete={cadastrosCanDelete}
+        />
+      )}
       
-      <CreditorsModal 
-        open={creditorsModalOpen} 
-        onOpenChange={setCreditorsModalOpen}
-      />
+      {!cadastrosLoading && (
+        <CreditorsModal 
+          open={creditorsModalOpen} 
+          onOpenChange={setCreditorsModalOpen}
+          canEdit={cadastrosCanEdit}
+          canDelete={cadastrosCanDelete}
+        />
+      )}
       
       <StoresModal 
         open={storesModalOpen} 
