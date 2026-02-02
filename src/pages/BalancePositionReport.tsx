@@ -295,6 +295,19 @@ const BalancePositionReport = () => {
       setLoadingMessage("Buscando transferências...");
       setLoadingProgress(10);
 
+      // Buscar todas as lojas vinculadas às contas delivery selecionadas
+      let allLinkedStoreIds = [...allStoreIds];
+      if (deliveryAccountIds.length > 0) {
+        const { data: deliveryStores } = await supabase
+          .from('delivery_account_stores')
+          .select('store_id')
+          .in('account_id', deliveryAccountIds);
+        if (deliveryStores) {
+          const deliveryStoreIds = deliveryStores.map(s => s.store_id);
+          allLinkedStoreIds = [...new Set([...allStoreIds, ...deliveryStoreIds])];
+        }
+      }
+
       // Step 1: Fetch all transfers for all accounts in one query
       const transfersPromise = allAccountIds.length > 0 
         ? supabase
@@ -306,13 +319,14 @@ const BalancePositionReport = () => {
       setLoadingMessage("Buscando transações financeiras...");
       setLoadingProgress(20);
 
-      // Step 2: Fetch all financial transactions in parallel (one for entrada, one for saida)
+      // Step 2: Fetch all financial transactions
+      // Inclui todas as lojas vinculadas (especialmente importante para contas delivery)
       const financialTransSaidaPromise = allAccountIds.length > 0
         ? supabase
             .from('financial_transactions')
             .select('amount, account_id, store_id, transaction_date, transaction_type')
             .in('account_id', allAccountIds)
-            .in('store_id', allStoreIds)
+            .in('store_id', allLinkedStoreIds)
             .lte('transaction_date', formattedTargetDate)
         : Promise.resolve({ data: [] });
 
@@ -412,6 +426,23 @@ const BalancePositionReport = () => {
       setLoadingMessage("Calculando saldos...");
       setLoadingProgress(80);
 
+      // Criar mapa de lojas vinculadas para contas delivery
+      const deliveryAccountStoresMap = new Map<string, string[]>();
+      if (deliveryAccountIds.length > 0) {
+        const { data: allDeliveryStores } = await supabase
+          .from('delivery_account_stores')
+          .select('account_id, store_id')
+          .in('account_id', deliveryAccountIds);
+        
+        if (allDeliveryStores) {
+          allDeliveryStores.forEach(ds => {
+            const existing = deliveryAccountStoresMap.get(ds.account_id) || [];
+            existing.push(ds.store_id);
+            deliveryAccountStoresMap.set(ds.account_id, existing);
+          });
+        }
+      }
+
       // Create lookup maps for fast access
       const transfersData = transfersResult.data || [];
       const financialTransData = financialTransResult.data || [];
@@ -464,9 +495,14 @@ const BalancePositionReport = () => {
         });
 
         // 2. Process financial transactions (inclui todos os tipos de conta, incluindo delivery)
+        // Para contas delivery, aceita transações de qualquer loja vinculada
+        const accountLinkedStores = account.type === 'delivery' 
+          ? deliveryAccountStoresMap.get(account.id) || [account.store_id]
+          : [account.store_id];
+        
         financialTransData.forEach(t => {
           if (t.account_id === account.id && 
-              t.store_id === account.store_id &&
+              accountLinkedStores.includes(t.store_id) &&
               t.transaction_date >= initialBalanceDate && 
               t.transaction_date <= formattedTargetDate) {
             if (t.transaction_type === 'saida') {
