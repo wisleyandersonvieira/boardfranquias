@@ -36,6 +36,7 @@ import { DeliveryModal } from "@/components/DeliveryModal";
 import { DocumentTypesModal } from "@/components/DocumentTypesModal";
 import { PartnersModal } from "@/components/PartnersModal";
 import { PartnerTransactionsModal } from "@/components/PartnerTransactionsModal";
+import { ServiceOrdersModal } from "@/components/ServiceOrdersModal";
 
 interface PendingTask {
   id: string;
@@ -57,6 +58,7 @@ const DashboardLayout = ({ children, user, pendingTasks }: DashboardLayoutProps)
   const [transfersOpen, setTransfersOpen] = useState(false);
   const [periodControlOpen, setPeriodControlOpen] = useState(false);
   const [partnerTransactionsOpen, setPartnerTransactionsOpen] = useState(false);
+  const [serviceOrdersOpen, setServiceOrdersOpen] = useState(false);
   
   // Funcionarios modals
   const [jobFunctionsOpen, setJobFunctionsOpen] = useState(false);
@@ -111,6 +113,7 @@ const DashboardLayout = ({ children, user, pendingTasks }: DashboardLayoutProps)
         onOpenDocumentTypes={() => setDocumentTypesModalOpen(true)}
         onOpenPartners={() => setPartnersModalOpen(true)}
         onOpenPartnerTransactions={() => setPartnerTransactionsOpen(true)}
+        onOpenServiceOrders={() => setServiceOrdersOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -294,6 +297,11 @@ const DashboardLayout = ({ children, user, pendingTasks }: DashboardLayoutProps)
       <PartnerTransactionsModal 
         open={partnerTransactionsOpen} 
         onOpenChange={setPartnerTransactionsOpen}
+      />
+      
+      <ServiceOrdersModal 
+        open={serviceOrdersOpen} 
+        onOpenChange={setServiceOrdersOpen}
       />
     </div>
   );

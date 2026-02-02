@@ -2535,6 +2535,79 @@ export type Database = {
           },
         ]
       }
+      service_orders: {
+        Row: {
+          attachments: Json | null
+          created_at: string
+          created_by: string
+          description: string
+          id: string
+          nf_number: string | null
+          os_date: string
+          os_number: string
+          registration_date: string
+          status: string
+          store_id: string
+          supplier_id: string | null
+          updated_at: string
+          value: number | null
+        }
+        Insert: {
+          attachments?: Json | null
+          created_at?: string
+          created_by: string
+          description: string
+          id?: string
+          nf_number?: string | null
+          os_date: string
+          os_number: string
+          registration_date?: string
+          status?: string
+          store_id: string
+          supplier_id?: string | null
+          updated_at?: string
+          value?: number | null
+        }
+        Update: {
+          attachments?: Json | null
+          created_at?: string
+          created_by?: string
+          description?: string
+          id?: string
+          nf_number?: string | null
+          os_date?: string
+          os_number?: string
+          registration_date?: string
+          status?: string
+          store_id?: string
+          supplier_id?: string | null
+          updated_at?: string
+          value?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_orders_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_orders_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_orders_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       stock_control: {
         Row: {
           created_at: string

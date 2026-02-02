@@ -74,6 +74,7 @@ interface AppSidebarProps {
   onOpenDocumentTypes: () => void;
   onOpenPartners: () => void;
   onOpenPartnerTransactions: () => void;
+  onOpenServiceOrders: () => void;
 }
 
 const AppSidebar = ({
@@ -97,6 +98,7 @@ const AppSidebar = ({
   onOpenDocumentTypes,
   onOpenPartners,
   onOpenPartnerTransactions,
+  onOpenServiceOrders,
 }: AppSidebarProps) => {
   const navigate = useNavigate();
   const [activeModule, setActiveModule] = useState<string | null>(null);
@@ -217,6 +219,7 @@ const AppSidebar = ({
         { id: "contas-receber", label: "Contas a Receber", action: "openAccountsReceivable" },
         { id: "transferencias", label: "Transferências", action: "openTransfers" },
         { id: "aportes-retiradas", label: "Aportes e Retiradas", action: "openPartnerTransactions" },
+        { id: "registro-os", label: "Registro de OS", action: "openServiceOrders" },
         { id: "controle-periodo", label: "Controle de Período", action: "openPeriodControl" },
       ],
     },
@@ -400,6 +403,9 @@ const AppSidebar = ({
           break;
         case "openPartnerTransactions":
           onOpenPartnerTransactions();
+          break;
+        case "openServiceOrders":
+          onOpenServiceOrders();
           break;
       }
     }
