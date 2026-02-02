@@ -295,18 +295,79 @@ const BalancePositionReport = () => {
       setLoadingMessage("Buscando transferências...");
       setLoadingProgress(10);
 
-      // Buscar todas as lojas vinculadas às contas delivery selecionadas
+      // Buscar todas as lojas vinculadas às contas selecionadas (para todas os tipos de conta)
+      // O saldo deve considerar movimentações de TODAS as lojas vinculadas à conta
       let allLinkedStoreIds = [...allStoreIds];
-      if (deliveryAccountIds.length > 0) {
-        const { data: deliveryStores } = await supabase
-          .from('delivery_account_stores')
-          .select('store_id')
-          .in('account_id', deliveryAccountIds);
-        if (deliveryStores) {
-          const deliveryStoreIds = deliveryStores.map(s => s.store_id);
-          allLinkedStoreIds = [...new Set([...allStoreIds, ...deliveryStoreIds])];
-        }
+      
+      const linkedStoresPromises = [];
+      
+      if (currentAccountIds.length > 0) {
+        linkedStoresPromises.push(
+          supabase.from('current_account_stores').select('account_id, store_id').in('account_id', currentAccountIds)
+        );
+      } else {
+        linkedStoresPromises.push(Promise.resolve({ data: [] }));
       }
+      
+      if (cashAccountIds.length > 0) {
+        linkedStoresPromises.push(
+          supabase.from('cash_account_stores').select('account_id, store_id').in('account_id', cashAccountIds)
+        );
+      } else {
+        linkedStoresPromises.push(Promise.resolve({ data: [] }));
+      }
+      
+      if (cardAccountIds.length > 0) {
+        linkedStoresPromises.push(
+          supabase.from('card_account_stores').select('account_id, store_id').in('account_id', cardAccountIds)
+        );
+      } else {
+        linkedStoresPromises.push(Promise.resolve({ data: [] }));
+      }
+      
+      if (deliveryAccountIds.length > 0) {
+        linkedStoresPromises.push(
+          supabase.from('delivery_account_stores').select('account_id, store_id').in('account_id', deliveryAccountIds)
+        );
+      } else {
+        linkedStoresPromises.push(Promise.resolve({ data: [] }));
+      }
+      
+      const [currentStoresResult, cashStoresResult, cardStoresResult, deliveryStoresResult] = await Promise.all(linkedStoresPromises);
+      
+      // Criar mapas de lojas vinculadas para cada tipo de conta
+      const currentAccountStoresMap = new Map<string, string[]>();
+      const cashAccountStoresMap = new Map<string, string[]>();
+      const cardAccountStoresMap = new Map<string, string[]>();
+      const deliveryAccountStoresMap = new Map<string, string[]>();
+      
+      (currentStoresResult.data || []).forEach((s: any) => {
+        const existing = currentAccountStoresMap.get(s.account_id) || [];
+        existing.push(s.store_id);
+        currentAccountStoresMap.set(s.account_id, existing);
+        if (!allLinkedStoreIds.includes(s.store_id)) allLinkedStoreIds.push(s.store_id);
+      });
+      
+      (cashStoresResult.data || []).forEach((s: any) => {
+        const existing = cashAccountStoresMap.get(s.account_id) || [];
+        existing.push(s.store_id);
+        cashAccountStoresMap.set(s.account_id, existing);
+        if (!allLinkedStoreIds.includes(s.store_id)) allLinkedStoreIds.push(s.store_id);
+      });
+      
+      (cardStoresResult.data || []).forEach((s: any) => {
+        const existing = cardAccountStoresMap.get(s.account_id) || [];
+        existing.push(s.store_id);
+        cardAccountStoresMap.set(s.account_id, existing);
+        if (!allLinkedStoreIds.includes(s.store_id)) allLinkedStoreIds.push(s.store_id);
+      });
+      
+      (deliveryStoresResult.data || []).forEach((s: any) => {
+        const existing = deliveryAccountStoresMap.get(s.account_id) || [];
+        existing.push(s.store_id);
+        deliveryAccountStoresMap.set(s.account_id, existing);
+        if (!allLinkedStoreIds.includes(s.store_id)) allLinkedStoreIds.push(s.store_id);
+      });
 
       // Step 1: Fetch all transfers for all accounts in one query
       const transfersPromise = allAccountIds.length > 0 
@@ -365,13 +426,13 @@ const BalancePositionReport = () => {
       setLoadingMessage("Buscando transações de sócios...");
       setLoadingProgress(40);
 
-      // Step 4: Fetch partner transactions
+      // Step 4: Fetch partner transactions - usa todas as lojas vinculadas às contas
       const partnerTransPromise = allAccountIds.length > 0
         ? supabase
             .from('partner_transactions')
             .select('amount, transaction_type, account_id, store_id, payment_date')
             .in('account_id', allAccountIds)
-            .in('store_id', allStoreIds)
+            .in('store_id', allLinkedStoreIds)
             .lte('payment_date', formattedTargetDate)
         : Promise.resolve({ data: [] });
 
@@ -426,22 +487,7 @@ const BalancePositionReport = () => {
       setLoadingMessage("Calculando saldos...");
       setLoadingProgress(80);
 
-      // Criar mapa de lojas vinculadas para contas delivery
-      const deliveryAccountStoresMap = new Map<string, string[]>();
-      if (deliveryAccountIds.length > 0) {
-        const { data: allDeliveryStores } = await supabase
-          .from('delivery_account_stores')
-          .select('account_id, store_id')
-          .in('account_id', deliveryAccountIds);
-        
-        if (allDeliveryStores) {
-          allDeliveryStores.forEach(ds => {
-            const existing = deliveryAccountStoresMap.get(ds.account_id) || [];
-            existing.push(ds.store_id);
-            deliveryAccountStoresMap.set(ds.account_id, existing);
-          });
-        }
-      }
+      // Os mapas de lojas vinculadas já foram criados acima
 
       // Create lookup maps for fast access
       const transfersData = transfersResult.data || [];
@@ -494,11 +540,17 @@ const BalancePositionReport = () => {
           }
         });
 
-        // 2. Process financial transactions (inclui todos os tipos de conta, incluindo delivery)
-        // Para contas delivery, aceita transações de qualquer loja vinculada
-        const accountLinkedStores = account.type === 'delivery' 
-          ? deliveryAccountStoresMap.get(account.id) || [account.store_id]
-          : [account.store_id];
+        // 2. Process financial transactions - usa todas as lojas vinculadas à conta
+        let accountLinkedStores: string[] = [account.store_id];
+        if (account.type === 'current') {
+          accountLinkedStores = currentAccountStoresMap.get(account.id) || [account.store_id];
+        } else if (account.type === 'cash') {
+          accountLinkedStores = cashAccountStoresMap.get(account.id) || [account.store_id];
+        } else if (account.type === 'card') {
+          accountLinkedStores = cardAccountStoresMap.get(account.id) || [account.store_id];
+        } else if (account.type === 'delivery') {
+          accountLinkedStores = deliveryAccountStoresMap.get(account.id) || [account.store_id];
+        }
         
         financialTransData.forEach(t => {
           if (t.account_id === account.id && 
@@ -513,12 +565,12 @@ const BalancePositionReport = () => {
           }
         });
 
-        // 3. Process cash control items based on account type
+        // 3. Process cash control items - aceita de todas as lojas vinculadas à conta
         if (account.type === 'cash') {
           cashControlItemsData.forEach((item: any) => {
             if (item.cash_account_id === account.id) {
               const cc = cashControlMap.get(item.cash_control_id);
-              if (cc && cc.store_id === account.store_id && 
+              if (cc && accountLinkedStores.includes(cc.store_id) && 
                   cc.date >= initialBalanceDate && cc.date <= formattedTargetDate) {
                 balance += item.valor;
               }
@@ -530,7 +582,7 @@ const BalancePositionReport = () => {
           deliveryItemsData.forEach((item: any) => {
             if (item.delivery_account_id === account.id) {
               const cc = cashControlMap.get(item.cash_control_id);
-              if (cc && cc.store_id === account.store_id && 
+              if (cc && accountLinkedStores.includes(cc.store_id) && 
                   cc.date >= initialBalanceDate && cc.date <= formattedTargetDate) {
                 balance += item.valor;
               }
@@ -542,7 +594,7 @@ const BalancePositionReport = () => {
           cardItemsData.forEach((item: any) => {
             if (item.card_account_id === account.id) {
               const cc = cashControlMap.get(item.cash_control_id);
-              if (cc && cc.store_id === account.store_id && 
+              if (cc && accountLinkedStores.includes(cc.store_id) && 
                   cc.date >= initialBalanceDate && cc.date <= formattedTargetDate) {
                 balance += item.valor;
               }
@@ -554,7 +606,7 @@ const BalancePositionReport = () => {
           accountItemsData.forEach((item: any) => {
             if (item.current_account_id === account.id) {
               const cc = cashControlMap.get(item.cash_control_id);
-              if (cc && cc.store_id === account.store_id && 
+              if (cc && accountLinkedStores.includes(cc.store_id) && 
                   cc.date >= initialBalanceDate && cc.date <= formattedTargetDate) {
                 balance += item.valor;
               }
@@ -562,10 +614,10 @@ const BalancePositionReport = () => {
           });
         }
 
-        // 4. Process partner transactions
+        // 4. Process partner transactions - aceita de todas as lojas vinculadas à conta
         partnerTransData.forEach(transaction => {
           if (transaction.account_id === account.id && 
-              transaction.store_id === account.store_id &&
+              accountLinkedStores.includes(transaction.store_id) &&
               transaction.payment_date >= initialBalanceDate && 
               transaction.payment_date <= formattedTargetDate) {
             if (transaction.transaction_type === 'aporte') {
