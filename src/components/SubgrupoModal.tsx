@@ -335,6 +335,16 @@ export const SubgrupoModal = ({ open, onOpenChange, canEdit = true, canDelete = 
   };
 
   const handleDelete = async (subgrupo: Subgrupo) => {
+    // Verificar autorização do usuário
+    if (!isAuthorized) {
+      toast({
+        variant: "destructive",
+        title: "Não autorizado",
+        description: "Você não tem permissão para excluir subgrupos nesta marca.",
+      });
+      return;
+    }
+
     setLoading(true);
     try {
       // Check for linked chart_of_accounts
@@ -400,6 +410,31 @@ export const SubgrupoModal = ({ open, onOpenChange, canEdit = true, canDelete = 
           variant: "destructive",
           title: "Exclusão não permitida",
           description: "Este subgrupo possui produtos vinculados e não pode ser excluído.",
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Verificar se o subgrupo está sendo usado na estrutura do DRE
+      const { data: dreItems, error: dreError } = await supabase
+        .from("dre_structure_items")
+        .select(`
+          id, 
+          name,
+          dre_structures!inner(name)
+        `)
+        .eq("account_group_id", subgrupo.id)
+        .limit(3);
+
+      if (dreError) throw dreError;
+
+      if (dreItems && dreItems.length > 0) {
+        const dreItemNames = dreItems.map(item => `"${item.name}" (${(item.dre_structures as any).name})`).join(", ");
+        
+        toast({
+          variant: "destructive",
+          title: "Não é possível excluir",
+          description: `Este subgrupo está sendo usado na estrutura DRE: ${dreItemNames}. Remova essas referências antes de excluir o subgrupo.`,
         });
         setLoading(false);
         return;
