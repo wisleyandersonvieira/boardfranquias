@@ -37,6 +37,9 @@ const Cadastros = () => {
   const { toast } = useToast();
   const { canAccess, canEdit, canDelete, canAccessParameters, canAccessStores, permissionLevel, loading } = useCadastrosPermissions();
 
+  // Debug log for permissions
+  console.log('Cadastros Permissions:', { canEdit, canDelete, permissionLevel, loading });
+
   // Redirect if user has no access at all (after loading)
   useEffect(() => {
     if (!loading && !canAccess) {

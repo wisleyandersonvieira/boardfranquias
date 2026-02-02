@@ -24,6 +24,11 @@ export const ContasModal = ({
   canEdit = true,
   canDelete = true
 }: ContasModalProps) => {
+  const handleOpenModal = (openFn: () => void) => {
+    onOpenChange(false);
+    openFn();
+  };
+
   const modules = [
     {
       id: "contas-correntes",
@@ -31,10 +36,7 @@ export const ContasModal = ({
       description: "Cadastro e gestão de contas bancárias",
       icon: CreditCard,
       color: "bg-purple-500",
-      onClick: () => {
-        onOpenChange(false);
-        onCurrentAccountsOpen();
-      }
+      onClick: () => handleOpenModal(onCurrentAccountsOpen)
     },
     {
       id: "contas-caixa",
@@ -42,10 +44,7 @@ export const ContasModal = ({
       description: "Cadastro e gestão de contas caixa",
       icon: Wallet,
       color: "bg-yellow-500",
-      onClick: () => {
-        onOpenChange(false);
-        onCashAccountsOpen();
-      }
+      onClick: () => handleOpenModal(onCashAccountsOpen)
     },
     {
       id: "contas-cartao",
@@ -53,10 +52,7 @@ export const ContasModal = ({
       description: "Cadastro e gestão de contas cartão",
       icon: DollarSign,
       color: "bg-red-500",
-      onClick: () => {
-        onOpenChange(false);
-        onCardAccountsOpen();
-      }
+      onClick: () => handleOpenModal(onCardAccountsOpen)
     },
     {
       id: "delivery",
@@ -64,10 +60,7 @@ export const ContasModal = ({
       description: "Cadastro e gestão de contas delivery",
       icon: Truck,
       color: "bg-cyan-500",
-      onClick: () => {
-        onOpenChange(false);
-        onDeliveryOpen();
-      }
+      onClick: () => handleOpenModal(onDeliveryOpen)
     }
   ];
 
