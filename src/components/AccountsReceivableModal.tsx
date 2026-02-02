@@ -801,13 +801,24 @@ export function AccountsReceivableModal({ open, onOpenChange }: AccountsReceivab
           if (deletePaymentError) throw deletePaymentError;
 
           // Delete financial transaction for this installment
-          const { error: deleteTransactionError } = await supabase
+          // Tenta primeiro com reference_type = accounts_receivable_installments
+          const { error: deleteTransactionError1 } = await supabase
             .from("financial_transactions")
             .delete()
             .eq("reference_id", installmentId)
             .eq("reference_type", "accounts_receivable_installments");
 
-          if (deleteTransactionError) throw deleteTransactionError;
+          if (deleteTransactionError1) throw deleteTransactionError1;
+
+          // Também tenta com reference_type = accounts_receivable (para compatibilidade com registros antigos)
+          // Busca pelo account_receivable_id correspondente
+          const { error: deleteTransactionError2 } = await supabase
+            .from("financial_transactions")
+            .delete()
+            .eq("reference_id", accountId)
+            .eq("reference_type", "accounts_receivable");
+
+          if (deleteTransactionError2) throw deleteTransactionError2;
 
           // Update installment to remove payment_date
           const { error: installmentError } = await supabase
