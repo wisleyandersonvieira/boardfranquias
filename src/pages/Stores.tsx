@@ -361,6 +361,14 @@ const Stores = () => {
   console.log("Search term:", searchTerm);
   console.log("Filtered stores:", filteredStores);
 
+  if (permissionsLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p>Carregando...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
