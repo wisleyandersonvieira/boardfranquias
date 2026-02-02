@@ -256,10 +256,15 @@ const DashboardLayout = ({ children, user, pendingTasks }: DashboardLayoutProps)
         />
       )}
       
-      <StoresModal 
-        open={storesModalOpen} 
-        onOpenChange={setStoresModalOpen} 
-      />
+      {!cadastrosLoading && (
+        <StoresModal 
+          open={storesModalOpen} 
+          onOpenChange={setStoresModalOpen}
+          canEdit={cadastrosCanEdit}
+          canDelete={cadastrosCanDelete}
+          viewOnlyUserStores={!cadastrosCanEdit}
+        />
+      )}
       
       <GrupoModal 
         open={grupoModalOpen} 

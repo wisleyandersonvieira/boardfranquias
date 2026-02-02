@@ -596,8 +596,10 @@ export const StoresModal = ({
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="register" disabled={!canEdit}>Cadastro</TabsTrigger>
+          <TabsList className={canEdit ? "grid w-full grid-cols-2" : "grid w-full grid-cols-1"}>
+            {canEdit && (
+              <TabsTrigger value="register">Cadastro</TabsTrigger>
+            )}
             <TabsTrigger value="list">Exibir Cadastros</TabsTrigger>
           </TabsList>
 
