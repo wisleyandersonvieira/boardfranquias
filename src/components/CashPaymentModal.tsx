@@ -417,20 +417,9 @@ export function CashPaymentModal({
 
       if (updateError) throw updateError;
 
-      // Determinar o store_id correto para a transação financeira
-      // Para contas delivery, usar a primeira loja vinculada à conta
-      let transactionStoreId = accountPayable.store_id;
-      const selectedAccount = accounts.find(a => a.id === selectedAccountId);
-      if (selectedAccount?.type === 'delivery') {
-        const { data: deliveryStores } = await supabase
-          .from('delivery_account_stores')
-          .select('store_id')
-          .eq('account_id', selectedAccountId)
-          .limit(1);
-        if (deliveryStores && deliveryStores.length > 0) {
-          transactionStoreId = deliveryStores[0].store_id;
-        }
-      }
+      // O store_id da transação deve SEMPRE ser o store_id do contas a pagar
+      // Isso garante que a transação apareça nos relatórios da loja correta
+      const transactionStoreId = accountPayable.store_id;
 
       // Create financial transaction
       const { error: transactionError } = await supabase
