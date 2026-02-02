@@ -32,6 +32,7 @@ export const ServiceOrdersModal = ({ open, onOpenChange }: ServiceOrdersModalPro
   const [serviceOrders, setServiceOrders] = useState<ServiceOrder[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingStores, setLoadingStores] = useState(true);
+  const [hasSearched, setHasSearched] = useState(false);
   
   // Modal states
   const [formModalOpen, setFormModalOpen] = useState(false);
@@ -45,14 +46,15 @@ export const ServiceOrdersModal = ({ open, onOpenChange }: ServiceOrdersModalPro
   useEffect(() => {
     if (open) {
       fetchUserStores();
+      setHasSearched(false);
+      setServiceOrders([]);
     }
   }, [open]);
 
-  useEffect(() => {
-    if (stores.length > 0) {
-      fetchServiceOrders();
-    }
-  }, [selectedStores, statusFilter, startDate, endDate, stores]);
+  const handleSearch = () => {
+    setHasSearched(true);
+    fetchServiceOrders();
+  };
 
   const fetchUserStores = async () => {
     setLoadingStores(true);
@@ -163,6 +165,14 @@ export const ServiceOrdersModal = ({ open, onOpenChange }: ServiceOrdersModalPro
     }
   };
 
+  const handleSelectAllStores = (checked: boolean) => {
+    if (checked) {
+      setSelectedStores(stores.map(s => s.id));
+    } else {
+      setSelectedStores([]);
+    }
+  };
+
   const handleStatusChange = async (orderId: string, newStatus: string) => {
     try {
       const { error } = await supabase
@@ -242,6 +252,17 @@ export const ServiceOrdersModal = ({ open, onOpenChange }: ServiceOrdersModalPro
                     </div>
                   ) : (
                     <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {/* Select All Option */}
+                      <div className="flex items-center space-x-2 border-b pb-2 mb-2">
+                        <Checkbox
+                          id="select-all"
+                          checked={selectedStores.length === stores.length && stores.length > 0}
+                          onCheckedChange={(checked) => handleSelectAllStores(checked as boolean)}
+                        />
+                        <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
+                          Selecionar todas
+                        </label>
+                      </div>
                       {stores.map((store) => (
                         <div key={store.id} className="flex items-center space-x-2">
                           <Checkbox
@@ -333,14 +354,21 @@ export const ServiceOrdersModal = ({ open, onOpenChange }: ServiceOrdersModalPro
 
           {/* Actions */}
           <div className="flex justify-between items-center mb-4">
-            <Button variant="outline" onClick={() => {
-              setSelectedStores([]);
-              setStatusFilter("all");
-              setStartDate(undefined);
-              setEndDate(undefined);
-            }}>
-              Limpar Filtros
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => {
+                setSelectedStores([]);
+                setStatusFilter("all");
+                setStartDate(undefined);
+                setEndDate(undefined);
+                setHasSearched(false);
+                setServiceOrders([]);
+              }}>
+                Limpar Filtros
+              </Button>
+              <Button onClick={handleSearch}>
+                Pesquisar
+              </Button>
+            </div>
             <Button onClick={handleNewOrder}>
               <Plus className="h-4 w-4 mr-2" />
               Cadastrar OS
@@ -361,7 +389,13 @@ export const ServiceOrdersModal = ({ open, onOpenChange }: ServiceOrdersModalPro
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loading ? (
+                {!hasSearched ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      Utilize os filtros acima e clique em Pesquisar para buscar as ordens de serviço
+                    </TableCell>
+                  </TableRow>
+                ) : loading ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto" />
