@@ -10,6 +10,8 @@ interface ContasModalProps {
   onCashAccountsOpen: () => void;
   onCardAccountsOpen: () => void;
   onDeliveryOpen: () => void;
+  canEdit?: boolean;
+  canDelete?: boolean;
 }
 
 export const ContasModal = ({ 
@@ -18,7 +20,9 @@ export const ContasModal = ({
   onCurrentAccountsOpen,
   onCashAccountsOpen,
   onCardAccountsOpen,
-  onDeliveryOpen
+  onDeliveryOpen,
+  canEdit = true,
+  canDelete = true
 }: ContasModalProps) => {
   const modules = [
     {

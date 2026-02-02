@@ -222,7 +222,9 @@ const Cadastros = () => {
         onCurrentAccountsOpen={() => setCurrentAccountsModalOpen(true)} 
         onCashAccountsOpen={() => setCashAccountsModalOpen(true)} 
         onCardAccountsOpen={() => setCardAccountsModalOpen(true)} 
-        onDeliveryOpen={() => setDeliveryModalOpen(true)} 
+        onDeliveryOpen={() => setDeliveryModalOpen(true)}
+        canEdit={canEdit}
+        canDelete={canDelete}
       />
       <SuppliersModal 
         open={suppliersModalOpen} 
