@@ -59,38 +59,31 @@ const Cadastros = () => {
   }
 
   const handleMenuClick = (menuId: string, openModal: () => void) => {
-    // Read permission: can see menus but cannot access
-    if (permissionLevel === 'read') {
+    // Parameters: only admin can access
+    if (menuId === 'parametros' && permissionLevel !== 'admin') {
       toast({
         variant: "destructive",
         title: "Acesso negado",
-        description: "Você não tem permissão para acessar este menu.",
+        description: "Você não tem permissão para acessar Parâmetros.",
+      });
+      return;
+    }
+    
+    // Stores: admin has full access, write is blocked, read can see user's stores only
+    if (menuId === 'lojas' && permissionLevel === 'write') {
+      toast({
+        variant: "destructive",
+        title: "Acesso negado",
+        description: "Você não tem permissão para acessar Lojas.",
       });
       return;
     }
 
-    // Write permission: cannot access Parameters or Stores
-    if (permissionLevel === 'write') {
-      if (menuId === 'parametros') {
-        toast({
-          variant: "destructive",
-          title: "Acesso negado",
-          description: "Você não tem permissão para acessar Parâmetros.",
-        });
-        return;
-      }
-      if (menuId === 'lojas') {
-        toast({
-          variant: "destructive",
-          title: "Acesso negado",
-          description: "Você não tem permissão para acessar Lojas.",
-        });
-        return;
-      }
-    }
-
     openModal();
   };
+
+  // Determine if user can see data (read permission or higher)
+  const canViewData = permissionLevel === 'read' || permissionLevel === 'write' || permissionLevel === 'admin';
 
   const cadastroModules = [{
     id: "fornecedores",
@@ -115,7 +108,7 @@ const Cadastros = () => {
     icon: Store,
     color: "bg-pink-500",
     onClick: () => handleMenuClick("lojas", () => setStoresModalOpen(true)),
-    restricted: !canAccessStores
+    restricted: permissionLevel === 'write' // Write cannot access, read and admin can
   }, {
     id: "grupos",
     title: "Grupos",
@@ -192,10 +185,9 @@ const Cadastros = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {cadastroModules.map(module => {
           const IconComponent = module.icon;
-          const isDisabled = permissionLevel === 'read';
           return <Card 
               key={module.id} 
-              className={`${isDisabled ? 'opacity-60' : 'cursor-pointer hover:shadow-lg'} transition-shadow relative`}
+              className="cursor-pointer hover:shadow-lg transition-shadow relative"
             >
                 {module.restricted && (
                   <div className="absolute top-2 right-2">
@@ -214,9 +206,8 @@ const Cadastros = () => {
                     className="w-full" 
                     variant="outline" 
                     onClick={module.onClick}
-                    disabled={isDisabled}
                   >
-                    {isDisabled ? "Sem acesso" : "Acessar"}
+                    Acessar
                   </Button>
                 </CardContent>
               </Card>;
@@ -245,7 +236,13 @@ const Cadastros = () => {
         canEdit={canEdit}
         canDelete={canDelete}
       />
-      <StoresModal open={storesModalOpen} onOpenChange={setStoresModalOpen} />
+      <StoresModal 
+        open={storesModalOpen} 
+        onOpenChange={setStoresModalOpen}
+        canEdit={canEdit}
+        canDelete={canDelete}
+        viewOnlyUserStores={permissionLevel === 'read'}
+      />
       <GrupoModal 
         open={grupoModalOpen} 
         onOpenChange={setGrupoModalOpen}

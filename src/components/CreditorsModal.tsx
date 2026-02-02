@@ -51,7 +51,7 @@ export function CreditorsModal({ open, onOpenChange, canEdit = true, canDelete =
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [editingCreditor, setEditingCreditor] = useState<Creditor | null>(null);
-  const [activeTab, setActiveTab] = useState("register");
+  const [activeTab, setActiveTab] = useState(canEdit ? "register" : "list");
   const { matrixId, matrixName } = useUserMatrix();
   const { toast } = useToast();
 
