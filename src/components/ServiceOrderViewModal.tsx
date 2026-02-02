@@ -16,12 +16,18 @@ interface ServiceOrderViewModalProps {
 
 export const ServiceOrderViewModal = ({ open, onOpenChange, order }: ServiceOrderViewModalProps) => {
   const [creatorName, setCreatorName] = useState<string>("");
+  const [editorName, setEditorName] = useState<string>("");
 
   useEffect(() => {
     if (open && order?.created_by) {
       fetchCreatorName(order.created_by);
     }
-  }, [open, order?.created_by]);
+    if (open && order?.updated_by) {
+      fetchEditorName(order.updated_by);
+    } else {
+      setEditorName("");
+    }
+  }, [open, order?.created_by, order?.updated_by]);
 
   const fetchCreatorName = async (userId: string) => {
     try {
@@ -36,6 +42,22 @@ export const ServiceOrderViewModal = ({ open, onOpenChange, order }: ServiceOrde
       }
     } catch (error) {
       console.error('Error fetching creator name:', error);
+    }
+  };
+
+  const fetchEditorName = async (userId: string) => {
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('name')
+        .eq('id', userId)
+        .single();
+      
+      if (data?.name) {
+        setEditorName(data.name);
+      }
+    } catch (error) {
+      console.error('Error fetching editor name:', error);
     }
   };
 
@@ -171,11 +193,17 @@ export const ServiceOrderViewModal = ({ open, onOpenChange, order }: ServiceOrde
           )}
 
           {/* Footer Info */}
-          <div className="border-t pt-4 text-sm text-muted-foreground">
+          <div className="border-t pt-4 text-sm text-muted-foreground space-y-1">
             <p>
               Criado em: {format(parseISO(order.created_at || order.registration_date), "dd/MM/yyyy 'às' HH:mm")}
               {creatorName && ` por ${creatorName}`}
             </p>
+            {order.updated_by && order.updated_at && (
+              <p>
+                Editado em: {format(parseISO(order.updated_at), "dd/MM/yyyy 'às' HH:mm")}
+                {editorName && ` por ${editorName}`}
+              </p>
+            )}
           </div>
         </div>
       </DialogContent>

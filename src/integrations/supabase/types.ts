@@ -2550,6 +2550,7 @@ export type Database = {
           store_id: string
           supplier_id: string | null
           updated_at: string
+          updated_by: string | null
           value: number | null
         }
         Insert: {
@@ -2566,6 +2567,7 @@ export type Database = {
           store_id: string
           supplier_id?: string | null
           updated_at?: string
+          updated_by?: string | null
           value?: number | null
         }
         Update: {
@@ -2582,6 +2584,7 @@ export type Database = {
           store_id?: string
           supplier_id?: string | null
           updated_at?: string
+          updated_by?: string | null
           value?: number | null
         }
         Relationships: [

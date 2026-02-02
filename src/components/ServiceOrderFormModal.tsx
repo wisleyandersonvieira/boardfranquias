@@ -221,7 +221,11 @@ export const ServiceOrderFormModal = ({
       if (isEditing && order) {
         const { error } = await supabase
           .from('service_orders')
-          .update(orderData)
+          .update({
+            ...orderData,
+            updated_by: user.id,
+            updated_at: new Date().toISOString()
+          })
           .eq('id', order.id);
 
         if (error) throw error;
