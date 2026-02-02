@@ -315,18 +315,17 @@ export const DeliveryModal = ({ open, onOpenChange, canEdit = true, canDelete = 
 
   const handleDelete = async (account: DeliveryAccount) => {
     try {
-      // Verificar se existem pagamentos de contas a pagar vinculados
-      const { data: payablePayments, error: payablePaymentsError } = await supabase
-        .from('accounts_payable_payments')
+      // Verificar se existem transações financeiras vinculadas
+      const { data: financialTransactions, error: financialTransactionsError } = await supabase
+        .from('financial_transactions')
         .select('id')
-        .eq('payment_account_type', 'delivery_account')
-        .eq('payment_account_id', account.id)
+        .eq('account_id', account.id)
         .limit(1);
 
-      if (payablePaymentsError) throw payablePaymentsError;
+      if (financialTransactionsError) throw financialTransactionsError;
 
-      if (payablePayments && payablePayments.length > 0) {
-        toast.error('Esta conta delivery possui pagamentos de contas a pagar vinculados e não pode ser excluída.');
+      if (financialTransactions && financialTransactions.length > 0) {
+        toast.error('Esta conta delivery possui transações financeiras vinculadas e não pode ser excluída.');
         return;
       }
 
