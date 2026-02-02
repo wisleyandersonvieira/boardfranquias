@@ -262,8 +262,10 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
 
       // ========== ETAPA 1: Buscar todos os dados em paralelo ==========
       
-      // Buscar todas as lojas vinculadas à conta selecionada para filtrar transações
-      let linkedStoreIds: string[] = [selectedStore];
+      // Buscar todas as lojas vinculadas à conta selecionada
+      // O extrato deve mostrar TODAS as movimentações da conta, independente da loja
+      let linkedStoreIds: string[] = [];
+      
       if (account.type === 'delivery') {
         const { data: deliveryStores } = await supabase
           .from('delivery_account_stores')
@@ -272,17 +274,45 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
         if (deliveryStores && deliveryStores.length > 0) {
           linkedStoreIds = deliveryStores.map(s => s.store_id);
         }
+      } else if (account.type === 'current') {
+        const { data: currentStores } = await supabase
+          .from('current_account_stores')
+          .select('store_id')
+          .eq('account_id', selectedAccount);
+        if (currentStores && currentStores.length > 0) {
+          linkedStoreIds = currentStores.map(s => s.store_id);
+        }
+      } else if (account.type === 'cash') {
+        const { data: cashStores } = await supabase
+          .from('cash_account_stores')
+          .select('store_id')
+          .eq('account_id', selectedAccount);
+        if (cashStores && cashStores.length > 0) {
+          linkedStoreIds = cashStores.map(s => s.store_id);
+        }
+      } else if (account.type === 'card') {
+        const { data: cardStores } = await supabase
+          .from('card_account_stores')
+          .select('store_id')
+          .eq('account_id', selectedAccount);
+        if (cardStores && cardStores.length > 0) {
+          linkedStoreIds = cardStores.map(s => s.store_id);
+        }
       }
       
-      // Transferências
+      // Fallback: se não encontrou lojas vinculadas, usa a loja selecionada
+      if (linkedStoreIds.length === 0) {
+        linkedStoreIds = [selectedStore];
+      }
+      
+      // Transferências - busca todas as transferências da conta (sem filtro de loja)
       const transfersPromise = supabase
         .from('transfers')
         .select('*')
         .or(`source_account_id.eq.${selectedAccount},destination_account_id.eq.${selectedAccount}`)
         .order('transfer_date');
 
-      // Financial transactions (inclui todos os tipos de conta)
-      // Para contas delivery, busca transações de todas as lojas vinculadas
+      // Financial transactions - busca todas as transações da conta em TODAS as lojas vinculadas
       const financialTransPromise = supabase
         .from('financial_transactions')
         .select('id, amount, transaction_date, description, reference_id, reference_type, transaction_type')
@@ -303,21 +333,20 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
         cashControlItemPromise = Promise.resolve({ data: [] });
       }
 
-      // Cash controls
+      // Cash controls - busca de TODAS as lojas vinculadas à conta
       const cashControlsPromise = supabase
         .from('cash_control')
         .select('id, date')
-        .eq('store_id', selectedStore);
+        .in('store_id', linkedStoreIds);
 
-      // Partner transactions
+      // Partner transactions - busca de TODAS as lojas vinculadas à conta
       const partnerTransPromise = supabase
         .from('partner_transactions')
         .select('id, amount, payment_date, transaction_type, notes, partners:partner_id(name)')
-        .eq('store_id', selectedStore)
+        .in('store_id', linkedStoreIds)
         .eq('account_id', selectedAccount);
 
-      // Dados de referência para validação
-      // Para contas delivery, buscar dados de todas as lojas vinculadas
+      // Dados de referência para validação - busca de TODAS as lojas vinculadas
       const payableInstallmentsPromise = supabase
         .from('accounts_payable_installments')
         .select('id, installment_number, payment_date, account_payable_id');
