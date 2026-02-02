@@ -1,9 +1,10 @@
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { format, parseISO } from "date-fns";
-import { Paperclip, Download, ExternalLink } from "lucide-react";
+import { Paperclip, Download } from "lucide-react";
 import { toast } from "sonner";
 import type { ServiceOrder } from "@/types/serviceOrder";
 
@@ -14,6 +15,30 @@ interface ServiceOrderViewModalProps {
 }
 
 export const ServiceOrderViewModal = ({ open, onOpenChange, order }: ServiceOrderViewModalProps) => {
+  const [creatorName, setCreatorName] = useState<string>("");
+
+  useEffect(() => {
+    if (open && order?.created_by) {
+      fetchCreatorName(order.created_by);
+    }
+  }, [open, order?.created_by]);
+
+  const fetchCreatorName = async (userId: string) => {
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('name')
+        .eq('id', userId)
+        .single();
+      
+      if (data?.name) {
+        setCreatorName(data.name);
+      }
+    } catch (error) {
+      console.error('Error fetching creator name:', error);
+    }
+  };
+
   if (!order) return null;
 
   const getStatusBadge = (status: string) => {
@@ -59,20 +84,6 @@ export const ServiceOrderViewModal = ({ open, onOpenChange, order }: ServiceOrde
     }
   };
 
-  const handleOpenFile = async (attachment: any) => {
-    try {
-      const { data } = supabase.storage
-        .from('attachments')
-        .getPublicUrl(attachment.path);
-
-      if (data?.publicUrl) {
-        window.open(data.publicUrl, '_blank');
-      }
-    } catch (error) {
-      console.error('Error opening file:', error);
-      toast.error('Erro ao abrir arquivo');
-    }
-  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -145,24 +156,14 @@ export const ServiceOrderViewModal = ({ open, onOpenChange, order }: ServiceOrde
                       <Paperclip className="h-4 w-4 text-muted-foreground" />
                       <span className="text-sm">{attachment.name}</span>
                     </div>
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleOpenFile(attachment)}
-                        title="Visualizar"
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDownload(attachment)}
-                        title="Baixar"
-                      >
-                        <Download className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDownload(attachment)}
+                      title="Baixar"
+                    >
+                      <Download className="h-4 w-4" />
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -171,7 +172,10 @@ export const ServiceOrderViewModal = ({ open, onOpenChange, order }: ServiceOrde
 
           {/* Footer Info */}
           <div className="border-t pt-4 text-sm text-muted-foreground">
-            <p>Criado em: {format(parseISO(order.created_at), "dd/MM/yyyy 'às' HH:mm")}</p>
+            <p>
+              Criado em: {format(parseISO(order.created_at || order.registration_date), "dd/MM/yyyy 'às' HH:mm")}
+              {creatorName && ` por ${creatorName}`}
+            </p>
           </div>
         </div>
       </DialogContent>
