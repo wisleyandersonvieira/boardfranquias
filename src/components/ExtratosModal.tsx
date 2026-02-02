@@ -319,25 +319,34 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
         .in('store_id', linkedStoreIds)
         .eq('account_id', selectedAccount);
 
-      // Cash control items baseado no tipo de conta
+      // Cash control items baseado no tipo de conta - busca com o cash_control para obter a data diretamente
       let cashControlItemPromise;
       if (account.type === 'cash') {
-        cashControlItemPromise = supabase.from('cash_control_cash_items').select('valor, cash_control_id').eq('cash_account_id', selectedAccount);
+        cashControlItemPromise = supabase
+          .from('cash_control_cash_items')
+          .select('valor, cash_control_id, cash_control:cash_control_id(id, date, store_id)')
+          .eq('cash_account_id', selectedAccount);
       } else if (account.type === 'card') {
-        cashControlItemPromise = supabase.from('cash_control_card_items').select('valor, cash_control_id').eq('card_account_id', selectedAccount);
+        cashControlItemPromise = supabase
+          .from('cash_control_card_items')
+          .select('valor, cash_control_id, cash_control:cash_control_id(id, date, store_id)')
+          .eq('card_account_id', selectedAccount);
       } else if (account.type === 'delivery') {
-        cashControlItemPromise = supabase.from('cash_control_delivery_items').select('valor, cash_control_id').eq('delivery_account_id', selectedAccount);
+        cashControlItemPromise = supabase
+          .from('cash_control_delivery_items')
+          .select('valor, cash_control_id, cash_control:cash_control_id(id, date, store_id)')
+          .eq('delivery_account_id', selectedAccount);
       } else if (account.type === 'current') {
-        cashControlItemPromise = supabase.from('cash_control_account_items').select('valor, cash_control_id').eq('current_account_id', selectedAccount);
+        cashControlItemPromise = supabase
+          .from('cash_control_account_items')
+          .select('valor, cash_control_id, cash_control:cash_control_id(id, date, store_id)')
+          .eq('current_account_id', selectedAccount);
       } else {
         cashControlItemPromise = Promise.resolve({ data: [] });
       }
 
-      // Cash controls - busca de TODAS as lojas vinculadas à conta
-      const cashControlsPromise = supabase
-        .from('cash_control')
-        .select('id, date')
-        .in('store_id', linkedStoreIds);
+      // Cash controls não é mais necessário buscar separadamente - já vem no join acima
+      const cashControlsPromise = Promise.resolve({ data: [] });
 
       // Partner transactions - busca de TODAS as lojas vinculadas à conta
       const partnerTransPromise = supabase
@@ -402,11 +411,9 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
 
       setLoadingProgress(50);
 
+
       // ========== ETAPA 2: Criar mapas de lookup para processamento rápido ==========
-      const cashControlMap = new Map<string, string>();
-      (cashControlsResult.data || []).forEach((cc: any) => {
-        cashControlMap.set(cc.id, cc.date);
-      });
+      // Nota: cashControlMap não é mais necessário pois a data vem no join do cashControlItemsResult
 
       const payableInstallmentsMap = new Map<string, any>();
       (payableInstallmentsResult.data || []).forEach((inst: any) => {
@@ -503,9 +510,9 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
           }
         });
 
-        // Processar cash control items anteriores
+        // Processar cash control items anteriores (data vem do join)
         (cashControlItemsResult.data || []).forEach((item: any) => {
-          const ccDate = cashControlMap.get(item.cash_control_id);
+          const ccDate = (item.cash_control as any)?.date;
           if (ccDate && ccDate >= inicialDateStr && ccDate <= dayBeforeStr) {
             saldoDiaAnterior += item.valor;
           }
@@ -640,7 +647,7 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
       };
 
       (cashControlItemsResult.data || []).forEach((item: any) => {
-        const ccDate = cashControlMap.get(item.cash_control_id);
+        const ccDate = (item.cash_control as any)?.date;
         if (ccDate && ccDate >= startDateStr && ccDate <= endDateStr) {
           items.push({
             date: parseISO(ccDate + 'T12:00:00'),
