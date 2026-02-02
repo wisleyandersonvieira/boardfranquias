@@ -50,6 +50,9 @@ interface FormData {
 }
 
 export function CurrentAccountsModal({ open, onOpenChange, canEdit = true, canDelete = true }: CurrentAccountsModalProps) {
+  // Debug log to verify permissions are received correctly
+  console.log('CurrentAccountsModal permissions:', { canEdit, canDelete, open });
+  
   const [accounts, setAccounts] = useState<CurrentAccount[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [editingAccount, setEditingAccount] = useState<CurrentAccount | null>(null);
