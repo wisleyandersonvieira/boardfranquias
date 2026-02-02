@@ -201,6 +201,25 @@ export const PartnersModal = ({
 
     setLoading(true);
     try {
+      // Verificar se o sócio está vinculado a alguma loja
+      const { data: storePartners, error: storePartnersError } = await supabase
+        .from("store_partners")
+        .select("id")
+        .eq("partner_id", id)
+        .limit(1);
+
+      if (storePartnersError) throw storePartnersError;
+
+      if (storePartners && storePartners.length > 0) {
+        toast({
+          variant: "destructive",
+          title: "Exclusão não permitida",
+          description: "Este sócio está vinculado a uma ou mais lojas e não pode ser excluído.",
+        });
+        setLoading(false);
+        return;
+      }
+
       // Verificar se existem movimentações de aportes/retiradas vinculadas ao sócio
       const { data: transactions, error: transactionsError } = await supabase
         .from("partner_transactions")
