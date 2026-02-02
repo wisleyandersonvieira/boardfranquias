@@ -1528,6 +1528,10 @@ export function AccountsReceivableModal({ open, onOpenChange }: AccountsReceivab
   };
 
   const handleSave = async () => {
+    // Prevent double-click submissions
+    if (loading) return;
+    setLoading(true);
+
     // If attachment only edit, skip validation of other fields
     if (!isAttachmentOnlyEdit) {
       if (!creditorId || !documentType || !documentNumber || !issueDate || !dueDate || !dataCompetencia) {
@@ -1536,6 +1540,7 @@ export function AccountsReceivableModal({ open, onOpenChange }: AccountsReceivab
           description: "Preencha todos os campos obrigatórios do formulário",
           variant: "destructive",
         });
+        setLoading(false);
         return;
       }
 
@@ -1545,6 +1550,7 @@ export function AccountsReceivableModal({ open, onOpenChange }: AccountsReceivab
           description: "Adicione pelo menos um item na aba Itens",
           variant: "destructive",
         });
+        setLoading(false);
         return;
       }
 
@@ -1556,11 +1562,10 @@ export function AccountsReceivableModal({ open, onOpenChange }: AccountsReceivab
           description: competenceValidation.message,
           variant: "destructive",
         });
+        setLoading(false);
         return;
       }
     }
-
-    setLoading(true);
     try {
       const totalAmount = getTotalAmount();
 
