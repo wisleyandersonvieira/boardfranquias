@@ -418,7 +418,7 @@ export function CurrentAccountsModal({ open, onOpenChange, canEdit = true, canDe
           {!showForm ? (
             <div className="space-y-4">
               <div className="flex flex-wrap gap-4 items-end">
-                {canEdit && (
+                {canEdit === true && (
                   <Button onClick={() => setShowForm(true)}>
                     <Plus className="h-4 w-4 mr-2" />
                     Nova Conta Corrente
