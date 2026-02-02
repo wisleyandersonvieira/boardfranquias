@@ -4948,6 +4948,9 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
                                     <p className="text-sm text-muted-foreground">
                                       <span className="font-medium">Conta:</span> {installment.paymentAccountInfo.name}
                                       {installment.paymentAccountInfo.account_type === 'current' && ` - ${installment.paymentAccountInfo.bank} (${installment.paymentAccountInfo.account_number})`}
+                                      {installment.paymentAccountInfo.account_type === 'cash' && ' (Caixa)'}
+                                      {installment.paymentAccountInfo.account_type === 'card' && ` - ${installment.paymentAccountInfo.bank} (Cartão)`}
+                                      {installment.paymentAccountInfo.account_type === 'delivery' && ' (Delivery)'}
                                     </p>
                                   )}
                                 </div>
@@ -5165,7 +5168,7 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
                           <p className="text-sm text-muted-foreground">Conta de Pagamento</p>
                           <p className="font-medium">
                             {paymentAccountInfo 
-                              ? `${paymentAccountInfo.name}${paymentAccountInfo.account_type === 'current' ? ` - ${paymentAccountInfo.bank} (${paymentAccountInfo.account_number})` : ''}`
+                              ? `${paymentAccountInfo.name}${paymentAccountInfo.account_type === 'current' ? ` - ${paymentAccountInfo.bank} (${paymentAccountInfo.account_number})` : ''}${paymentAccountInfo.account_type === 'cash' ? ' (Caixa)' : ''}${paymentAccountInfo.account_type === 'card' ? ` - ${paymentAccountInfo.bank} (Cartão)` : ''}${paymentAccountInfo.account_type === 'delivery' ? ' (Delivery)' : ''}`
                               : 'Não informada'
                             }
                           </p>
@@ -5212,6 +5215,9 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
                                   <p className="text-sm text-muted-foreground">
                                     <span className="font-medium">Conta:</span> {installment.paymentAccountInfo.name}
                                     {installment.paymentAccountInfo.account_type === 'current' && ` - ${installment.paymentAccountInfo.bank} (${installment.paymentAccountInfo.account_number})`}
+                                    {installment.paymentAccountInfo.account_type === 'cash' && ' (Caixa)'}
+                                    {installment.paymentAccountInfo.account_type === 'card' && ` - ${installment.paymentAccountInfo.bank} (Cartão)`}
+                                    {installment.paymentAccountInfo.account_type === 'delivery' && ' (Delivery)'}
                                   </p>
                                 )}
                               </div>
