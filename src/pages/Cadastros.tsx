@@ -260,30 +260,38 @@ const Cadastros = () => {
         canEdit={canEdit}
         canDelete={canDelete}
       />
-      <CurrentAccountsModal 
-        open={currentAccountsModalOpen} 
-        onOpenChange={setCurrentAccountsModalOpen}
-        canEdit={canEdit}
-        canDelete={canDelete}
-      />
-      <CashAccountsModal 
-        open={cashAccountsModalOpen} 
-        onOpenChange={setCashAccountsModalOpen}
-        canEdit={canEdit}
-        canDelete={canDelete}
-      />
-      <CardAccountsModal 
-        open={cardAccountsModalOpen} 
-        onOpenChange={setCardAccountsModalOpen}
-        canEdit={canEdit}
-        canDelete={canDelete}
-      />
-      <DeliveryModal 
-        open={deliveryModalOpen} 
-        onOpenChange={setDeliveryModalOpen}
-        canEdit={canEdit}
-        canDelete={canDelete}
-      />
+      {!loading && (
+        <CurrentAccountsModal 
+          open={currentAccountsModalOpen} 
+          onOpenChange={setCurrentAccountsModalOpen}
+          canEdit={canEdit}
+          canDelete={canDelete}
+        />
+      )}
+      {!loading && (
+        <CashAccountsModal 
+          open={cashAccountsModalOpen} 
+          onOpenChange={setCashAccountsModalOpen}
+          canEdit={canEdit}
+          canDelete={canDelete}
+        />
+      )}
+      {!loading && (
+        <CardAccountsModal 
+          open={cardAccountsModalOpen} 
+          onOpenChange={setCardAccountsModalOpen}
+          canEdit={canEdit}
+          canDelete={canDelete}
+        />
+      )}
+      {!loading && (
+        <DeliveryModal 
+          open={deliveryModalOpen} 
+          onOpenChange={setDeliveryModalOpen}
+          canEdit={canEdit}
+          canDelete={canDelete}
+        />
+      )}
       <ParametersModal open={parametersModalOpen} onOpenChange={setParametersModalOpen} />
       <DocumentTypesModal 
         open={documentTypesModalOpen} 
