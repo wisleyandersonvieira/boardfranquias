@@ -37,6 +37,7 @@ import { DocumentTypesModal } from "@/components/DocumentTypesModal";
 import { PartnersModal } from "@/components/PartnersModal";
 import { PartnerTransactionsModal } from "@/components/PartnerTransactionsModal";
 import { ServiceOrdersModal } from "@/components/ServiceOrdersModal";
+import { useCadastrosPermissions } from "@/hooks/useCadastrosPermissions";
 
 interface PendingTask {
   id: string;
@@ -51,6 +52,7 @@ interface DashboardLayoutProps {
 
 const DashboardLayout = ({ children, user, pendingTasks }: DashboardLayoutProps) => {
   const navigate = useNavigate();
+  const { canEdit: cadastrosCanEdit, canDelete: cadastrosCanDelete, loading: cadastrosLoading } = useCadastrosPermissions();
   
   // Financeiro modals
   const [accountsPayableOpen, setAccountsPayableOpen] = useState(false);
@@ -231,7 +233,9 @@ const DashboardLayout = ({ children, user, pendingTasks }: DashboardLayoutProps)
         onCurrentAccountsOpen={() => setCurrentAccountsModalOpen(true)} 
         onCashAccountsOpen={() => setCashAccountsModalOpen(true)} 
         onCardAccountsOpen={() => setCardAccountsModalOpen(true)} 
-        onDeliveryOpen={() => setDeliveryModalOpen(true)} 
+        onDeliveryOpen={() => setDeliveryModalOpen(true)}
+        canEdit={cadastrosCanEdit}
+        canDelete={cadastrosCanDelete}
       />
       
       <SuppliersModal 
@@ -259,25 +263,41 @@ const DashboardLayout = ({ children, user, pendingTasks }: DashboardLayoutProps)
         onOpenChange={setSubgrupoModalOpen}
       />
       
-      <CurrentAccountsModal 
-        open={currentAccountsModalOpen} 
-        onOpenChange={setCurrentAccountsModalOpen}
-      />
+      {!cadastrosLoading && (
+        <CurrentAccountsModal 
+          open={currentAccountsModalOpen} 
+          onOpenChange={setCurrentAccountsModalOpen}
+          canEdit={cadastrosCanEdit}
+          canDelete={cadastrosCanDelete}
+        />
+      )}
       
-      <CashAccountsModal 
-        open={cashAccountsModalOpen} 
-        onOpenChange={setCashAccountsModalOpen}
-      />
+      {!cadastrosLoading && (
+        <CashAccountsModal 
+          open={cashAccountsModalOpen} 
+          onOpenChange={setCashAccountsModalOpen}
+          canEdit={cadastrosCanEdit}
+          canDelete={cadastrosCanDelete}
+        />
+      )}
       
-      <CardAccountsModal 
-        open={cardAccountsModalOpen} 
-        onOpenChange={setCardAccountsModalOpen}
-      />
+      {!cadastrosLoading && (
+        <CardAccountsModal 
+          open={cardAccountsModalOpen} 
+          onOpenChange={setCardAccountsModalOpen}
+          canEdit={cadastrosCanEdit}
+          canDelete={cadastrosCanDelete}
+        />
+      )}
       
-      <DeliveryModal 
-        open={deliveryModalOpen} 
-        onOpenChange={setDeliveryModalOpen}
-      />
+      {!cadastrosLoading && (
+        <DeliveryModal 
+          open={deliveryModalOpen} 
+          onOpenChange={setDeliveryModalOpen}
+          canEdit={cadastrosCanEdit}
+          canDelete={cadastrosCanDelete}
+        />
+      )}
       
       <ParametersModal 
         open={parametersModalOpen} 
