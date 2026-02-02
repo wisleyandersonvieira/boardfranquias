@@ -40,11 +40,17 @@ export const useCadastrosPermissions = () => {
 
         // Check profile-based permissions first
         if (profile.profile_id) {
-          const { data: profilePermissions } = await supabase
+          const { data: profilePermissions, error: permError } = await supabase
             .from("profile_permissions")
             .select("permission")
             .eq("profile_id", profile.profile_id)
             .eq("module", "cadastros");
+
+          console.log('Cadastros Permission Check:', { 
+            profileId: profile.profile_id, 
+            profilePermissions, 
+            permError 
+          });
 
           if (profilePermissions && profilePermissions.length > 0) {
             const perms = profilePermissions.map(p => p.permission);
