@@ -33,6 +33,9 @@ const Cadastros = () => {
   const [contasModalOpen, setContasModalOpen] = useState(false);
   const [documentTypesModalOpen, setDocumentTypesModalOpen] = useState(false);
   const [partnersModalOpen, setPartnersModalOpen] = useState(false);
+  
+  // State to track permissions for account modals
+  const [accountModalPermissions, setAccountModalPermissions] = useState({ canEdit: true, canDelete: true });
   const navigate = useNavigate();
   const { toast } = useToast();
   const { canAccess, canEdit, canDelete, canAccessParameters, canAccessStores, permissionLevel, loading } = useCadastrosPermissions();
@@ -222,10 +225,22 @@ const Cadastros = () => {
       <ContasModal 
         open={contasModalOpen} 
         onOpenChange={setContasModalOpen} 
-        onCurrentAccountsOpen={() => setCurrentAccountsModalOpen(true)} 
-        onCashAccountsOpen={() => setCashAccountsModalOpen(true)} 
-        onCardAccountsOpen={() => setCardAccountsModalOpen(true)} 
-        onDeliveryOpen={() => setDeliveryModalOpen(true)}
+        onCurrentAccountsOpen={(edit, del) => {
+          setAccountModalPermissions({ canEdit: edit, canDelete: del });
+          setCurrentAccountsModalOpen(true);
+        }} 
+        onCashAccountsOpen={(edit, del) => {
+          setAccountModalPermissions({ canEdit: edit, canDelete: del });
+          setCashAccountsModalOpen(true);
+        }} 
+        onCardAccountsOpen={(edit, del) => {
+          setAccountModalPermissions({ canEdit: edit, canDelete: del });
+          setCardAccountsModalOpen(true);
+        }} 
+        onDeliveryOpen={(edit, del) => {
+          setAccountModalPermissions({ canEdit: edit, canDelete: del });
+          setDeliveryModalOpen(true);
+        }}
         canEdit={canEdit}
         canDelete={canDelete}
       />
@@ -263,26 +278,26 @@ const Cadastros = () => {
       <CurrentAccountsModal 
         open={currentAccountsModalOpen} 
         onOpenChange={setCurrentAccountsModalOpen}
-        canEdit={canEdit}
-        canDelete={canDelete}
+        canEdit={accountModalPermissions.canEdit}
+        canDelete={accountModalPermissions.canDelete}
       />
       <CashAccountsModal 
         open={cashAccountsModalOpen} 
         onOpenChange={setCashAccountsModalOpen}
-        canEdit={canEdit}
-        canDelete={canDelete}
+        canEdit={accountModalPermissions.canEdit}
+        canDelete={accountModalPermissions.canDelete}
       />
       <CardAccountsModal 
         open={cardAccountsModalOpen} 
         onOpenChange={setCardAccountsModalOpen}
-        canEdit={canEdit}
-        canDelete={canDelete}
+        canEdit={accountModalPermissions.canEdit}
+        canDelete={accountModalPermissions.canDelete}
       />
       <DeliveryModal 
         open={deliveryModalOpen} 
         onOpenChange={setDeliveryModalOpen}
-        canEdit={canEdit}
-        canDelete={canDelete}
+        canEdit={accountModalPermissions.canEdit}
+        canDelete={accountModalPermissions.canDelete}
       />
       <ParametersModal open={parametersModalOpen} onOpenChange={setParametersModalOpen} />
       <DocumentTypesModal 

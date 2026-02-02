@@ -6,10 +6,10 @@ import { CreditCard, Wallet, DollarSign, Truck } from "lucide-react";
 interface ContasModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCurrentAccountsOpen: () => void;
-  onCashAccountsOpen: () => void;
-  onCardAccountsOpen: () => void;
-  onDeliveryOpen: () => void;
+  onCurrentAccountsOpen: (canEdit: boolean, canDelete: boolean) => void;
+  onCashAccountsOpen: (canEdit: boolean, canDelete: boolean) => void;
+  onCardAccountsOpen: (canEdit: boolean, canDelete: boolean) => void;
+  onDeliveryOpen: (canEdit: boolean, canDelete: boolean) => void;
   canEdit?: boolean;
   canDelete?: boolean;
 }
@@ -24,9 +24,9 @@ export const ContasModal = ({
   canEdit = true,
   canDelete = true
 }: ContasModalProps) => {
-  const handleOpenModal = (openFn: () => void) => {
+  const handleOpenModal = (openFn: (canEdit: boolean, canDelete: boolean) => void) => {
     onOpenChange(false);
-    openFn();
+    openFn(canEdit, canDelete);
   };
 
   const modules = [
