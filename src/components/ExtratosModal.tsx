@@ -269,14 +269,12 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
         .or(`source_account_id.eq.${selectedAccount},destination_account_id.eq.${selectedAccount}`)
         .order('transfer_date');
 
-      // Financial transactions
-      const financialTransPromise = (account.type === 'current' || account.type === 'cash' || account.type === 'card')
-        ? supabase
-            .from('financial_transactions')
-            .select('id, amount, transaction_date, description, reference_id, reference_type, transaction_type')
-            .eq('store_id', selectedStore)
-            .eq('account_id', selectedAccount)
-        : Promise.resolve({ data: [] });
+      // Financial transactions (inclui todos os tipos de conta)
+      const financialTransPromise = supabase
+        .from('financial_transactions')
+        .select('id, amount, transaction_date, description, reference_id, reference_type, transaction_type')
+        .eq('store_id', selectedStore)
+        .eq('account_id', selectedAccount);
 
       // Cash control items baseado no tipo de conta
       let cashControlItemPromise;
