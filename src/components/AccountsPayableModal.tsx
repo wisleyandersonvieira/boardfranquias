@@ -1237,17 +1237,33 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
         // Fetch payment account information for each paid installment
         const installmentsWithPaymentInfo = await Promise.all(
           paidInstallments.map(async (installment) => {
-            const { data: transactionData, error: transactionError } = await supabase
-              .from("financial_transactions")
-              .select("account_id")
-              .eq("reference_id", installment.id)
-              .eq("reference_type", "accounts_payable_installments")
+            let paymentAccountInfo = null;
+            
+            // First, try to get from accounts_payable_payments table
+            const { data: paymentData, error: paymentError } = await supabase
+              .from("accounts_payable_payments")
+              .select("payment_account_id, payment_account_type")
+              .eq("installment_id", installment.id)
               .limit(1)
               .maybeSingle();
 
-            let paymentAccountInfo = null;
-            if (!transactionError && transactionData) {
-              paymentAccountInfo = currentAccounts.find(acc => acc.id === transactionData.account_id) || null;
+            if (!paymentError && paymentData?.payment_account_id) {
+              paymentAccountInfo = currentAccounts.find(acc => acc.id === paymentData.payment_account_id) || null;
+            }
+
+            // If not found, try financial_transactions as fallback
+            if (!paymentAccountInfo) {
+              const { data: transactionData, error: transactionError } = await supabase
+                .from("financial_transactions")
+                .select("account_id")
+                .eq("reference_id", installment.id)
+                .eq("reference_type", "accounts_payable_installments")
+                .limit(1)
+                .maybeSingle();
+
+              if (!transactionError && transactionData) {
+                paymentAccountInfo = currentAccounts.find(acc => acc.id === transactionData.account_id) || null;
+              }
             }
 
             return {
@@ -1259,22 +1275,39 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
 
         setReverseInstallments(installmentsWithPaymentInfo);
       } else {
-        // Account without installments - fetch payment info from financial_transactions
+        // Account without installments - fetch payment info
         setReverseInstallments([]);
         
-        // Fetch the payment info for account without installments
-        const { data: transactionData, error: transactionError } = await supabase
-          .from("financial_transactions")
-          .select("account_id, amount")
-          .eq("reference_id", account.id)
-          .eq("reference_type", "accounts_payable")
+        let accountInfo = null;
+        
+        // First, try to get from accounts_payable_payments table
+        const { data: paymentData, error: paymentError } = await supabase
+          .from("accounts_payable_payments")
+          .select("payment_account_id, payment_account_type")
+          .eq("account_payable_id", account.id)
           .limit(1)
           .maybeSingle();
 
-        if (!transactionError && transactionData) {
-          const accountInfo = currentAccounts.find(acc => acc.id === transactionData.account_id) || null;
-          setPaymentAccountInfo(accountInfo);
+        if (!paymentError && paymentData?.payment_account_id) {
+          accountInfo = currentAccounts.find(acc => acc.id === paymentData.payment_account_id) || null;
         }
+
+        // If not found, try financial_transactions as fallback
+        if (!accountInfo) {
+          const { data: transactionData, error: transactionError } = await supabase
+            .from("financial_transactions")
+            .select("account_id, amount")
+            .eq("reference_id", account.id)
+            .eq("reference_type", "accounts_payable")
+            .limit(1)
+            .maybeSingle();
+
+          if (!transactionError && transactionData) {
+            accountInfo = currentAccounts.find(acc => acc.id === transactionData.account_id) || null;
+          }
+        }
+        
+        setPaymentAccountInfo(accountInfo);
       }
 
       // Always show modal (both for accounts with and without installments)
