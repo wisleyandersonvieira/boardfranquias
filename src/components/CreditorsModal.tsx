@@ -321,10 +321,12 @@ export function CreditorsModal({ open, onOpenChange, canEdit = true, canDelete =
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="register" disabled={!canEdit}>
-              {editingCreditor ? "Editar" : "Cadastrar"}
-            </TabsTrigger>
+          <TabsList className={canEdit ? "grid w-full grid-cols-2" : "grid w-full grid-cols-1"}>
+            {canEdit && (
+              <TabsTrigger value="register">
+                {editingCreditor ? "Editar" : "Cadastrar"}
+              </TabsTrigger>
+            )}
             <TabsTrigger value="list">Listar</TabsTrigger>
           </TabsList>
 
@@ -486,7 +488,9 @@ export function CreditorsModal({ open, onOpenChange, canEdit = true, canDelete =
                       <TableHead>Contato</TableHead>
                       <TableHead>Telefone</TableHead>
                       <TableHead>E-mail</TableHead>
-                      <TableHead className="text-right">Ações</TableHead>
+                      {(canEdit || canDelete) && (
+                        <TableHead className="text-right">Ações</TableHead>
+                      )}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -506,28 +510,30 @@ export function CreditorsModal({ open, onOpenChange, canEdit = true, canDelete =
                           <TableCell>{creditor.contact_person || "-"}</TableCell>
                           <TableCell>{creditor.phone || "-"}</TableCell>
                           <TableCell>{creditor.email || "-"}</TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end space-x-2">
-                              {canEdit && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleEdit(creditor)}
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                              )}
-                              {canDelete && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleDelete(creditor)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              )}
-                            </div>
-                          </TableCell>
+                          {(canEdit || canDelete) && (
+                            <TableCell className="text-right">
+                              <div className="flex justify-end space-x-2">
+                                {canEdit && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleEdit(creditor)}
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                )}
+                                {canDelete && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleDelete(creditor)}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))
                     )}
