@@ -484,22 +484,15 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
 
   const fetchFilteredAccountsPayable = async () => {
     try {
-      let query = supabase
-        .from("accounts_payable")
-        .select(`
-          *,
-          suppliers(name),
-          employees(name),
-          stores(name)
-        `);
+      // Collect all ID filters first to combine them properly
+      let idFilters: Set<string>[] = [];
+      let hasIdFilter = false;
 
       // Apply filters only if they have values
       if (filterDateFrom || filterDateTo) {
-        // Para filtro de data de baixa, precisamos buscar contas que tenham payment_date
-        // OU que tenham parcelas com payment_date dentro do período
-        
-        let accountsWithPaymentDate = [];
-        let accountsWithInstallmentPaymentDate = [];
+        hasIdFilter = true;
+        let accountsWithPaymentDate: string[] = [];
+        let accountsWithInstallmentPaymentDate: string[] = [];
         
         // Buscar contas com payment_date principal
         if (filterDateFrom && filterDateTo) {
@@ -542,29 +535,18 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
         // Combinar IDs de ambas as buscas
         const allAccountIds = [...new Set([...accountsWithPaymentDate, ...accountsWithInstallmentPaymentDate])];
         
-        if (allAccountIds.length > 0) {
-          query = query.in("id", allAccountIds);
-        } else {
-          // Se não encontrou nenhuma conta com pagamento no período, retornar vazio
+        if (allAccountIds.length === 0) {
           setAccountsPayable([]);
           setViewCurrentPage(1);
           setShowFilteredData(true);
           return;
         }
+        idFilters.push(new Set(allAccountIds));
       }
       
-      if (filterSupplier && filterSupplier !== "all" && filterSupplier !== "") {
-        query = query.eq("supplier_id", filterSupplier);
-      }
-      
-      // Filtro por funcionário
-      if (filterEmployee && filterEmployee !== "all" && filterEmployee !== "") {
-        query = query.eq("employee_id", filterEmployee);
-      }
-      
-      // Para filtro de loja, precisamos buscar contas que tenham itens na loja selecionada
-      // (considera a loja atual dos itens, não a loja original da conta)
+      // Para filtro de loja, buscar contas que tenham itens na loja selecionada
       if (filterStore && filterStore !== "all" && filterStore !== "") {
+        hasIdFilter = true;
         const { data: itemsWithStore } = await supabase
           .from("accounts_payable_items")
           .select("account_payable_id")
@@ -572,20 +554,27 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
         
         const accountsWithStoreItems = [...new Set(itemsWithStore?.map(item => item.account_payable_id) || [])];
         
-        if (accountsWithStoreItems.length > 0) {
-          query = query.in("id", accountsWithStoreItems);
-        } else {
-          // Se não encontrou nenhuma conta com itens na loja selecionada, retornar vazio
+        // Also include accounts that have store_id directly matching
+        const { data: accountsWithDirectStore } = await supabase
+          .from("accounts_payable")
+          .select("id")
+          .eq("store_id", filterStore);
+        
+        const directStoreIds = accountsWithDirectStore?.map(item => item.id) || [];
+        const allStoreAccountIds = [...new Set([...accountsWithStoreItems, ...directStoreIds])];
+        
+        if (allStoreAccountIds.length === 0) {
           setAccountsPayable([]);
           setViewCurrentPage(1);
           setShowFilteredData(true);
           return;
         }
+        idFilters.push(new Set(allStoreAccountIds));
       }
       
-      // Filtro por conta de pagamento - busca contas que tenham algum pagamento pela conta selecionada
+      // Filtro por conta de pagamento
       if (filterPaymentAccount && filterPaymentAccount !== "all" && filterPaymentAccount !== "") {
-        // Buscar transações financeiras que usam essa conta de pagamento
+        hasIdFilter = true;
         const { data: transactionsWithAccount } = await supabase
           .from("financial_transactions")
           .select("reference_id, reference_type")
@@ -600,7 +589,6 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
           return;
         }
         
-        // Separar IDs de contas diretas e de parcelas
         const directAccountIds = transactionsWithAccount
           .filter(t => t.reference_type === "accounts_payable")
           .map(t => t.reference_id);
@@ -609,7 +597,6 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
           .filter(t => t.reference_type === "accounts_payable_installments")
           .map(t => t.reference_id);
         
-        // Buscar IDs de contas a partir das parcelas
         let accountsFromInstallments: string[] = [];
         if (installmentIds.length > 0) {
           const { data: installmentsData } = await supabase
@@ -620,26 +607,20 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
           accountsFromInstallments = installmentsData?.map(i => i.account_payable_id) || [];
         }
         
-        // Combinar todos os IDs de contas
         const allAccountIds = [...new Set([...directAccountIds, ...accountsFromInstallments])];
         
-        if (allAccountIds.length > 0) {
-          query = query.in("id", allAccountIds);
-        } else {
+        if (allAccountIds.length === 0) {
           setAccountsPayable([]);
           setViewCurrentPage(1);
           setShowFilteredData(true);
           return;
         }
+        idFilters.push(new Set(allAccountIds));
       }
       
-      if (filterDocumentNumber.trim()) {
-        query = query.ilike("document_number", `%${filterDocumentNumber}%`);
-      }
-      // Filtro de vencimento: buscar contas que tenham parcelas com vencimento no período
-      // OU que o due_date principal esteja no período (para contas sem parcelas)
+      // Filtro de vencimento
       if (filterDueDateFrom || filterDueDateTo) {
-        // Primeiro, buscar IDs de contas que têm parcelas com vencimento no período
+        hasIdFilter = true;
         let installmentDueDateQuery = supabase
           .from("accounts_payable_installments")
           .select("account_payable_id");
@@ -668,12 +649,10 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
         
         const { data: mainDueDateData } = await mainDueDateQuery;
         
-        // Para contas com due_date principal no período, verificar se não têm parcelas
         const accountsWithMainDueDate: string[] = [];
         if (mainDueDateData && mainDueDateData.length > 0) {
           const mainAccountIds = mainDueDateData.map(item => item.id);
           
-          // Verificar quais dessas contas não têm parcelas cadastradas
           const { data: accountsWithInstallments } = await supabase
             .from("accounts_payable_installments")
             .select("account_payable_id")
@@ -681,7 +660,6 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
           
           const accountsWithInstallmentsSet = new Set(accountsWithInstallments?.map(item => item.account_payable_id) || []);
           
-          // Adicionar contas sem parcelas que têm due_date no período
           mainAccountIds.forEach(id => {
             if (!accountsWithInstallmentsSet.has(id)) {
               accountsWithMainDueDate.push(id);
@@ -689,18 +667,61 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
           });
         }
         
-        // Combinar IDs: contas com parcelas no período + contas sem parcelas com due_date no período
         const allDueDateAccountIds = [...new Set([...accountsWithInstallmentDueDate, ...accountsWithMainDueDate])];
         
-        if (allDueDateAccountIds.length > 0) {
-          query = query.in("id", allDueDateAccountIds);
-        } else {
-          // Se não encontrou nenhuma conta com vencimento no período, retornar vazio
+        if (allDueDateAccountIds.length === 0) {
           setAccountsPayable([]);
           setViewCurrentPage(1);
           setShowFilteredData(true);
           return;
         }
+        idFilters.push(new Set(allDueDateAccountIds));
+      }
+
+      // Calculate intersection of all ID filters
+      let finalIds: string[] | null = null;
+      if (hasIdFilter && idFilters.length > 0) {
+        // Start with the first set and intersect with all others
+        let intersectedSet = idFilters[0];
+        for (let i = 1; i < idFilters.length; i++) {
+          intersectedSet = new Set([...intersectedSet].filter(x => idFilters[i].has(x)));
+        }
+        finalIds = [...intersectedSet];
+        
+        if (finalIds.length === 0) {
+          setAccountsPayable([]);
+          setViewCurrentPage(1);
+          setShowFilteredData(true);
+          return;
+        }
+      }
+
+      // Build the main query
+      let query = supabase
+        .from("accounts_payable")
+        .select(`
+          *,
+          suppliers(name),
+          employees(name),
+          stores(name)
+        `);
+
+      // Apply the combined ID filter if we have one
+      if (finalIds !== null) {
+        query = query.in("id", finalIds);
+      }
+      
+      if (filterSupplier && filterSupplier !== "all" && filterSupplier !== "") {
+        query = query.eq("supplier_id", filterSupplier);
+      }
+      
+      // Filtro por funcionário
+      if (filterEmployee && filterEmployee !== "all" && filterEmployee !== "") {
+        query = query.eq("employee_id", filterEmployee);
+      }
+      
+      if (filterDocumentNumber.trim()) {
+        query = query.ilike("document_number", `%${filterDocumentNumber}%`);
       }
       
       // Apply status filter
@@ -731,12 +752,6 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
         ...item,
         attachments: Array.isArray(item.attachments) ? item.attachments as Array<{name: string, url?: string, path?: string, size?: number, type?: string}> : []
       }));
-      
-      console.log('📊 Dados das contas buscadas:', formattedData.map(item => ({
-        id: item.id,
-        description: item.description,
-        attachments: item.attachments
-      })));
       
       setAccountsPayable(formattedData);
       setViewCurrentPage(1);
