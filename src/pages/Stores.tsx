@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowLeft, Edit, Trash2, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useCadastrosPermissions } from "@/hooks/useCadastrosPermissions";
 
 interface Store {
   id: string;
@@ -26,14 +27,16 @@ interface Store {
 
 const Stores = () => {
   const [stores, setStores] = useState<Store[]>([]);
+  const [userStoreIds, setUserStoreIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [editingStore, setEditingStore] = useState<Store | null>(null);
-  const [activeTab, setActiveTab] = useState("register");
+  const [activeTab, setActiveTab] = useState("list");
   const [userMatrixId, setUserMatrixId] = useState<string>("");
   const [userMatrixName, setUserMatrixName] = useState<string>("");
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { canEdit, canDelete, loading: permissionsLoading } = useCadastrosPermissions();
 
   // Form state
   const [formData, setFormData] = useState({
@@ -50,6 +53,7 @@ const Stores = () => {
   useEffect(() => {
     fetchUserMatrix();
     fetchStores();
+    fetchUserStores();
   }, []);
 
   const fetchUserMatrix = async () => {
@@ -91,8 +95,30 @@ const Stores = () => {
   useEffect(() => {
     if (activeTab === "list") {
       fetchStores();
+      fetchUserStores();
     }
   }, [activeTab]);
+
+  const fetchUserStores = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("user_stores")
+        .select("store_id")
+        .eq("user_id", user.id);
+
+      if (error) {
+        console.error("Error fetching user stores:", error);
+        return;
+      }
+
+      setUserStoreIds((data || []).map(us => us.store_id));
+    } catch (error) {
+      console.error("Error in fetchUserStores:", error);
+    }
+  };
 
   const fetchStores = async () => {
     setLoading(true);
@@ -316,6 +342,11 @@ const Stores = () => {
   };
 
   const filteredStores = stores.filter(store => {
+    // Se não tem permissão de edição, filtra apenas as lojas vinculadas ao usuário
+    if (!canEdit && !userStoreIds.includes(store.id)) {
+      return false;
+    }
+    
     if (!searchTerm.trim()) return true; // Se não há termo de busca, mostra todos
     
     const searchLower = searchTerm.toLowerCase();
@@ -349,8 +380,10 @@ const Stores = () => {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="register">Cadastro</TabsTrigger>
+          <TabsList className={canEdit ? "grid w-full grid-cols-2" : "grid w-full grid-cols-1"}>
+            {canEdit && (
+              <TabsTrigger value="register">Cadastro</TabsTrigger>
+            )}
             <TabsTrigger value="list">Exibir Cadastros</TabsTrigger>
           </TabsList>
 
@@ -507,7 +540,9 @@ const Stores = () => {
                         <TableHead>Telefone</TableHead>
                         <TableHead>Gerente</TableHead>
                         <TableHead>Data Abertura</TableHead>
-                        <TableHead className="text-right">Ações</TableHead>
+                        {(canEdit || canDelete) && (
+                          <TableHead className="text-right">Ações</TableHead>
+                        )}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -544,24 +579,30 @@ const Stores = () => {
                             <TableCell>
                               {store.opening_date ? new Date(store.opening_date).toLocaleDateString('pt-BR') : "-"}
                             </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex justify-end space-x-2">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleEdit(store)}
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleDelete(store)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </TableCell>
+                            {(canEdit || canDelete) && (
+                              <TableCell className="text-right">
+                                <div className="flex justify-end space-x-2">
+                                  {canEdit && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleEdit(store)}
+                                    >
+                                      <Edit className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                  {canDelete && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleDelete(store)}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                </div>
+                              </TableCell>
+                            )}
                           </TableRow>
                         ))
                       )}
