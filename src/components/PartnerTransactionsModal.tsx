@@ -436,6 +436,27 @@ export const PartnerTransactionsModal = ({ open, onOpenChange }: PartnerTransact
     }
 
     try {
+      // Validar período antes de salvar
+      const competenceValidation = await validatePartnerTransactionPeriod.competencia(competenceDate, selectedStoreId);
+      if (competenceValidation.blocked) {
+        toast({
+          title: "Período Bloqueado",
+          description: competenceValidation.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const paymentValidation = await validatePartnerTransactionPeriod.pagamento(paymentDate, selectedStoreId);
+      if (paymentValidation.blocked) {
+        toast({
+          title: "Período Bloqueado",
+          description: paymentValidation.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
@@ -489,9 +510,9 @@ export const PartnerTransactionsModal = ({ open, onOpenChange }: PartnerTransact
   };
 
   const handleEdit = async (transaction: PartnerTransaction) => {
-    // Validate period before editing
-    const paymentValidation = await validatePartnerTransactionPeriod.pagamento(transaction.payment_date);
-    const competenceValidation = await validatePartnerTransactionPeriod.competencia(transaction.competence_date);
+    // Validate period before editing - use store_id from transaction
+    const paymentValidation = await validatePartnerTransactionPeriod.pagamento(transaction.payment_date, transaction.store_id);
+    const competenceValidation = await validatePartnerTransactionPeriod.competencia(transaction.competence_date, transaction.store_id);
 
     if (paymentValidation.blocked) {
       toast({
@@ -530,9 +551,9 @@ export const PartnerTransactionsModal = ({ open, onOpenChange }: PartnerTransact
   };
 
   const handleDeleteClick = async (transaction: PartnerTransaction) => {
-    // Validate period before deleting
-    const paymentValidation = await validatePartnerTransactionPeriod.pagamento(transaction.payment_date);
-    const competenceValidation = await validatePartnerTransactionPeriod.competencia(transaction.competence_date);
+    // Validate period before deleting - use store_id from transaction
+    const paymentValidation = await validatePartnerTransactionPeriod.pagamento(transaction.payment_date, transaction.store_id);
+    const competenceValidation = await validatePartnerTransactionPeriod.competencia(transaction.competence_date, transaction.store_id);
 
     if (paymentValidation.blocked) {
       toast({
