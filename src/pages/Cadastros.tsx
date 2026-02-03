@@ -299,12 +299,14 @@ const Cadastros = () => {
         canEdit={canEdit}
         canDelete={canDelete}
       />
-      <PartnersModal 
-        open={partnersModalOpen} 
-        onOpenChange={setPartnersModalOpen}
-        canEdit={canEdit}
-        canDelete={canDelete}
-      />
+      {!loading && (
+        <PartnersModal 
+          open={partnersModalOpen} 
+          onOpenChange={setPartnersModalOpen}
+          canEdit={canEdit}
+          canDelete={canDelete}
+        />
+      )}
     </div>;
 };
 export default Cadastros;
