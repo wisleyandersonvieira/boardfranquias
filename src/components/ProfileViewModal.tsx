@@ -19,10 +19,7 @@ interface ProfileViewModalProps {
 
 const MODULES: Record<string, string> = {
   'cadastros': 'Cadastros',
-  'produtos': 'Produtos',
-  'fornecedores': 'Fornecedores',
   'usuarios': 'Usuários',
-  'lojas': 'Lojas',
   'financeiro': 'Financeiro',
   'caixa': 'Caixa',
   'estoque': 'Estoque',
