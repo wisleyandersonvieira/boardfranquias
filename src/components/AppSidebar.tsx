@@ -29,6 +29,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCadastrosPermissions } from "@/hooks/useCadastrosPermissions";
 import { useFinanceiroPermissions } from "@/hooks/useFinanceiroPermissions";
 import { useEstoquePermissions } from "@/hooks/useEstoquePermissions";
+import { useRelatoriosPermissions } from "@/hooks/useRelatoriosPermissions";
 import { toast } from "sonner";
 
 
@@ -110,6 +111,7 @@ const AppSidebar = ({
   const { canAccess: canAccessCadastros, loading: loadingCadastros } = useCadastrosPermissions();
   const { canView: canAccessFinanceiro, loading: loadingFinanceiro } = useFinanceiroPermissions();
   const { canAccess: canAccessEstoque, loading: loadingEstoque } = useEstoquePermissions();
+  const { canAccess: canAccessRelatorios, loading: loadingRelatorios } = useRelatoriosPermissions();
   
 
   useEffect(() => {
@@ -333,6 +335,12 @@ const AppSidebar = ({
     // Block access to Estoque if user doesn't have permission
     if (item.id === "estoque" && !loadingEstoque && !canAccessEstoque) {
       toast.error("Acesso negado ao módulo Estoque");
+      return;
+    }
+
+    // Block access to Relatórios if user doesn't have permission
+    if (item.id === "relatorios" && !loadingRelatorios && !canAccessRelatorios) {
+      toast.error("Acesso negado ao módulo Relatórios");
       return;
     }
 
