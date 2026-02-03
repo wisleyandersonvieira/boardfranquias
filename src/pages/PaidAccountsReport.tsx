@@ -357,6 +357,19 @@ const PaidAccountsReport = () => {
         accountsData = accountsData.filter((account: any) => account.store_id === filters.store_id);
       }
 
+      // Filter by product - show accounts that have at least one item with the selected product
+      if (filters.product_id && filters.product_id !== "all") {
+        accountsData = accountsData.filter((account: any) => {
+          if (!account.accounts_payable_items || account.accounts_payable_items.length === 0) {
+            return false;
+          }
+          // Check if any item in this account has the selected product
+          return account.accounts_payable_items.some((item: any) => {
+            return item.product_id === filters.product_id;
+          });
+        });
+      }
+
       // Filter by group - show accounts that have at least one product with the selected group
       if (filters.group_id && filters.group_id !== "all") {
         accountsData = accountsData.filter((account: any) => {
