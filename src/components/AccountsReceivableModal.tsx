@@ -171,6 +171,8 @@ export function AccountsReceivableModal({ open, onOpenChange }: AccountsReceivab
   const [filterDueDateFrom, setFilterDueDateFrom] = useState("");
   const [filterDueDateTo, setFilterDueDateTo] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  const [filterCreatedDateFrom, setFilterCreatedDateFrom] = useState("");
+  const [filterCreatedDateTo, setFilterCreatedDateTo] = useState("");
   const [showFilteredData, setShowFilteredData] = useState(false);
 
   // Payment tab filters
@@ -408,6 +410,14 @@ export function AccountsReceivableModal({ open, onOpenChange }: AccountsReceivab
       if (filterStatus && filterStatus !== "all" && filterStatus !== "") {
         query = query.eq("status", filterStatus);
       }
+      
+      // Filtro por período de cadastro (created_at)
+      if (filterCreatedDateFrom) {
+        query = query.gte("created_at", `${filterCreatedDateFrom}T00:00:00`);
+      }
+      if (filterCreatedDateTo) {
+        query = query.lte("created_at", `${filterCreatedDateTo}T23:59:59`);
+      }
 
       query = query.order("created_at", { ascending: false });
 
@@ -457,6 +467,8 @@ export function AccountsReceivableModal({ open, onOpenChange }: AccountsReceivab
     setFilterDueDateFrom("");
     setFilterDueDateTo("");
     setFilterStatus("all");
+    setFilterCreatedDateFrom("");
+    setFilterCreatedDateTo("");
     setAccountsReceivable([]);
     setShowFilteredData(false);
   };
@@ -1068,13 +1080,49 @@ export function AccountsReceivableModal({ open, onOpenChange }: AccountsReceivab
 
   const fetchStores = async () => {
     try {
-      const { data, error } = await supabase
-        .from("stores")
-        .select("id, name, code")
-        .order("name");
+      // Buscar o usuário logado
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-      if (error) throw error;
-      setStores(data || []);
+      // Buscar lojas vinculadas ao usuário através de user_stores
+      const { data: userStoresData, error: userStoresError } = await supabase
+        .from("user_stores")
+        .select("store_id")
+        .eq("user_id", user.id);
+
+      if (userStoresError) throw userStoresError;
+
+      if (userStoresData && userStoresData.length > 0) {
+        const storeIds = userStoresData.map(us => us.store_id);
+        
+        const { data, error } = await supabase
+          .from("stores")
+          .select("id, name, code")
+          .in("id", storeIds)
+          .order("name");
+
+        if (error) throw error;
+        setStores(data || []);
+      } else {
+        // Se não tiver lojas vinculadas, verificar se é admin (pode ver todas)
+        const { data: profileData } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
+          .single();
+
+        if (profileData?.role === 'admin') {
+          const { data, error } = await supabase
+            .from("stores")
+            .select("id, name, code")
+            .order("name");
+
+          if (error) throw error;
+          setStores(data || []);
+        } else {
+          setStores([]);
+        }
+      }
     } catch (error) {
       console.error("Error fetching stores:", error);
     }
@@ -2375,6 +2423,22 @@ export function AccountsReceivableModal({ open, onOpenChange }: AccountsReceivab
                         <SelectItem value="paid">Recebido</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div>
+                    <Label>Data Cadastro (De)</Label>
+                    <Input
+                      type="date"
+                      value={filterCreatedDateFrom}
+                      onChange={(e) => setFilterCreatedDateFrom(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label>Data Cadastro (Até)</Label>
+                    <Input
+                      type="date"
+                      value={filterCreatedDateTo}
+                      onChange={(e) => setFilterCreatedDateTo(e.target.value)}
+                    />
                   </div>
                 </div>
                 <div className="flex gap-2">
