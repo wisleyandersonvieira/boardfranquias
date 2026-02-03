@@ -289,11 +289,17 @@ export const PartnersModal = ({
           <DialogTitle>Cadastro de Sócios</DialogTitle>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className={cn("grid w-full", canEdit ? "grid-cols-2" : "grid-cols-1")}>
-            {canEdit && <TabsTrigger value="cadastro">Cadastrar</TabsTrigger>}
-            <TabsTrigger value="lista">Listar</TabsTrigger>
-          </TabsList>
+        <Tabs value={canEdit ? activeTab : "lista"} onValueChange={(value) => canEdit && setActiveTab(value)}>
+          {canEdit ? (
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="cadastro">Cadastrar</TabsTrigger>
+              <TabsTrigger value="lista">Listar</TabsTrigger>
+            </TabsList>
+          ) : (
+            <TabsList className="grid w-full grid-cols-1">
+              <TabsTrigger value="lista">Listar</TabsTrigger>
+            </TabsList>
+          )}
 
           <TabsContent value="cadastro" className="space-y-4 mt-4">
             <form onSubmit={handleSubmit} className="space-y-4">
