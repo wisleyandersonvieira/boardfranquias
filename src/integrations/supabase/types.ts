@@ -2838,6 +2838,7 @@ export type Database = {
           phone: string | null
           state: string | null
           store_id: string | null
+          trade_name: string | null
           updated_at: string
         }
         Insert: {
@@ -2854,6 +2855,7 @@ export type Database = {
           phone?: string | null
           state?: string | null
           store_id?: string | null
+          trade_name?: string | null
           updated_at?: string
         }
         Update: {
@@ -2870,6 +2872,7 @@ export type Database = {
           phone?: string | null
           state?: string | null
           store_id?: string | null
+          trade_name?: string | null
           updated_at?: string
         }
         Relationships: [

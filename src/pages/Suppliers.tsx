@@ -14,6 +14,7 @@ import { useUserMatrix } from "@/hooks/useUserMatrix";
 interface Supplier {
   id: string;
   name: string;
+  trade_name: string | null;
   cnpj_cpf: string | null;
   address: string | null;
   city: string | null;
@@ -40,6 +41,7 @@ const Suppliers = () => {
   // Form state
   const [formData, setFormData] = useState({
     name: "",
+    trade_name: "",
     cnpj_cpf: "",
     address: "",
     city: "",
@@ -188,6 +190,7 @@ const Suppliers = () => {
   const handleEdit = (supplier: Supplier) => {
     setFormData({
       name: supplier.name,
+      trade_name: supplier.trade_name || "",
       cnpj_cpf: supplier.cnpj_cpf || "",
       address: supplier.address || "",
       city: supplier.city || "",
@@ -234,6 +237,7 @@ const Suppliers = () => {
   const resetForm = () => {
     setFormData({
       name: "",
+      trade_name: "",
       cnpj_cpf: "",
       address: "",
       city: "",
@@ -323,6 +327,16 @@ const Suppliers = () => {
                         placeholder="Nome da empresa"
                       />
                     </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="trade_name">Nome Fantasia</Label>
+                    <Input
+                      id="trade_name"
+                      value={formData.trade_name}
+                      onChange={(e) => setFormData({ ...formData, trade_name: e.target.value })}
+                      placeholder="Nome fantasia da empresa"
+                    />
                   </div>
 
                    <div className="space-y-2">
