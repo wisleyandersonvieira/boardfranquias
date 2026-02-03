@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import EmployeeObligationsTab from "./EmployeeObligationsTab";
 import { ptBR } from "date-fns/locale";
+import { useFuncionariosPermissions } from "@/hooks/useFuncionariosPermissions";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -76,6 +77,7 @@ const EmployeeMovementModal = ({ isOpen, onClose }: EmployeeMovementModalProps) 
   const [showInactiveEmployees, setShowInactiveEmployees] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const { canEdit } = useFuncionariosPermissions();
   const { toast } = useToast();
 
   const fetchStores = async () => {
@@ -667,9 +669,9 @@ const EmployeeMovementModal = ({ isOpen, onClose }: EmployeeMovementModalProps) 
               </div>
 
               <Tabs defaultValue="financeiro" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
+                <TabsList className={`grid w-full ${canEdit ? 'grid-cols-2' : 'grid-cols-1'}`}>
                   <TabsTrigger value="financeiro">Financeiro</TabsTrigger>
-                  <TabsTrigger value="obrigacoes">Obrigações</TabsTrigger>
+                  {canEdit && <TabsTrigger value="obrigacoes">Obrigações</TabsTrigger>}
                 </TabsList>
 
                 <TabsContent value="financeiro" className="space-y-4">
@@ -846,13 +848,15 @@ const EmployeeMovementModal = ({ isOpen, onClose }: EmployeeMovementModalProps) 
                   </Card>
                 </TabsContent>
 
-                <TabsContent value="obrigacoes" className="space-y-4">
-                  <EmployeeObligationsTab
-                    employeeId={selectedEmployee.id}
-                    employeeName={selectedEmployee.name}
-                    storeId={selectedStore.id}
-                  />
-                </TabsContent>
+                {canEdit && (
+                  <TabsContent value="obrigacoes" className="space-y-4">
+                    <EmployeeObligationsTab
+                      employeeId={selectedEmployee.id}
+                      employeeName={selectedEmployee.name}
+                      storeId={selectedStore.id}
+                    />
+                  </TabsContent>
+                )}
               </Tabs>
             </div>
           )}
