@@ -42,7 +42,7 @@ export const PartnersModal = ({
   const [partners, setPartners] = useState<Partner[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeTab, setActiveTab] = useState(canEdit ? "cadastro" : "lista");
+  const [activeTab, setActiveTab] = useState("lista");
   const [editingPartner, setEditingPartner] = useState<Partner | null>(null);
   const [birthDate, setBirthDate] = useState<Date | undefined>(undefined);
   const { matrixId, matrixName } = useUserMatrix();
@@ -79,12 +79,17 @@ export const PartnersModal = ({
   useEffect(() => {
     if (open) {
       fetchPartners();
-      // Set default tab to "lista" for view-only users
-      if (!canEdit) {
-        setActiveTab("lista");
-      }
+      // Always reset to lista when opening - cadastro tab is hidden for view-only users anyway
+      setActiveTab("lista");
     }
-  }, [open, canEdit]);
+  }, [open]);
+
+  // If user somehow is on cadastro tab but doesn't have edit permission, redirect to lista
+  useEffect(() => {
+    if (!canEdit && activeTab === "cadastro") {
+      setActiveTab("lista");
+    }
+  }, [canEdit, activeTab]);
 
   const formatCPF = (value: string) => {
     const numbers = value.replace(/\D/g, "");
