@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import JobFunctionObligationsModal from "./JobFunctionObligationsModal";
 import { useUserMatrix } from "@/hooks/useUserMatrix";
+import { useFuncionariosPermissions } from "@/hooks/useFuncionariosPermissions";
 
 interface JobFunction {
   id: string;
@@ -39,6 +40,7 @@ const JobFunctionModal = ({ isOpen, onClose }: JobFunctionModalProps) => {
   const [selectedFunctionForObligations, setSelectedFunctionForObligations] = useState<JobFunction | null>(null);
   const { toast } = useToast();
   const { matrixId, matrixName, matrixCode } = useUserMatrix();
+  const { canEdit } = useFuncionariosPermissions();
 
   const [formData, setFormData] = useState({
     name: '',
@@ -253,17 +255,19 @@ const JobFunctionModal = ({ isOpen, onClose }: JobFunctionModalProps) => {
         <div className="space-y-6">
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-semibold">Funções Cadastradas</h3>
-            <Button 
-              onClick={() => {
-                setShowForm(true);
-                setEditingFunction(null);
-                setFormData({ name: '', description: '', base_salary: '' });
-              }}
-              className="flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              Nova Função
-            </Button>
+            {canEdit && (
+              <Button 
+                onClick={() => {
+                  setShowForm(true);
+                  setEditingFunction(null);
+                  setFormData({ name: '', description: '', base_salary: '' });
+                }}
+                className="flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Nova Função
+              </Button>
+            )}
           </div>
 
           {showForm && (
@@ -348,7 +352,7 @@ const JobFunctionModal = ({ isOpen, onClose }: JobFunctionModalProps) => {
                     <TableHead>Descrição</TableHead>
                     <TableHead>Salário Base</TableHead>
                     <TableHead>Funcionários</TableHead>
-                    <TableHead>Ações</TableHead>
+                    {canEdit && <TableHead>Ações</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -365,45 +369,47 @@ const JobFunctionModal = ({ isOpen, onClose }: JobFunctionModalProps) => {
                         }).format(jobFunction.base_salary)}
                       </TableCell>
                       <TableCell>{jobFunction.employee_count || 0}</TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleEdit(jobFunction)}
-                            title="Editar"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setSelectedFunctionForObligations(jobFunction);
-                              setShowObligationsModal(true);
-                            }}
-                            title="Vincular Obrigações"
-                          >
-                            <ClipboardList className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleDelete(jobFunction)}
-                            title={jobFunction.employee_count && jobFunction.employee_count > 0 
-                              ? "Não é possível excluir - possui funcionários vinculados" 
-                              : "Excluir"}
-                            disabled={!!(jobFunction.employee_count && jobFunction.employee_count > 0)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
+                      {canEdit && (
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleEdit(jobFunction)}
+                              title="Editar"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedFunctionForObligations(jobFunction);
+                                setShowObligationsModal(true);
+                              }}
+                              title="Vincular Obrigações"
+                            >
+                              <ClipboardList className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleDelete(jobFunction)}
+                              title={jobFunction.employee_count && jobFunction.employee_count > 0 
+                                ? "Não é possível excluir - possui funcionários vinculados" 
+                                : "Excluir"}
+                              disabled={!!(jobFunction.employee_count && jobFunction.employee_count > 0)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                   {jobFunctions.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground">
+                      <TableCell colSpan={canEdit ? 7 : 6} className="text-center text-muted-foreground">
                         Nenhuma função cadastrada
                       </TableCell>
                     </TableRow>
