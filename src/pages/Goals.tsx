@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Target, Plus, Pencil, Copy, Search, ArrowLeft } from "lucide-react";
+import { useCadastrosPermissions } from "@/hooks/useCadastrosPermissions";
 
 interface Store {
   id: string;
@@ -58,6 +59,7 @@ const MONTHS = [
 
 const Goals = () => {
   const navigate = useNavigate();
+  const { canEdit } = useCadastrosPermissions();
   const [stores, setStores] = useState<Store[]>([]);
   const [selectedStore, setSelectedStore] = useState<string>("");
   const [selectedYear, setSelectedYear] = useState<string>("");
@@ -326,13 +328,15 @@ const Goals = () => {
 
       <main className="container mx-auto px-4 py-8">
         <div className="space-y-6">
-          {/* Button */}
-          <div className="flex justify-end">
-            <Button onClick={handleOpenRegister}>
-              <Plus className="h-4 w-4 mr-2" />
-              Cadastrar
-            </Button>
-          </div>
+          {/* Button - only show for users with edit permission */}
+          {canEdit && (
+            <div className="flex justify-end">
+              <Button onClick={handleOpenRegister}>
+                <Plus className="h-4 w-4 mr-2" />
+                Cadastrar
+              </Button>
+            </div>
+          )}
 
           {/* Filters */}
           <Card>
@@ -387,7 +391,7 @@ const Goals = () => {
                   <CardTitle className="text-lg">
                     Metas - {getStoreName(selectedStore)} - {selectedYear}
                   </CardTitle>
-                  {goals.length > 0 && (
+                  {goals.length > 0 && canEdit && (
                     <div className="flex gap-2">
                       <Button variant="outline" size="sm" onClick={handleEdit}>
                         <Pencil className="h-4 w-4 mr-2" />
