@@ -50,6 +50,7 @@ const PaidAccountsReport = () => {
     product_id: "all",
     account_id: "all",
     group_id: "all",
+    employee_id: "all",
   });
 
   const [accounts, setAccounts] = useState<any[]>([]);
@@ -57,6 +58,7 @@ const PaidAccountsReport = () => {
   const [stores, setStores] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [groups, setGroups] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
   const [availableAccounts, setAvailableAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -65,6 +67,7 @@ const PaidAccountsReport = () => {
     fetchStores();
     fetchProducts();
     fetchGroups();
+    fetchEmployees();
   }, []);
 
   // Fetch available accounts when store is selected
@@ -131,6 +134,15 @@ const PaidAccountsReport = () => {
       .is("parent_id", null)
       .order("code");
     setGroups(data || []);
+  };
+
+  const fetchEmployees = async () => {
+    const { data } = await supabase
+      .from("employees")
+      .select("id, name")
+      .eq("is_active", true)
+      .order("name");
+    setEmployees(data || []);
   };
 
   const fetchAccountsForStore = async (storeId: string) => {
@@ -386,6 +398,11 @@ const PaidAccountsReport = () => {
         });
       }
 
+      // Filter by employee
+      if (filters.employee_id && filters.employee_id !== "all") {
+        accountsData = accountsData.filter((account: any) => account.employee_id === filters.employee_id);
+      }
+
       setAccounts(accountsData);
       toast({
         title: "Pesquisa realizada",
@@ -416,6 +433,7 @@ const PaidAccountsReport = () => {
       product_id: "all",
       account_id: "all",
       group_id: "all",
+      employee_id: "all",
     });
     setAvailableAccounts([]);
     setAccounts([]);
@@ -443,6 +461,10 @@ const PaidAccountsReport = () => {
     if (filters.group_id !== "all") {
       const group = groups.find(g => g.id === filters.group_id);
       if (group) filterInfo.push(`Grupo: ${group.name}`);
+    }
+    if (filters.employee_id !== "all") {
+      const employee = employees.find(e => e.id === filters.employee_id);
+      if (employee) filterInfo.push(`Funcionário: ${employee.name}`);
     }
     return filterInfo;
   };
@@ -991,6 +1013,22 @@ const PaidAccountsReport = () => {
                     {groups.map((group) => (
                       <SelectItem key={group.id} value={group.id}>
                         {group.code} - {group.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Funcionário</Label>
+                <Select value={filters.employee_id} onValueChange={(value) => setFilters(prev => ({...prev, employee_id: value}))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecionar funcionário" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    {employees.map((employee) => (
+                      <SelectItem key={employee.id} value={employee.id}>
+                        {employee.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
