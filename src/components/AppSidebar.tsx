@@ -30,6 +30,7 @@ import { useCadastrosPermissions } from "@/hooks/useCadastrosPermissions";
 import { useFinanceiroPermissions } from "@/hooks/useFinanceiroPermissions";
 import { useEstoquePermissions } from "@/hooks/useEstoquePermissions";
 import { useRelatoriosPermissions } from "@/hooks/useRelatoriosPermissions";
+import { useDREPermissions } from "@/hooks/useDREPermissions";
 import { toast } from "sonner";
 
 
@@ -112,6 +113,7 @@ const AppSidebar = ({
   const { canView: canAccessFinanceiro, loading: loadingFinanceiro } = useFinanceiroPermissions();
   const { canAccess: canAccessEstoque, loading: loadingEstoque } = useEstoquePermissions();
   const { canAccess: canAccessRelatorios, loading: loadingRelatorios } = useRelatoriosPermissions();
+  const { canAccessView: canAccessDRE, isLoading: loadingDRE } = useDREPermissions();
   
 
   useEffect(() => {
@@ -341,6 +343,12 @@ const AppSidebar = ({
     // Block access to Relatórios if user doesn't have permission
     if (item.id === "relatorios" && !loadingRelatorios && !canAccessRelatorios) {
       toast.error("Acesso negado ao módulo Relatórios");
+      return;
+    }
+
+    // Block access to DRE if user doesn't have permission
+    if (item.id === "dre" && !loadingDRE && !canAccessDRE) {
+      toast.error("Acesso negado ao módulo DRE");
       return;
     }
 
