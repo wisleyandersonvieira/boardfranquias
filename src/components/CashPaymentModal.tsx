@@ -246,6 +246,9 @@ export function CashPaymentModal({
   };
 
   const handlePayment = async () => {
+    // CRITICAL: Set loading immediately to prevent double-clicks
+    if (loading) return;
+    
     if (!accountPayable || !selectedAccountId || !paymentDate) {
       toast({
         title: "Erro",
@@ -255,21 +258,39 @@ export function CashPaymentModal({
       return;
     }
 
-    // Validate payment period
-    const paymentValidation = await validateAccountsPayablePeriod.pagamento(paymentDate);
-    if (paymentValidation.blocked) {
-      toast({
-        title: "Período Bloqueado",
-        description: paymentValidation.message,
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Account validation is already done during fetch - accounts are filtered by store
-
     setLoading(true);
+
     try {
+      // Validate payment period
+      const paymentValidation = await validateAccountsPayablePeriod.pagamento(paymentDate);
+      if (paymentValidation.blocked) {
+        toast({
+          title: "Período Bloqueado",
+          description: paymentValidation.message,
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Check if already paid to prevent duplicates
+      const { data: existingPayments } = await supabase
+        .from("accounts_payable_payments")
+        .select("id")
+        .eq("account_payable_id", accountPayable.id)
+        .limit(1);
+      
+      if (existingPayments && existingPayments.length > 0) {
+        toast({
+          title: "Erro",
+          description: "Esta conta já foi paga",
+          variant: "destructive",
+        });
+        setLoading(false);
+        onOpenChange(false);
+        onPaymentSuccess?.();
+        return;
+      }
       const user = (await supabase.auth.getUser()).data.user;
       if (!user) {
         throw new Error("User not authenticated");
