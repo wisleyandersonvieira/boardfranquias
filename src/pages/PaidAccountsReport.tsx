@@ -49,12 +49,14 @@ const PaidAccountsReport = () => {
     store_id: "all",
     product_id: "all",
     account_id: "all",
+    group_id: "all",
   });
 
   const [accounts, setAccounts] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [stores, setStores] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
+  const [groups, setGroups] = useState<any[]>([]);
   const [availableAccounts, setAvailableAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -62,6 +64,7 @@ const PaidAccountsReport = () => {
     fetchSuppliers();
     fetchStores();
     fetchProducts();
+    fetchGroups();
   }, []);
 
   // Fetch available accounts when store is selected
@@ -119,6 +122,15 @@ const PaidAccountsReport = () => {
   const fetchProducts = async () => {
     const { data } = await supabase.from("products").select("id, name");
     setProducts(data || []);
+  };
+
+  const fetchGroups = async () => {
+    const { data } = await supabase
+      .from("account_groups")
+      .select("id, name, code")
+      .is("parent_id", null)
+      .order("code");
+    setGroups(data || []);
   };
 
   const fetchAccountsForStore = async (storeId: string) => {
@@ -204,7 +216,7 @@ const PaidAccountsReport = () => {
             quantity,
             unit_price,
             total_price,
-            products(id, name, subgroup_id, account_groups:subgroup_id(id, name))
+            products(id, name, subgroup_id, account_groups:subgroup_id(id, name, parent_id))
           )
         `) as { data: any[] | null; error: any };
 
@@ -345,6 +357,22 @@ const PaidAccountsReport = () => {
         accountsData = accountsData.filter((account: any) => account.store_id === filters.store_id);
       }
 
+      // Filter by group - show accounts that have at least one product with the selected group
+      if (filters.group_id && filters.group_id !== "all") {
+        accountsData = accountsData.filter((account: any) => {
+          if (!account.accounts_payable_items || account.accounts_payable_items.length === 0) {
+            return false;
+          }
+          // Check if any product in this account belongs to a subgroup of the selected group
+          return account.accounts_payable_items.some((item: any) => {
+            const subgroup = item.products?.account_groups;
+            if (!subgroup) return false;
+            // The subgroup's parent_id should match the selected group_id
+            return subgroup.parent_id === filters.group_id;
+          });
+        });
+      }
+
       setAccounts(accountsData);
       toast({
         title: "Pesquisa realizada",
@@ -374,6 +402,7 @@ const PaidAccountsReport = () => {
       store_id: "all",
       product_id: "all",
       account_id: "all",
+      group_id: "all",
     });
     setAvailableAccounts([]);
     setAccounts([]);
@@ -397,6 +426,10 @@ const PaidAccountsReport = () => {
     if (filters.account_id !== "all") {
       const account = availableAccounts.find(a => a.id === filters.account_id);
       if (account) filterInfo.push(`Conta: ${account.name}`);
+    }
+    if (filters.group_id !== "all") {
+      const group = groups.find(g => g.id === filters.group_id);
+      if (group) filterInfo.push(`Grupo: ${group.name}`);
     }
     return filterInfo;
   };
@@ -929,6 +962,22 @@ const PaidAccountsReport = () => {
                     {availableAccounts.map((account) => (
                       <SelectItem key={account.id} value={account.id}>
                         {account.name} ({account.type})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Grupo</Label>
+                <Select value={filters.group_id} onValueChange={(value) => setFilters(prev => ({...prev, group_id: value}))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecionar grupo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    {groups.map((group) => (
+                      <SelectItem key={group.id} value={group.id}>
+                        {group.code} - {group.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
