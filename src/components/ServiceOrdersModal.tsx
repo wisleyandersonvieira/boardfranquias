@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,10 +13,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Plus, Eye, Pencil, CalendarIcon, Loader2 } from "lucide-react";
+import { Plus, Eye, Pencil, CalendarIcon, Loader2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ServiceOrderFormModal } from "./ServiceOrderFormModal";
 import { ServiceOrderViewModal } from "./ServiceOrderViewModal";
+import { useServiceOrderDeletePermission } from "@/hooks/useServiceOrderDeletePermission";
 import type { ServiceOrder, Store } from "@/types/serviceOrder";
 
 interface ServiceOrdersModalProps {
@@ -42,6 +44,12 @@ export const ServiceOrdersModal = ({ open, onOpenChange }: ServiceOrdersModalPro
   
   // Dropdown for status change
   const [statusDropdownOpen, setStatusDropdownOpen] = useState<string | null>(null);
+
+  // Delete permission and state
+  const { canDelete } = useServiceOrderDeletePermission();
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [orderToDelete, setOrderToDelete] = useState<ServiceOrder | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -206,6 +214,41 @@ export const ServiceOrdersModal = ({ open, onOpenChange }: ServiceOrdersModalPro
     setSelectedOrder(null);
     setIsEditing(false);
     setFormModalOpen(true);
+  };
+
+  const handleDeleteClick = (order: ServiceOrder) => {
+    setOrderToDelete(order);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!orderToDelete) return;
+    
+    setDeleting(true);
+    try {
+      // Delete attachments from storage if any
+      if (orderToDelete.attachments && orderToDelete.attachments.length > 0) {
+        const paths = orderToDelete.attachments.map((att: any) => att.path);
+        await supabase.storage.from('attachments').remove(paths);
+      }
+
+      const { error } = await supabase
+        .from('service_orders')
+        .delete()
+        .eq('id', orderToDelete.id);
+
+      if (error) throw error;
+      
+      toast.success('OS excluída com sucesso');
+      fetchServiceOrders();
+    } catch (error: any) {
+      console.error('Error deleting service order:', error);
+      toast.error(error.message || 'Erro ao excluir OS');
+    } finally {
+      setDeleting(false);
+      setDeleteDialogOpen(false);
+      setOrderToDelete(null);
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -466,6 +509,16 @@ export const ServiceOrdersModal = ({ open, onOpenChange }: ServiceOrdersModalPro
                           <Button variant="ghost" size="icon" onClick={() => handleEdit(order)}>
                             <Pencil className="h-4 w-4" />
                           </Button>
+                          {canDelete && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => handleDeleteClick(order)}
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -496,6 +549,36 @@ export const ServiceOrdersModal = ({ open, onOpenChange }: ServiceOrdersModalPro
         onOpenChange={setViewModalOpen}
         order={selectedOrder}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir a OS {orderToDelete?.os_number}? 
+              Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteConfirm}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Excluindo...
+                </>
+              ) : (
+                'Excluir'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 };
