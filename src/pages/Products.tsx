@@ -7,13 +7,13 @@ import { ProductForm } from "@/components/ProductForm";
 import { ProductList } from "@/components/ProductList";
 import { UnitsModal } from "@/components/UnitsModal";
 import { useNavigate } from "react-router-dom";
-import { useProdutosPermissions } from "@/hooks/useProdutosPermissions";
+import { useCadastrosPermissions } from "@/hooks/useCadastrosPermissions";
 
 export default function Products() {
   const [unitsModalOpen, setUnitsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("list");
   const navigate = useNavigate();
-  const { permissionLevel, loading, canEdit, canDelete } = useProdutosPermissions();
+  const { permissionLevel, loading, canEdit, canDelete } = useCadastrosPermissions();
 
   // Se for read-only, sempre mostrar lista
   const effectiveTab = !canEdit ? "list" : activeTab;
