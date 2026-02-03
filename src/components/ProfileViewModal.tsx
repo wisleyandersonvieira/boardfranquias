@@ -23,8 +23,6 @@ const MODULES: Record<string, string> = {
   'financeiro': 'Financeiro',
   'caixa': 'Caixa',
   'estoque': 'Estoque',
-  'contas_pagar': 'Contas a Pagar',
-  'contas_receber': 'Contas a Receber',
   'relatorios': 'Relatórios',
   'dre': 'DRE',
   'configuracoes': 'Configurações',
