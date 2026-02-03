@@ -470,15 +470,17 @@ export const PeriodControlModal = ({ open, onOpenChange }: PeriodControlModalPro
                           Criado em: {format(new Date(block.created_at), 'dd/MM/yyyy HH:mm')}
                         </span>
                       </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDeleteBlock(block.id)}
-                        disabled={loading}
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Liberar
-                      </Button>
+                      {canEdit && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDeleteBlock(block.id)}
+                          disabled={loading}
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Liberar
+                        </Button>
+                      )}
                     </div>
                   ))}
                 </div>
