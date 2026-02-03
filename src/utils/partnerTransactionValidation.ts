@@ -94,7 +94,7 @@ export const validatePartnerTransactionPeriod = {
    * Valida se a competência não está bloqueada para cadastro
    */
   competencia: async (competenceDate: Date | string, storeId: string): Promise<{ blocked: boolean; message?: string }> => {
-    const blocked = await isPeriodBlockedByStore(competenceDate, 'competencia', 'financeiro', storeId);
+    const blocked = await isPeriodBlockedByStore(competenceDate, 'competencia', 'aportes_retiradas', storeId);
     
     let year: number;
     let month: number;
@@ -120,7 +120,7 @@ export const validatePartnerTransactionPeriod = {
    * Valida se o pagamento não está bloqueado
    */
   pagamento: async (paymentDate: Date | string, storeId: string): Promise<{ blocked: boolean; message?: string }> => {
-    const blocked = await isPeriodBlockedByStore(paymentDate, 'pagamento', 'financeiro', storeId);
+    const blocked = await isPeriodBlockedByStore(paymentDate, 'pagamento', 'aportes_retiradas', storeId);
     
     let year: number;
     let month: number;
