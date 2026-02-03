@@ -17,7 +17,11 @@ interface ProfileModalProps {
 
 const MODULES = [
   { id: "cadastros", name: "Cadastros", description: "Acesso ao módulo de cadastros gerais" },
-  { id: "usuarios", name: "Usuários", description: "Gestão de usuários e permissões" },
+  {
+    id: "usuarios",
+    name: "Usuários",
+    description: "Gestão de usuários e permissões (Cadastro e edição permitida somente para usuário Matriz)",
+  },
   { id: "financeiro", name: "Financeiro", description: "Gestão financeira geral (inclui contas a pagar e receber)" },
   { id: "caixa", name: "Caixa", description: "Controle de caixa" },
   { id: "estoque", name: "Estoque", description: "Controle e gestão de estoque" },
@@ -26,9 +30,13 @@ const MODULES = [
   {
     id: "dre",
     name: "DRE",
-    description: "Demonstrativo de Resultado do Exercício (edição permitida somente para usuário Matriz)",
+    description: "Demonstrativo de Resultado do Exercício (Edição permitida somente para usuário Matriz)",
   },
-  { id: "configuracoes", name: "Configurações", description: "Configurações do sistema" },
+  {
+    id: "configuracoes",
+    name: "Configurações",
+    description: "Configurações do sistema (Edição permitida somente para usuário Matriz",
+  },
   {
     id: "assistente_ia",
     name: "Assistente de IA",
