@@ -79,8 +79,12 @@ export const PartnersModal = ({
   useEffect(() => {
     if (open) {
       fetchPartners();
+      // Set default tab to "lista" for view-only users
+      if (!canEdit) {
+        setActiveTab("lista");
+      }
     }
-  }, [open]);
+  }, [open, canEdit]);
 
   const formatCPF = (value: string) => {
     const numbers = value.replace(/\D/g, "");
@@ -280,8 +284,8 @@ export const PartnersModal = ({
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="cadastro">Cadastrar</TabsTrigger>
+          <TabsList className={cn("grid w-full", canEdit ? "grid-cols-2" : "grid-cols-1")}>
+            {canEdit && <TabsTrigger value="cadastro">Cadastrar</TabsTrigger>}
             <TabsTrigger value="lista">Listar</TabsTrigger>
           </TabsList>
 
