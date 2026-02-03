@@ -79,17 +79,15 @@ export const PartnersModal = ({
   useEffect(() => {
     if (open) {
       fetchPartners();
-      // Always reset to lista when opening - cadastro tab is hidden for view-only users anyway
-      setActiveTab("lista");
     }
   }, [open]);
 
-  // If user somehow is on cadastro tab but doesn't have edit permission, redirect to lista
+  // Update activeTab based on canEdit permission - always go to lista if user can't edit
   useEffect(() => {
-    if (!canEdit && activeTab === "cadastro") {
+    if (!canEdit) {
       setActiveTab("lista");
     }
-  }, [canEdit, activeTab]);
+  }, [canEdit]);
 
   const formatCPF = (value: string) => {
     const numbers = value.replace(/\D/g, "");
