@@ -81,7 +81,7 @@ const AccountingExportReport = () => {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("role")
+        .select("role, store_id")
         .eq("id", user.id)
         .single();
 
@@ -93,13 +93,35 @@ const AccountingExportReport = () => {
           .order("name");
         storesData = (data || []).map((s: any) => ({ id: s.id, name: s.name }));
       } else {
+        // Collect store IDs from user_stores and primary store
+        const storeIds: string[] = [];
+        
+        // Add primary store from profile
+        if (profile?.store_id) {
+          storeIds.push(profile.store_id);
+        }
+        
+        // Get additional stores from user_stores
         const { data: userStores } = await query("user_stores")
-          .select("store_id, stores(id, name)")
+          .select("store_id")
           .eq("user_id", user.id);
-
-        storesData = userStores
-          ?.map((us: any) => us.stores)
-          .filter((s: any) => s) || [];
+        
+        if (userStores) {
+          userStores.forEach((us: any) => {
+            if (us.store_id && !storeIds.includes(us.store_id)) {
+              storeIds.push(us.store_id);
+            }
+          });
+        }
+        
+        // Fetch stores by IDs
+        if (storeIds.length > 0) {
+          const { data } = await query("stores")
+            .select("id, name")
+            .in("id", storeIds)
+            .order("name");
+          storesData = (data || []).map((s: any) => ({ id: s.id, name: s.name }));
+        }
       }
 
       setStores(storesData);
