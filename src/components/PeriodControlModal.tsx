@@ -13,6 +13,7 @@ import { toast } from "@/hooks/use-toast";
 import { Trash2, Plus, Calendar, Shield, ChevronDown } from "lucide-react";
 import { format } from "date-fns";
 import { useUserMatrix } from "@/hooks/useUserMatrix";
+import { useFinanceiroPermissions } from "@/hooks/useFinanceiroPermissions";
 
 interface PeriodControlModalProps {
   open: boolean;
@@ -67,6 +68,9 @@ export const PeriodControlModal = ({ open, onOpenChange }: PeriodControlModalPro
   
   // User matrix data
   const { matrixId, matrixName, isLoading: matrixLoading } = useUserMatrix();
+  
+  // Financeiro permissions
+  const { canEdit } = useFinanceiroPermissions();
   
   // Filter state
   const [filterYear, setFilterYear] = useState<number>(new Date().getFullYear());
@@ -266,18 +270,20 @@ export const PeriodControlModal = ({ open, onOpenChange }: PeriodControlModalPro
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* Botão para criar novo bloqueio */}
+          {/* Botão para criar novo bloqueio - apenas para usuários com permissão de escrita */}
           <div className="flex justify-between items-center">
             <p className="text-sm text-muted-foreground">
               Gerencie os períodos bloqueados para evitar novos cadastros nos módulos selecionados.
             </p>
-            <Button 
-              onClick={() => setShowForm(!showForm)}
-              size="sm"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Novo Bloqueio
-            </Button>
+            {canEdit && (
+              <Button 
+                onClick={() => setShowForm(!showForm)}
+                size="sm"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Novo Bloqueio
+              </Button>
+            )}
           </div>
 
           {/* Formulário de criação */}
