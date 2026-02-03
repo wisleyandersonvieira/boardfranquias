@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Plus, Eye, Pencil, Trash2, X, ArrowUpDown, ArrowUp, ArrowDown, FileDown, FileText, FileSpreadsheet } from "lucide-react";
 import { format } from "date-fns";
 import { validatePartnerTransactionPeriod } from "@/utils/partnerTransactionValidation";
+import { useFinanceiroPermissions } from "@/hooks/useFinanceiroPermissions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -120,6 +121,7 @@ export const PartnerTransactionsModal = ({ open, onOpenChange }: PartnerTransact
   const [notes, setNotes] = useState("");
 
   const { toast } = useToast();
+  const { canEdit } = useFinanceiroPermissions();
 
   // Filter and sort transactions
   const filteredAndSortedTransactions = useMemo(() => {
@@ -758,10 +760,12 @@ export const PartnerTransactionsModal = ({ open, onOpenChange }: PartnerTransact
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
-                  <Button size="sm" onClick={() => setShowForm(true)}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Cadastrar
-                  </Button>
+                  {canEdit && (
+                    <Button size="sm" onClick={() => setShowForm(true)}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Cadastrar
+                    </Button>
+                  )}
                 </div>
               </div>
 
@@ -860,22 +864,26 @@ export const PartnerTransactionsModal = ({ open, onOpenChange }: PartnerTransact
                                 >
                                   <Eye className="h-4 w-4" />
                                 </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7"
-                                  onClick={() => handleEdit(transaction)}
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7"
-                                  onClick={() => handleDeleteClick(transaction)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
+                                {canEdit && (
+                                  <>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7"
+                                      onClick={() => handleEdit(transaction)}
+                                    >
+                                      <Pencil className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7"
+                                      onClick={() => handleDeleteClick(transaction)}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </>
+                                )}
                               </div>
                             </TableCell>
                           </TableRow>
