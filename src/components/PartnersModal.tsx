@@ -39,6 +39,9 @@ export const PartnersModal = ({
   canEdit = true,
   canDelete = true
 }: PartnersModalProps) => {
+  // Debug log to track canEdit prop
+  console.log('PartnersModal permissions:', { canEdit, canDelete, open });
+
   const [partners, setPartners] = useState<Partner[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
