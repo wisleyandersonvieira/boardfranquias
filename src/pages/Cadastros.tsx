@@ -293,12 +293,14 @@ const Cadastros = () => {
         />
       )}
       <ParametersModal open={parametersModalOpen} onOpenChange={setParametersModalOpen} />
-      <DocumentTypesModal 
-        open={documentTypesModalOpen} 
-        onOpenChange={setDocumentTypesModalOpen}
-        canEdit={canEdit}
-        canDelete={canDelete}
-      />
+      {!loading && (
+        <DocumentTypesModal 
+          open={documentTypesModalOpen} 
+          onOpenChange={setDocumentTypesModalOpen}
+          canEdit={canEdit}
+          canDelete={canDelete}
+        />
+      )}
       {!loading && (
         <PartnersModal 
           open={partnersModalOpen} 
