@@ -50,6 +50,7 @@ const MODULES = [
   { id: 'contas_pagar', label: 'Contas a Pagar' },
   { id: 'contas_receber', label: 'Contas a Receber' },
   { id: 'transferencias', label: 'Transferências' },
+  { id: 'aportes_retiradas', label: 'Aportes e Retiradas' },
   { id: 'caixa', label: 'Controle de Caixa' },
   { id: 'estoque', label: 'Estoque' }
 ];
