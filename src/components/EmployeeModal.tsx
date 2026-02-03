@@ -18,6 +18,7 @@ import { CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { useFuncionariosPermissions } from "@/hooks/useFuncionariosPermissions";
 
 interface Employee {
   id: string;
@@ -68,6 +69,7 @@ const EmployeeModal = ({ isOpen, onClose }: EmployeeModalProps) => {
   const [uploadingFile, setUploadingFile] = useState(false);
   const [employeesWithMovements, setEmployeesWithMovements] = useState<Set<string>>(new Set());
   const { toast } = useToast();
+  const { canEdit } = useFuncionariosPermissions();
 
   // Filter states
   const [showFilters, setShowFilters] = useState(false);
@@ -704,16 +706,18 @@ const EmployeeModal = ({ isOpen, onClose }: EmployeeModalProps) => {
                 <Filter className="w-4 h-4" />
                 {showFilters ? 'Ocultar Filtros' : 'Exibir Filtros'}
               </Button>
-              <Button 
-                onClick={() => {
-                  resetForm();
-                  setShowForm(true);
-                }}
-                className="flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                Novo Funcionário
-              </Button>
+              {canEdit && (
+                <Button 
+                  onClick={() => {
+                    resetForm();
+                    setShowForm(true);
+                  }}
+                  className="flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Novo Funcionário
+                </Button>
+              )}
             </div>
           </div>
 
@@ -1124,7 +1128,7 @@ const EmployeeModal = ({ isOpen, onClose }: EmployeeModalProps) => {
                     <TableHead>Data Registro</TableHead>
                     <TableHead>Registrado</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Ações</TableHead>
+                    {canEdit && <TableHead>Ações</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1156,55 +1160,57 @@ const EmployeeModal = ({ isOpen, onClose }: EmployeeModalProps) => {
                             {isInactive ? "Inativo" : "Ativo"}
                           </Badge>
                         </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            {isInactive ? (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleReactivate(employee.id)}
-                                title="Reativar funcionário"
-                              >
-                                <RotateCcw className="w-4 h-4" />
-                              </Button>
-                            ) : (
-                              <>
+                        {canEdit && (
+                          <TableCell>
+                            <div className="flex gap-2">
+                              {isInactive ? (
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => handleEdit(employee)}
-                                  title="Editar funcionário"
+                                  onClick={() => handleReactivate(employee.id)}
+                                  title="Reativar funcionário"
                                 >
-                                  <Edit className="w-4 h-4" />
+                                  <RotateCcw className="w-4 h-4" />
                                 </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleInactivate(employee.id)}
-                                  title="Inativar funcionário"
-                                >
-                                  <Ban className="w-4 h-4" />
-                                </Button>
-                                {!hasMovements && (
+                              ) : (
+                                <>
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() => handleDelete(employee.id)}
-                                    title="Excluir funcionário"
+                                    onClick={() => handleEdit(employee)}
+                                    title="Editar funcionário"
                                   >
-                                    <Trash2 className="w-4 h-4" />
+                                    <Edit className="w-4 h-4" />
                                   </Button>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        </TableCell>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleInactivate(employee.id)}
+                                    title="Inativar funcionário"
+                                  >
+                                    <Ban className="w-4 h-4" />
+                                  </Button>
+                                  {!hasMovements && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleDelete(employee.id)}
+                                      title="Excluir funcionário"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </TableCell>
+                        )}
                       </TableRow>
                     );
                   })}
                   {filteredEmployees.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center text-muted-foreground">
+                      <TableCell colSpan={canEdit ? 8 : 7} className="text-center text-muted-foreground">
                         {employees.length === 0 ? 'Nenhum funcionário cadastrado' : 'Nenhum funcionário encontrado com os filtros aplicados'}
                       </TableCell>
                     </TableRow>
