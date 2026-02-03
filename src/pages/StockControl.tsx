@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Store, Package } from "lucide-react";
 import { StockYearCalendarModal } from "@/components/StockYearCalendarModal";
-
+import { useEstoquePermissions } from "@/hooks/useEstoquePermissions";
 interface Store {
   id: string;
   name: string;
@@ -17,6 +17,7 @@ const StockControl = () => {
   const [store, setStore] = useState<Store | null>(null);
   const [loading, setLoading] = useState(true);
   const [yearCalendarOpen, setYearCalendarOpen] = useState(false);
+  const { canEdit, loading: loadingPermissions } = useEstoquePermissions();
 
   useEffect(() => {
     if (storeId) {
@@ -119,11 +120,12 @@ const StockControl = () => {
         </div>
       </main>
 
-      {storeId && (
+      {storeId && !loadingPermissions && (
         <StockYearCalendarModal
           open={yearCalendarOpen}
           onOpenChange={handleYearCalendarClose}
           storeId={storeId}
+          canEdit={canEdit}
         />
       )}
     </div>
