@@ -322,10 +322,14 @@ const DashboardLayout = ({ children, user, pendingTasks }: DashboardLayoutProps)
         onOpenChange={setDocumentTypesModalOpen}
       />
       
-      <PartnersModal 
-        open={partnersModalOpen} 
-        onOpenChange={setPartnersModalOpen}
-      />
+      {!cadastrosLoading && (
+        <PartnersModal 
+          open={partnersModalOpen} 
+          onOpenChange={setPartnersModalOpen}
+          canEdit={cadastrosCanEdit}
+          canDelete={cadastrosCanDelete}
+        />
+      )}
       
       <PartnerTransactionsModal 
         open={partnerTransactionsOpen} 
