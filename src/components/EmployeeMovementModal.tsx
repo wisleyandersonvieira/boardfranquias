@@ -9,6 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Building2, User, FileText, Download, ChevronDown, FileSpreadsheet, UserX, Users, ChevronLeft, ChevronRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -31,6 +32,7 @@ interface Employee {
   name: string;
   cpf: string;
   is_active: boolean;
+  is_registered: boolean;
 }
 
 interface PayableAccount {
@@ -167,7 +169,8 @@ const EmployeeMovementModal = ({ isOpen, onClose }: EmployeeMovementModalProps) 
           id,
           name,
           cpf,
-          is_active
+          is_active,
+          is_registered
         `)
         .eq("store_id", storeId)
         .eq("is_active", !inactive)
@@ -179,7 +182,8 @@ const EmployeeMovementModal = ({ isOpen, onClose }: EmployeeMovementModalProps) 
         id: employee.id,
         name: employee.name || '',
         cpf: employee.cpf || '',
-        is_active: employee.is_active || false
+        is_active: employee.is_active || false,
+        is_registered: employee.is_registered ?? false
       })) || [];
       
       setEmployees(employeesData);
@@ -649,9 +653,20 @@ const EmployeeMovementModal = ({ isOpen, onClose }: EmployeeMovementModalProps) 
                             CPF: {employee.cpf}
                           </p>
                         </div>
-                        <Button variant="outline" size="sm">
-                          Ver Movimentações
-                        </Button>
+                        <div className="flex items-center gap-3">
+                          <Badge 
+                            variant={employee.is_registered ? "default" : "secondary"}
+                            className={employee.is_registered 
+                              ? "bg-green-100 text-green-800 hover:bg-green-100 dark:bg-green-900 dark:text-green-100" 
+                              : "bg-yellow-100 text-yellow-800 hover:bg-yellow-100 dark:bg-yellow-900 dark:text-yellow-100"
+                            }
+                          >
+                            {employee.is_registered ? "Registrado" : "Sem Registro"}
+                          </Badge>
+                          <Button variant="outline" size="sm">
+                            Ver Movimentações
+                          </Button>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
