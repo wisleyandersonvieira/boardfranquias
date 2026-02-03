@@ -27,6 +27,7 @@ import {
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useCadastrosPermissions } from "@/hooks/useCadastrosPermissions";
+import { useFinanceiroPermissions } from "@/hooks/useFinanceiroPermissions";
 import { toast } from "sonner";
 
 
@@ -106,6 +107,7 @@ const AppSidebar = ({
   const [stores, setStores] = useState<StoreData[]>([]);
   const [loadingStores, setLoadingStores] = useState(false);
   const { canAccess: canAccessCadastros, loading: loadingCadastros } = useCadastrosPermissions();
+  const { canView: canAccessFinanceiro, loading: loadingFinanceiro } = useFinanceiroPermissions();
   
 
   useEffect(() => {
@@ -317,6 +319,12 @@ const AppSidebar = ({
     // Block access to Cadastros if user doesn't have permission
     if (item.id === "cadastros" && !loadingCadastros && !canAccessCadastros) {
       toast.error("Acesso negado ao módulo Cadastros");
+      return;
+    }
+
+    // Block access to Financeiro if user doesn't have permission
+    if (item.id === "financeiro" && !loadingFinanceiro && !canAccessFinanceiro) {
+      toast.error("Acesso negado ao módulo Financeiro");
       return;
     }
 
