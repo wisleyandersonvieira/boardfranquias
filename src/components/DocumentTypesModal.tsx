@@ -272,11 +272,17 @@ export function DocumentTypesModal({ open, onOpenChange, canEdit = true, canDele
           <DialogTitle>Tipos de Documento</DialogTitle>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="list">Lista</TabsTrigger>
-            {canEdit && <TabsTrigger value="form">{editingId ? "Editar" : "Novo"}</TabsTrigger>}
-          </TabsList>
+        <Tabs value={canEdit ? activeTab : "list"} onValueChange={(value) => canEdit && setActiveTab(value)}>
+          {canEdit ? (
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="list">Lista</TabsTrigger>
+              <TabsTrigger value="form">{editingId ? "Editar" : "Novo"}</TabsTrigger>
+            </TabsList>
+          ) : (
+            <TabsList className="grid w-full grid-cols-1">
+              <TabsTrigger value="list">Lista</TabsTrigger>
+            </TabsList>
+          )}
 
           <TabsContent value="list" className="space-y-4">
             <div className="flex justify-between items-center">
