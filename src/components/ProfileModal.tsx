@@ -21,6 +21,7 @@ const MODULES = [
   { id: 'financeiro', name: 'Financeiro', description: 'Gestão financeira geral (inclui contas a pagar e receber)' },
   { id: 'caixa', name: 'Caixa', description: 'Controle de caixa' },
   { id: 'estoque', name: 'Estoque', description: 'Controle e gestão de estoque' },
+  { id: 'funcionarios', name: 'Funcionários', description: 'Gestão de funcionários', permissionType: 'employee' },
   { id: 'relatorios', name: 'Relatórios', description: 'Visualização de relatórios' },
   { id: 'dre', name: 'DRE', description: 'Demonstrativo de Resultado do Exercício' },
   { id: 'configuracoes', name: 'Configurações', description: 'Configurações do sistema' },
@@ -38,6 +39,13 @@ const PERMISSIONS = [
 const AI_PERMISSIONS = [
   { id: 'disabled', name: 'Inabilitar', description: 'Módulo não visível para o usuário' },
   { id: 'admin', name: 'Administrar', description: 'Acesso completo ao assistente de IA' }
+];
+
+// Permissões para o módulo Funcionários (sem opção administrar)
+const EMPLOYEE_PERMISSIONS = [
+  { id: 'disabled', name: 'Inabilitar', description: 'Módulo não visível para o usuário' },
+  { id: 'read', name: 'Visualizar', description: 'Apenas visualização' },
+  { id: 'write', name: 'Editar', description: 'Criar, editar e visualizar' }
 ];
 
 export function ProfileModal({ isOpen, onClose, onSuccess, editingProfile }: ProfileModalProps) {
@@ -181,8 +189,13 @@ export function ProfileModal({ isOpen, onClose, onSuccess, editingProfile }: Pro
             <h3 className="text-lg font-semibold mb-4">Permissões por Módulo</h3>
           <div className="space-y-4">
               {MODULES.map((module) => {
-                // Usar permissões específicas para o módulo Assistente de IA
-                const modulePermissions = (module as any).isSpecial ? AI_PERMISSIONS : PERMISSIONS;
+                // Usar permissões específicas para cada tipo de módulo
+                let modulePermissions = PERMISSIONS;
+                if ((module as any).isSpecial) {
+                  modulePermissions = AI_PERMISSIONS;
+                } else if ((module as any).permissionType === 'employee') {
+                  modulePermissions = EMPLOYEE_PERMISSIONS;
+                }
                 
                 return (
                   <div key={module.id} className="border rounded-lg p-4">
