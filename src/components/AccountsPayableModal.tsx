@@ -8,7 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trash2, Plus, Edit, RefreshCw, Upload, X, FileText, FileDown, DollarSign, Eye, Search, Filter, ChevronLeft, ChevronRight, Paperclip, Loader2, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Trash2, Plus, Edit, RefreshCw, Upload, X, FileText, FileDown, DollarSign, Eye, Search, Filter, ChevronLeft, ChevronRight, Paperclip, Loader2, ArrowUpDown, ArrowUp, ArrowDown, Check, ChevronsUpDown } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { NFEItemsValidationModal } from "./NFEItemsValidationModal";
@@ -3789,35 +3792,111 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
                     </div>
                     <div>
                       <Label htmlFor="filter-supplier">Fornecedor</Label>
-                      <Select value={filterSupplier} onValueChange={setFilterSupplier}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione o fornecedor" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Todos</SelectItem>
-                          {suppliers.map((supplier) => (
-                            <SelectItem key={supplier.id} value={supplier.id}>
-                              {supplier.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            className="w-full justify-between font-normal"
+                          >
+                            {filterSupplier && filterSupplier !== "all"
+                              ? suppliers.find((s) => s.id === filterSupplier)?.name
+                              : "Todos"}
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[300px] p-0">
+                          <Command>
+                            <CommandInput placeholder="Buscar fornecedor..." />
+                            <CommandList>
+                              <CommandEmpty>Nenhum fornecedor encontrado.</CommandEmpty>
+                              <CommandGroup>
+                                <CommandItem
+                                  value="todos"
+                                  onSelect={() => setFilterSupplier("all")}
+                                >
+                                  <Check
+                                    className={cn(
+                                      "mr-2 h-4 w-4",
+                                      filterSupplier === "all" || filterSupplier === "" ? "opacity-100" : "opacity-0"
+                                    )}
+                                  />
+                                  Todos
+                                </CommandItem>
+                                {suppliers.map((supplier) => (
+                                  <CommandItem
+                                    key={supplier.id}
+                                    value={supplier.name}
+                                    onSelect={() => setFilterSupplier(supplier.id)}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        filterSupplier === supplier.id ? "opacity-100" : "opacity-0"
+                                      )}
+                                    />
+                                    {supplier.name}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                     </div>
                     <div>
                       <Label htmlFor="filter-employee">Funcionário</Label>
-                      <Select value={filterEmployee} onValueChange={setFilterEmployee}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione o funcionário" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Todos</SelectItem>
-                          {employees.map((employee) => (
-                            <SelectItem key={employee.id} value={employee.id}>
-                              {employee.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            className="w-full justify-between font-normal"
+                          >
+                            {filterEmployee && filterEmployee !== "all"
+                              ? employees.find((e) => e.id === filterEmployee)?.name
+                              : "Todos"}
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[300px] p-0">
+                          <Command>
+                            <CommandInput placeholder="Buscar funcionário..." />
+                            <CommandList>
+                              <CommandEmpty>Nenhum funcionário encontrado.</CommandEmpty>
+                              <CommandGroup>
+                                <CommandItem
+                                  value="todos"
+                                  onSelect={() => setFilterEmployee("all")}
+                                >
+                                  <Check
+                                    className={cn(
+                                      "mr-2 h-4 w-4",
+                                      filterEmployee === "all" || filterEmployee === "" ? "opacity-100" : "opacity-0"
+                                    )}
+                                  />
+                                  Todos
+                                </CommandItem>
+                                {employees.map((employee) => (
+                                  <CommandItem
+                                    key={employee.id}
+                                    value={employee.name}
+                                    onSelect={() => setFilterEmployee(employee.id)}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        filterEmployee === employee.id ? "opacity-100" : "opacity-0"
+                                      )}
+                                    />
+                                    {employee.name}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                     </div>
                     <div>
                       <Label htmlFor="filter-store">Loja</Label>
