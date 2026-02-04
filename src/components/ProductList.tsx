@@ -209,16 +209,23 @@ export const ProductList = ({ canEdit = true, canDelete = true }: ProductListPro
 
   const handleToggleBlock = async (product: Product) => {
     try {
+      const newBlockedState = !product.is_blocked;
+      
+      // Quando bloqueia, também inativa; quando desbloqueia, mantém inativo (usuário deve ativar manualmente)
+      const updateData = newBlockedState 
+        ? { is_blocked: true, is_active: false }
+        : { is_blocked: false };
+
       const { error } = await supabase
         .from("products")
-        .update({ is_blocked: !product.is_blocked })
+        .update(updateData)
         .eq("id", product.id);
 
       if (error) throw error;
 
       toast({
         title: "Sucesso",
-        description: `Produto ${!product.is_blocked ? 'bloqueado' : 'desbloqueado'} com sucesso!`,
+        description: `Produto ${newBlockedState ? 'bloqueado' : 'desbloqueado'} com sucesso!`,
       });
 
       fetchInitialData();
