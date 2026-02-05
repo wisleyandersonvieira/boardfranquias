@@ -1147,8 +1147,11 @@ export type Database = {
           expense_type: string
           id: string
           is_disabled: boolean
+          is_paid: boolean
           issue_date: string
           linked_account_payable_id: string | null
+          notes: string | null
+          payment_date: string | null
           reference_month: number
           reference_year: number
           store_id: string
@@ -1167,8 +1170,11 @@ export type Database = {
           expense_type: string
           id?: string
           is_disabled?: boolean
+          is_paid?: boolean
           issue_date: string
           linked_account_payable_id?: string | null
+          notes?: string | null
+          payment_date?: string | null
           reference_month?: number
           reference_year?: number
           store_id: string
@@ -1187,8 +1193,11 @@ export type Database = {
           expense_type?: string
           id?: string
           is_disabled?: boolean
+          is_paid?: boolean
           issue_date?: string
           linked_account_payable_id?: string | null
+          notes?: string | null
+          payment_date?: string | null
           reference_month?: number
           reference_year?: number
           store_id?: string
