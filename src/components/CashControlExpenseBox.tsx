@@ -38,6 +38,9 @@ interface Expense {
   reference_month: number;
   reference_year: number;
   linked_account_payable_id: string | null;
+  is_paid: boolean;
+  payment_date: string | null;
+  notes: string | null;
 }
 
 interface CashControlExpenseBoxProps {
@@ -125,7 +128,10 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
           edit_history: (exp.edit_history as Array<{ edited_at: string; edited_by_name: string }>) || [],
           reference_month: exp.reference_month,
           reference_year: exp.reference_year,
-          linked_account_payable_id: exp.linked_account_payable_id || null
+          linked_account_payable_id: exp.linked_account_payable_id || null,
+          is_paid: exp.is_paid || false,
+          payment_date: exp.payment_date || null,
+          notes: exp.notes || null
         };
       }));
     } catch (error) {
@@ -158,6 +164,9 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
       setAmount(expense.amount.toString());
       setExistingAttachments(expense.attachments);
       setAttachmentStatus(expense.attachment_status);
+      setIsPaid(expense.is_paid || false);
+      setPaymentDate(expense.payment_date || "");
+      setNotes(expense.notes || "");
     } else {
       resetForm();
     }
@@ -335,7 +344,10 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
             amount: parseFloat(amount),
             attachments: allAttachments as unknown as Json,
             attachment_status: newStatus as unknown as Json,
-            edit_history: newHistory
+            edit_history: newHistory,
+            is_paid: isPaid,
+            payment_date: isPaid ? paymentDate || null : null,
+            notes: notes || null
           })
           .eq("id", editingExpense.id);
 
@@ -357,7 +369,10 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
             created_by: user.id,
             created_by_name: userName,
             reference_month: referenceMonth,
-            reference_year: referenceYear
+            reference_year: referenceYear,
+            is_paid: isPaid,
+            payment_date: isPaid ? paymentDate || null : null,
+            notes: notes || null
           });
 
         if (error) throw error;
