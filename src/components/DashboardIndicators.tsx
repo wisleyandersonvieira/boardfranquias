@@ -527,8 +527,8 @@ const DashboardIndicators = () => {
           <CardContent>
             <div>
               <p className="text-xs text-muted-foreground">Fechamento de Caixa</p>
-              <div className={`text-lg font-bold ${lastRegistrations?.daysSinceLastCash !== null && lastRegistrations.daysSinceLastCash > 3 ? "text-amber-600" : ""}`}>
-                {loading ? "..." : lastRegistrations?.daysSinceLastCash !== null ? `${lastRegistrations.daysSinceLastCash} dia${lastRegistrations.daysSinceLastCash !== 1 ? 's' : ''}` : "Sem registros"}
+              <div className={`text-lg font-bold ${lastRegistrations?.daysSinceLastCash != null && lastRegistrations.daysSinceLastCash > 3 ? "text-amber-600" : ""}`}>
+                {loading ? "..." : lastRegistrations?.daysSinceLastCash != null ? `${lastRegistrations.daysSinceLastCash} dia${lastRegistrations.daysSinceLastCash !== 1 ? 's' : ''}` : "Sem registros"}
               </div>
             </div>
           </CardContent>
