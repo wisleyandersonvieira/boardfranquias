@@ -1026,60 +1026,60 @@ export function LinkToAccountsPayableModal({
               <h3 className="font-semibold mb-3">Itens</h3>
               
               <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_auto] gap-3 mb-4 items-end">
-                <div className="min-w-0">
+                <div className="min-w-0 relative">
                   <Label>Produto</Label>
                   <div className="flex gap-2">
-                    <Popover open={productSearchOpen} onOpenChange={setProductSearchOpen}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={productSearchOpen}
-                          className="w-full justify-between font-normal min-w-0"
-                        >
-                          <span className="truncate">
-                            {selectedProductData
-                              ? `${selectedProductData.code ? `${selectedProductData.code} - ` : ''}${selectedProductData.name}`
-                              : "Digite para buscar..."}
-                          </span>
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[400px] p-0" align="start">
-                        <Command shouldFilter={false}>
-                          <CommandInput 
-                            placeholder="Digite o nome do produto..." 
-                            value={productSearchTerm}
-                            onValueChange={setProductSearchTerm}
-                            autoFocus
-                          />
-                          <CommandList className="max-h-[300px] overflow-y-auto" style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                            <CommandEmpty>Nenhum produto encontrado.</CommandEmpty>
-                            <CommandGroup>
-                              {filteredProducts.slice(0, 50).map((product) => (
-                                <CommandItem
-                                  key={product.id}
-                                  value={product.id}
-                                  onSelect={() => {
-                                    setSelectedProduct(product.id);
-                                    setProductSearchOpen(false);
-                                    setProductSearchTerm("");
-                                  }}
-                                >
-                                  <Check
-                                    className={cn(
-                                      "mr-2 h-4 w-4",
-                                      selectedProduct === product.id ? "opacity-100" : "opacity-0"
-                                    )}
-                                  />
-                                  {product.code ? `${product.code} - ` : ''}{product.name}
-                                </CommandItem>
-                              ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
+                    <div className="relative flex-1">
+                      <Input
+                        placeholder="Digite para buscar produto..."
+                        value={selectedProductData 
+                          ? `${selectedProductData.code ? `${selectedProductData.code} - ` : ''}${selectedProductData.name}`
+                          : productSearchTerm
+                        }
+                        onChange={(e) => {
+                          setProductSearchTerm(e.target.value);
+                          setSelectedProduct("");
+                          setProductSearchOpen(true);
+                        }}
+                        onFocus={() => setProductSearchOpen(true)}
+                        onBlur={() => {
+                          // Delay to allow click on dropdown item
+                          setTimeout(() => setProductSearchOpen(false), 200);
+                        }}
+                      />
+                      {productSearchOpen && (productSearchTerm || !selectedProduct) && filteredProducts.length > 0 && (
+                        <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-[300px] overflow-y-auto">
+                          {filteredProducts.slice(0, 50).map((product) => (
+                            <div
+                              key={product.id}
+                              className={cn(
+                                "flex items-center px-3 py-2 cursor-pointer hover:bg-accent hover:text-accent-foreground text-sm",
+                                selectedProduct === product.id && "bg-accent"
+                              )}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                setSelectedProduct(product.id);
+                                setProductSearchTerm("");
+                                setProductSearchOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  selectedProduct === product.id ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              {product.code ? `${product.code} - ` : ''}{product.name}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {productSearchOpen && productSearchTerm && filteredProducts.length === 0 && (
+                        <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md p-3 text-sm text-muted-foreground">
+                          Nenhum produto encontrado.
+                        </div>
+                      )}
+                    </div>
                     <Button 
                       variant="outline" 
                       size="icon"
