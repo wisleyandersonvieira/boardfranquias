@@ -3,7 +3,23 @@
  * Provides automatic matching suggestions between OFX transactions and internal records
  */
 
-import { differenceInDays } from 'date-fns';
+import { differenceInDays, parseISO, startOfDay } from 'date-fns';
+
+/**
+ * Parse a date string from the database preserving the local date
+ * Handles both ISO format (YYYY-MM-DDTHH:MM:SS) and date-only (YYYY-MM-DD)
+ * Prevents timezone conversion issues
+ */
+export function parseDatePreservingLocal(dateStr: string): Date {
+  if (!dateStr) return new Date();
+  
+  // Extract just the date part (YYYY-MM-DD) to avoid timezone issues
+  const datePart = dateStr.substring(0, 10);
+  const [year, month, day] = datePart.split('-').map(Number);
+  
+  // Create date using local timezone
+  return new Date(year, month - 1, day, 12, 0, 0); // Use noon to avoid DST issues
+}
 
 export interface InternalTransaction {
   id: string;
