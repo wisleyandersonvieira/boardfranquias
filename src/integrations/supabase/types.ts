@@ -627,6 +627,190 @@ export type Database = {
           },
         ]
       }
+      bank_ofx_imports: {
+        Row: {
+          account_id: string
+          account_type: string
+          created_at: string
+          end_date: string | null
+          error_message: string | null
+          file_hash: string
+          file_name: string
+          id: string
+          imported_at: string
+          imported_by: string
+          matrix_id: string
+          start_date: string | null
+          status: string
+          total_transactions: number | null
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          account_type: string
+          created_at?: string
+          end_date?: string | null
+          error_message?: string | null
+          file_hash: string
+          file_name: string
+          id?: string
+          imported_at?: string
+          imported_by: string
+          matrix_id: string
+          start_date?: string | null
+          status?: string
+          total_transactions?: number | null
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          account_type?: string
+          created_at?: string
+          end_date?: string | null
+          error_message?: string | null
+          file_hash?: string
+          file_name?: string
+          id?: string
+          imported_at?: string
+          imported_by?: string
+          matrix_id?: string
+          start_date?: string | null
+          status?: string
+          total_transactions?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      bank_ofx_transactions: {
+        Row: {
+          account_id: string
+          account_type: string
+          amount: number
+          created_at: string
+          fitid: string
+          id: string
+          import_id: string
+          is_reconciled: boolean
+          matrix_id: string
+          memo: string | null
+          name: string | null
+          posted_at: string
+          raw_payload: Json | null
+          reconciled_at: string | null
+          reconciled_by: string | null
+          refnum: string | null
+          trntype: string
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          account_type: string
+          amount: number
+          created_at?: string
+          fitid: string
+          id?: string
+          import_id: string
+          is_reconciled?: boolean
+          matrix_id: string
+          memo?: string | null
+          name?: string | null
+          posted_at: string
+          raw_payload?: Json | null
+          reconciled_at?: string | null
+          reconciled_by?: string | null
+          refnum?: string | null
+          trntype: string
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          account_type?: string
+          amount?: number
+          created_at?: string
+          fitid?: string
+          id?: string
+          import_id?: string
+          is_reconciled?: boolean
+          matrix_id?: string
+          memo?: string | null
+          name?: string | null
+          posted_at?: string
+          raw_payload?: Json | null
+          reconciled_at?: string | null
+          reconciled_by?: string | null
+          refnum?: string | null
+          trntype?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bank_ofx_transactions_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "bank_ofx_imports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bank_reconciliations: {
+        Row: {
+          account_id: string
+          account_type: string
+          created_at: string
+          created_by: string
+          id: string
+          internal_id: string | null
+          internal_table: string | null
+          internal_type: string
+          match_score: number | null
+          matched_rule: string
+          matrix_id: string
+          notes: string | null
+          ofx_transaction_id: string
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          account_type: string
+          created_at?: string
+          created_by: string
+          id?: string
+          internal_id?: string | null
+          internal_table?: string | null
+          internal_type: string
+          match_score?: number | null
+          matched_rule: string
+          matrix_id: string
+          notes?: string | null
+          ofx_transaction_id: string
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          account_type?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          internal_id?: string | null
+          internal_table?: string | null
+          internal_type?: string
+          match_score?: number | null
+          matched_rule?: string
+          matrix_id?: string
+          notes?: string | null
+          ofx_transaction_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bank_reconciliations_ofx_transaction_id_fkey"
+            columns: ["ofx_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "bank_ofx_transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brands: {
         Row: {
           authorized_group_users: string[] | null
