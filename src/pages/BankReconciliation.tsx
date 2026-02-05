@@ -35,7 +35,7 @@ import { format, subDays, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { parseOFX, calculateFileHash, getDateFromOFX, OFXTransaction } from "@/utils/ofxParser";
-import { findMatches, formatMatchRule, getScoreColor, InternalTransaction, MatchSuggestion } from "@/utils/reconciliationMatcher";
+import { findMatches, formatMatchRule, getScoreColor, InternalTransaction, MatchSuggestion, parseDatePreservingLocal } from "@/utils/reconciliationMatcher";
 
 interface Account {
   id: string;
@@ -125,7 +125,7 @@ const BankReconciliation = () => {
         const matches = findMatches(
           {
             id: ofxTx.id,
-            posted_at: new Date(ofxTx.posted_at),
+            posted_at: parseDatePreservingLocal(ofxTx.posted_at),
             amount: ofxTx.amount,
             name: ofxTx.name,
             memo: ofxTx.memo,
@@ -246,7 +246,7 @@ const BankReconciliation = () => {
 
         return {
           id: t.id,
-          date: new Date(t.transaction_date),
+          date: parseDatePreservingLocal(t.transaction_date),
           amount: t.amount,
           description: t.description,
           type,
@@ -268,7 +268,7 @@ const BankReconciliation = () => {
           const isSource = t.source_account_id === selectedAccount;
           internal.push({
             id: t.id,
-            date: new Date(t.transfer_date),
+            date: parseDatePreservingLocal(t.transfer_date),
             amount: isSource ? -t.amount : t.amount,
             description: t.description || 'Transferência',
             type: 'transfer',
@@ -291,7 +291,7 @@ const BankReconciliation = () => {
           const partner = (t.partners as any);
           internal.push({
             id: t.id,
-            date: new Date(t.payment_date),
+            date: parseDatePreservingLocal(t.payment_date),
             amount: t.transaction_type === 'aporte' ? t.amount : -t.amount,
             description: t.notes || (t.transaction_type === 'aporte' ? 'Aporte de Sócio' : 'Retirada de Sócio'),
             type: 'partner_transaction',
@@ -624,7 +624,7 @@ const BankReconciliation = () => {
         const matches = findMatches(
           {
             id: ofxTx.id,
-            posted_at: new Date(ofxTx.posted_at),
+            posted_at: parseDatePreservingLocal(ofxTx.posted_at),
             amount: ofxTx.amount,
             name: ofxTx.name,
             memo: ofxTx.memo,
