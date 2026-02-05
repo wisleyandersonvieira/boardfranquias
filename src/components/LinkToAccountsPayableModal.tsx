@@ -1053,7 +1053,7 @@ export function LinkToAccountsPayableModal({
                             <div
                               key={product.id}
                               className={cn(
-                                "flex items-center px-3 py-2 cursor-pointer hover:bg-accent hover:text-accent-foreground text-sm",
+                                "flex items-center px-3 py-1.5 cursor-pointer hover:bg-accent hover:text-accent-foreground text-xs",
                                 selectedProduct === product.id && "bg-accent"
                               )}
                               onMouseDown={(e) => {
