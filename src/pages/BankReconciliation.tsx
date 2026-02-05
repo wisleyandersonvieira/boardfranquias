@@ -1065,9 +1065,13 @@ const BankReconciliation = () => {
                               <p className="text-sm font-medium mt-1">
                                 {format(match.internalTransaction.date, "dd/MM/yyyy")} - {getTypeLabel(match.internalTransaction.type)}
                               </p>
+                              {match.internalTransaction.entityName && (
+                                <p className="text-sm font-semibold text-primary truncate">
+                                  {match.internalTransaction.entityName}
+                                </p>
+                              )}
                               <p className="text-xs text-muted-foreground truncate">
                                 {match.internalTransaction.description}
-                                {match.internalTransaction.entityName && ` - ${match.internalTransaction.entityName}`}
                               </p>
                               <p className="text-xs text-muted-foreground mt-1">
                                 {match.reasons.join(' • ')}
