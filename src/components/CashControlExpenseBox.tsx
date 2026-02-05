@@ -4,6 +4,8 @@ import type { Json } from "@/integrations/supabase/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -77,6 +79,9 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
   const [existingAttachments, setExistingAttachments] = useState<AttachmentInfo[]>([]);
   const [attachmentStatus, setAttachmentStatus] = useState<Record<string, boolean>>({});
   const [uploading, setUploading] = useState(false);
+  const [isPaid, setIsPaid] = useState(false);
+  const [paymentDate, setPaymentDate] = useState("");
+  const [notes, setNotes] = useState("");
 
   const handleOpenLinkModal = (expense: Expense) => {
     setExpenseToLink(expense);
@@ -139,6 +144,9 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
     setExistingAttachments([]);
     setAttachmentStatus({});
     setEditingExpense(null);
+    setIsPaid(false);
+    setPaymentDate("");
+    setNotes("");
   };
 
   const handleOpenForm = (expense?: Expense) => {
@@ -780,6 +788,46 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="0,00"
+              />
+            </div>
+
+            <div className="flex items-center justify-between py-2">
+              <Label htmlFor="isPaid" className="cursor-pointer">Despesa paga?</Label>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">{isPaid ? "Sim" : "Não"}</span>
+                <Switch
+                  id="isPaid"
+                  checked={isPaid}
+                  onCheckedChange={(checked) => {
+                    setIsPaid(checked);
+                    if (checked && !paymentDate && issueDate) {
+                      setPaymentDate(issueDate);
+                    }
+                  }}
+                />
+              </div>
+            </div>
+
+            {isPaid && (
+              <div>
+                <Label htmlFor="paymentDate">Data do Pagamento</Label>
+                <Input
+                  id="paymentDate"
+                  type="date"
+                  value={paymentDate}
+                  onChange={(e) => setPaymentDate(e.target.value)}
+                />
+              </div>
+            )}
+
+            <div>
+              <Label htmlFor="notes">Observações</Label>
+              <Textarea
+                id="notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Observações sobre a despesa..."
+                rows={3}
               />
             </div>
 
