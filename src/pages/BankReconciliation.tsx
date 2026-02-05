@@ -633,17 +633,18 @@ const BankReconciliation = () => {
           internalTransactions
         );
 
-        const exactMatch = matches.find(m => m.matchRule === 'auto_exact');
-        if (exactMatch) {
+        // Auto reconcile if score >= 70% (auto_exact or auto_fuzzy)
+        const autoMatch = matches.find(m => m.score >= 70);
+        if (autoMatch) {
           await supabase.from('bank_reconciliations').insert({
             account_id: selectedAccount,
             account_type: selectedAccountType,
             ofx_transaction_id: ofxTx.id,
-            internal_type: exactMatch.internalTransaction.type,
-            internal_id: exactMatch.internalTransaction.id,
-            internal_table: exactMatch.internalTransaction.table,
-            matched_rule: 'auto_exact',
-            match_score: exactMatch.score,
+            internal_type: autoMatch.internalTransaction.type,
+            internal_id: autoMatch.internalTransaction.id,
+            internal_table: autoMatch.internalTransaction.table,
+            matched_rule: autoMatch.matchRule,
+            match_score: autoMatch.score,
             notes: 'Conciliação automática',
             matrix_id: matrixId,
             created_by: user.id,
