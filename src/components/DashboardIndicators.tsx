@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -7,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Users, DollarSign, Target, TrendingUp, ChevronDown, Calendar } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
+import { useDebounce } from "@/hooks/useDebounce";
 
 interface Store {
   id: string;
@@ -30,314 +32,237 @@ const MONTHS = [
 ];
 
 const DashboardIndicators = () => {
-  const [stores, setStores] = useState<Store[]>([]);
   const [selectedStores, setSelectedStores] = useState<string[]>([]);
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [selectedMonths, setSelectedMonths] = useState<number[]>([new Date().getMonth() + 1]);
-  const [loading, setLoading] = useState(true);
   const [storeDropdownOpen, setStoreDropdownOpen] = useState(false);
-  
-  // Indicators data
-  const [activeEmployees, setActiveEmployees] = useState(0);
-  const [unregisteredEmployees, setUnregisteredEmployees] = useState(0);
-  const [totalRevenue, setTotalRevenue] = useState(0);
-  const [totalGoal, setTotalGoal] = useState(0);
-  const [yearlyRevenue, setYearlyRevenue] = useState(0);
-  const [yearlyGoal, setYearlyGoal] = useState(0);
-  const [monthlyRevenueData, setMonthlyRevenueData] = useState<any[]>([]);
-  const [monthlyGoals, setMonthlyGoals] = useState<{ [key: number]: number }>({});
-  const [daysSinceLastCash, setDaysSinceLastCash] = useState<number | null>(null);
-  const [daysSinceLastExpense, setDaysSinceLastExpense] = useState<number | null>(null);
 
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
-  useEffect(() => {
-    fetchStores();
-  }, []);
+  // Debounce filters to prevent excessive API calls
+  const debouncedStores = useDebounce(selectedStores, 400);
+  const debouncedMonths = useDebounce(selectedMonths, 400);
+  const debouncedYear = useDebounce(selectedYear, 400);
 
-  useEffect(() => {
-    if (stores.length > 0) {
-      fetchIndicators();
-    }
-  }, [selectedStores, selectedMonths, selectedYear, stores]);
+  // Query for stores (cached)
+  const { data: stores = [] } = useQuery({
+    queryKey: ['dashboard-stores'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
 
-  const fetchStores = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+      // Get user's profile store and user_stores in parallel
+      const [profileResult, userStoresResult] = await Promise.all([
+        supabase.from("profiles").select("store_id").eq("id", user.id).single(),
+        supabase.from("user_stores").select("store_id").eq("user_id", user.id)
+      ]);
 
-    // Get user's profile store
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("store_id")
-      .eq("id", user.id)
-      .single();
+      const authorizedStoreIds = new Set<string>();
+      if (profileResult.data?.store_id) authorizedStoreIds.add(profileResult.data.store_id);
+      userStoresResult.data?.forEach(us => authorizedStoreIds.add(us.store_id));
 
-    // Get stores from user_stores junction table
-    const { data: userStores } = await supabase
-      .from("user_stores")
-      .select("store_id")
-      .eq("user_id", user.id);
+      if (authorizedStoreIds.size === 0) return [];
 
-    // Combine all authorized store IDs
-    const authorizedStoreIds = new Set<string>();
-    if (profile?.store_id) authorizedStoreIds.add(profile.store_id);
-    userStores?.forEach(us => authorizedStoreIds.add(us.store_id));
+      const { data } = await supabase
+        .from("stores")
+        .select("id, name, code")
+        .in("id", Array.from(authorizedStoreIds))
+        .order("name");
+      
+      return data || [];
+    },
+    staleTime: 10 * 60 * 1000, // 10 minutes cache
+  });
 
-    if (authorizedStoreIds.size === 0) {
-      setStores([]);
-      return;
-    }
+  // Derived store IDs to filter
+  const storeIdsToFilter = useMemo(() => {
+    return debouncedStores.length > 0 ? debouncedStores : stores.map(s => s.id);
+  }, [debouncedStores, stores]);
 
-    const { data } = await supabase
-      .from("stores")
-      .select("id, name, code")
-      .in("id", Array.from(authorizedStoreIds))
-      .order("name");
-    
-    if (data) setStores(data);
-  };
+  // Query for employees count (cached)
+  const { data: employeesData, isLoading: employeesLoading } = useQuery({
+    queryKey: ['dashboard-employees', storeIdsToFilter],
+    queryFn: async () => {
+      if (storeIdsToFilter.length === 0) return { active: 0, unregistered: 0 };
 
-  const fetchIndicators = async () => {
-    setLoading(true);
-    await Promise.all([
-      fetchActiveEmployees(),
-      fetchRevenue(),
-      fetchGoals(),
-      fetchMonthlyRevenue(),
-      fetchLastRegistrations(),
-    ]);
-    setLoading(false);
-  };
+      const [activeResult, unregisteredResult] = await Promise.all([
+        supabase
+          .from("employees")
+          .select("id", { count: "exact" })
+          .eq("is_active", true)
+          .is("dismissal_date", null)
+          .in("store_id", storeIdsToFilter),
+        supabase
+          .from("employees")
+          .select("id", { count: "exact" })
+          .eq("is_active", true)
+          .eq("is_registered", false)
+          .is("dismissal_date", null)
+          .in("store_id", storeIdsToFilter)
+      ]);
 
-  const fetchLastRegistrations = async () => {
-    const today = new Date();
-    
-    // Use selected stores or all user's authorized stores
-    const storeIdsToFilter = selectedStores.length > 0 ? selectedStores : stores.map(s => s.id);
-    
-    if (storeIdsToFilter.length === 0) {
-      setDaysSinceLastCash(null);
-      setDaysSinceLastExpense(null);
-      return;
-    }
+      return {
+        active: activeResult.count || 0,
+        unregistered: unregisteredResult.count || 0
+      };
+    },
+    enabled: storeIdsToFilter.length > 0,
+    staleTime: 5 * 60 * 1000, // 5 minutes cache
+  });
 
-    // Fetch last cash control date
-    const { data: cashData } = await supabase
-      .from("cash_control")
-      .select("date")
-      .in("store_id", storeIdsToFilter)
-      .order("date", { ascending: false })
-      .limit(1);
-    
-    if (cashData && cashData.length > 0) {
-      const lastCashDate = new Date(cashData[0].date);
-      const diffTime = today.getTime() - lastCashDate.getTime();
-      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-      setDaysSinceLastCash(diffDays);
-    } else {
-      setDaysSinceLastCash(null);
-    }
+  // Query for revenue data (both years) - cached
+  const { data: revenueData, isLoading: revenueLoading } = useQuery({
+    queryKey: ['dashboard-revenue', storeIdsToFilter, debouncedYear],
+    queryFn: async () => {
+      if (storeIdsToFilter.length === 0) return { currentYear: [], previousYear: [] };
 
-    // Fetch last expense date
-    const { data: expenseData } = await supabase
-      .from("cash_control_expenses")
-      .select("issue_date")
-      .in("store_id", storeIdsToFilter)
-      .order("issue_date", { ascending: false })
-      .limit(1);
-    
-    if (expenseData && expenseData.length > 0) {
-      const lastExpenseDate = new Date(expenseData[0].issue_date);
-      const diffTime = today.getTime() - lastExpenseDate.getTime();
-      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-      setDaysSinceLastExpense(diffDays);
-    } else {
-      setDaysSinceLastExpense(null);
-    }
-  };
+      const previousYear = debouncedYear - 1;
 
-  const fetchActiveEmployees = async () => {
-    // Use selected stores or all user's authorized stores
-    const storeIdsToFilter = selectedStores.length > 0 ? selectedStores : stores.map(s => s.id);
-    
-    if (storeIdsToFilter.length === 0) {
-      setActiveEmployees(0);
-      setUnregisteredEmployees(0);
-      return;
-    }
+      const [currentYearResult, previousYearResult] = await Promise.all([
+        supabase
+          .from("cash_control")
+          .select("date, faturamento_total")
+          .gte("date", `${debouncedYear}-01-01`)
+          .lte("date", `${debouncedYear}-12-31`)
+          .in("store_id", storeIdsToFilter),
+        supabase
+          .from("cash_control")
+          .select("date, faturamento_total")
+          .gte("date", `${previousYear}-01-01`)
+          .lte("date", `${previousYear}-12-31`)
+          .in("store_id", storeIdsToFilter)
+      ]);
 
-    // Fetch active employees count
-    const { count: activeCount } = await supabase
-      .from("employees")
-      .select("id", { count: "exact" })
-      .eq("is_active", true)
-      .is("dismissal_date", null)
-      .in("store_id", storeIdsToFilter);
+      return {
+        currentYear: currentYearResult.data || [],
+        previousYear: previousYearResult.data || []
+      };
+    },
+    enabled: storeIdsToFilter.length > 0,
+    staleTime: 5 * 60 * 1000, // 5 minutes cache
+  });
 
-    setActiveEmployees(activeCount || 0);
+  // Query for goals - UNIFIED (single query instead of two)
+  const { data: goalsData, isLoading: goalsLoading } = useQuery({
+    queryKey: ['dashboard-goals', storeIdsToFilter, debouncedYear],
+    queryFn: async () => {
+      if (storeIdsToFilter.length === 0) return [];
 
-    // Fetch unregistered employees count (active but not registered)
-    const { count: unregisteredCount } = await supabase
-      .from("employees")
-      .select("id", { count: "exact" })
-      .eq("is_active", true)
-      .eq("is_registered", false)
-      .is("dismissal_date", null)
-      .in("store_id", storeIdsToFilter);
+      const { data } = await supabase
+        .from("store_goals")
+        .select("goal_value, month")
+        .eq("year", debouncedYear)
+        .in("store_id", storeIdsToFilter);
 
-    setUnregisteredEmployees(unregisteredCount || 0);
-  };
+      return data || [];
+    },
+    enabled: storeIdsToFilter.length > 0,
+    staleTime: 5 * 60 * 1000, // 5 minutes cache
+  });
 
-  const fetchRevenue = async () => {
-    // Use selected stores or all user's authorized stores
-    const storeIdsToFilter = selectedStores.length > 0 ? selectedStores : stores.map(s => s.id);
-    
-    if (storeIdsToFilter.length === 0) {
-      setTotalRevenue(0);
-      setYearlyRevenue(0);
-      return;
-    }
+  // Query for last registrations
+  const { data: lastRegistrations, isLoading: lastRegLoading } = useQuery({
+    queryKey: ['dashboard-last-registrations', storeIdsToFilter],
+    queryFn: async () => {
+      if (storeIdsToFilter.length === 0) return { daysSinceLastCash: null, daysSinceLastExpense: null };
 
-    // Fetch all yearly data in a single query (instead of one query per month)
-    const { data: yearlyData } = await supabase
-      .from("cash_control")
-      .select("date, faturamento_total")
-      .gte("date", `${selectedYear}-01-01`)
-      .lte("date", `${selectedYear}-12-31`)
-      .in("store_id", storeIdsToFilter);
+      const today = new Date();
 
-    // Calculate total for selected months in-memory
-    let total = 0;
-    let yearlyTotal = 0;
-    
-    yearlyData?.forEach((item) => {
+      const [cashResult, expenseResult] = await Promise.all([
+        supabase
+          .from("cash_control")
+          .select("date")
+          .in("store_id", storeIdsToFilter)
+          .order("date", { ascending: false })
+          .limit(1),
+        supabase
+          .from("cash_control_expenses")
+          .select("issue_date")
+          .in("store_id", storeIdsToFilter)
+          .order("issue_date", { ascending: false })
+          .limit(1)
+      ]);
+
+      let daysSinceLastCash: number | null = null;
+      let daysSinceLastExpense: number | null = null;
+
+      if (cashResult.data && cashResult.data.length > 0) {
+        const lastCashDate = new Date(cashResult.data[0].date);
+        const diffTime = today.getTime() - lastCashDate.getTime();
+        daysSinceLastCash = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      }
+
+      if (expenseResult.data && expenseResult.data.length > 0) {
+        const lastExpenseDate = new Date(expenseResult.data[0].issue_date);
+        const diffTime = today.getTime() - lastExpenseDate.getTime();
+        daysSinceLastExpense = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      }
+
+      return { daysSinceLastCash, daysSinceLastExpense };
+    },
+    enabled: storeIdsToFilter.length > 0,
+    staleTime: 5 * 60 * 1000, // 5 minutes cache
+  });
+
+  // Computed values from cached data
+  const computedValues = useMemo(() => {
+    // Revenue aggregation from cached data
+    let totalRevenue = 0;
+    let yearlyRevenue = 0;
+    const currentYearMonthly: { [key: number]: number } = {};
+    const previousYearMonthly: { [key: number]: number } = {};
+
+    revenueData?.currentYear?.forEach((item) => {
       const month = parseInt(item.date.split('-')[1], 10);
       const value = item.faturamento_total || 0;
-      yearlyTotal += value;
+      yearlyRevenue += value;
+      currentYearMonthly[month] = (currentYearMonthly[month] || 0) + value;
       
-      if (selectedMonths.includes(month)) {
-        total += value;
+      if (debouncedMonths.includes(month)) {
+        totalRevenue += value;
       }
     });
-    
-    setTotalRevenue(total);
-    setYearlyRevenue(yearlyTotal);
-  };
 
-  const fetchGoals = async () => {
-    // Use selected stores or all user's authorized stores
-    const storeIdsToFilter = selectedStores.length > 0 ? selectedStores : stores.map(s => s.id);
-    
-    // If no stores available, return zeros
-    if (storeIdsToFilter.length === 0) {
-      setTotalGoal(0);
-      setYearlyGoal(0);
-      return;
-    }
-
-    const { data } = await supabase
-      .from("store_goals")
-      .select("goal_value")
-      .eq("year", selectedYear)
-      .in("month", selectedMonths)
-      .in("store_id", storeIdsToFilter);
-
-    const total = data?.reduce((sum, item) => sum + Number(item.goal_value), 0) || 0;
-    setTotalGoal(total);
-
-    // Fetch yearly goal
-    const { data: yearlyGoalData } = await supabase
-      .from("store_goals")
-      .select("goal_value, month")
-      .eq("year", selectedYear)
-      .in("store_id", storeIdsToFilter);
-
-    const yearlyGoalTotal = yearlyGoalData?.reduce((sum, item) => sum + Number(item.goal_value), 0) || 0;
-    setYearlyGoal(yearlyGoalTotal);
-
-    // Aggregate monthly goals
-    const goalsByMonth: { [key: number]: number } = {};
-    yearlyGoalData?.forEach((item) => {
-      goalsByMonth[item.month] = (goalsByMonth[item.month] || 0) + Number(item.goal_value);
-    });
-    setMonthlyGoals(goalsByMonth);
-  };
-
-  useEffect(() => {
-    // Update chart data when monthlyGoals changes
-    if (monthlyRevenueData.length > 0) {
-      const updatedData = monthlyRevenueData.map((item) => ({
-        ...item,
-        meta: monthlyGoals[item.month] || 0,
-      }));
-      setMonthlyRevenueData(updatedData);
-    }
-  }, [monthlyGoals]);
-
-  const fetchMonthlyRevenue = async () => {
-    const previousYear = selectedYear - 1;
-    
-    // Use selected stores or all user's authorized stores
-    const storeIdsToFilter = selectedStores.length > 0 ? selectedStores : stores.map(s => s.id);
-    
-    if (storeIdsToFilter.length === 0) {
-      setMonthlyRevenueData(MONTHS.map((m) => ({
-        name: m.label.substring(0, 3),
-        month: m.value,
-        [selectedYear]: 0,
-        [previousYear]: 0,
-      })));
-      return;
-    }
-
-    // Fetch current year data
-    const queryCurrentYear = supabase
-      .from("cash_control")
-      .select("date, faturamento_total, store_id")
-      .gte("date", `${selectedYear}-01-01`)
-      .lte("date", `${selectedYear}-12-31`)
-      .in("store_id", storeIdsToFilter);
-
-    // Fetch previous year data
-    const queryPreviousYear = supabase
-      .from("cash_control")
-      .select("date, faturamento_total, store_id")
-      .gte("date", `${previousYear}-01-01`)
-      .lte("date", `${previousYear}-12-31`)
-      .in("store_id", storeIdsToFilter);
-
-    const [{ data: currentYearData }, { data: previousYearData }] = await Promise.all([
-      queryCurrentYear,
-      queryPreviousYear,
-    ]);
-
-    // Aggregate by month for current year
-    // Use string parsing to avoid timezone issues with Date constructor
-    const currentYearMonthly: { [key: number]: number } = {};
-    currentYearData?.forEach((item) => {
-      const month = parseInt(item.date.split('-')[1], 10);
-      currentYearMonthly[month] = (currentYearMonthly[month] || 0) + (item.faturamento_total || 0);
-    });
-
-    // Aggregate by month for previous year
-    const previousYearMonthly: { [key: number]: number } = {};
-    previousYearData?.forEach((item) => {
+    revenueData?.previousYear?.forEach((item) => {
       const month = parseInt(item.date.split('-')[1], 10);
       previousYearMonthly[month] = (previousYearMonthly[month] || 0) + (item.faturamento_total || 0);
     });
 
-    // Transform to chart data with both years and goals
-    const chartData = MONTHS.map((m) => ({
+    // Goals aggregation from cached data (unified query)
+    let totalGoal = 0;
+    let yearlyGoal = 0;
+    const monthlyGoals: { [key: number]: number } = {};
+
+    goalsData?.forEach((item) => {
+      const value = Number(item.goal_value);
+      yearlyGoal += value;
+      monthlyGoals[item.month] = (monthlyGoals[item.month] || 0) + value;
+      
+      if (debouncedMonths.includes(item.month)) {
+        totalGoal += value;
+      }
+    });
+
+    // Build chart data
+    const monthlyRevenueData = MONTHS.map((m) => ({
       name: m.label.substring(0, 3),
       month: m.value,
-      [selectedYear]: currentYearMonthly[m.value] || 0,
-      [previousYear]: previousYearMonthly[m.value] || 0,
+      [debouncedYear]: currentYearMonthly[m.value] || 0,
+      [debouncedYear - 1]: previousYearMonthly[m.value] || 0,
       meta: monthlyGoals[m.value] || 0,
     }));
 
-    setMonthlyRevenueData(chartData);
-  };
+    return {
+      totalRevenue,
+      yearlyRevenue,
+      totalGoal,
+      yearlyGoal,
+      monthlyRevenueData
+    };
+  }, [revenueData, goalsData, debouncedMonths, debouncedYear]);
+
+  const loading = employeesLoading || revenueLoading || goalsLoading || lastRegLoading;
 
   const handleMonthToggle = (monthValue: string) => {
     const month = parseInt(monthValue);
@@ -383,14 +308,15 @@ const DashboardIndicators = () => {
   };
 
   // Goal achievement pie chart data
+  const { totalRevenue, totalGoal, yearlyRevenue, yearlyGoal, monthlyRevenueData } = computedValues;
   const goalPercentage = totalGoal > 0 ? (totalRevenue / totalGoal) * 100 : 0;
-  const displayPercentage = Math.min(goalPercentage, 100); // For pie chart visual (max 100% fill)
+  const displayPercentage = Math.min(goalPercentage, 100);
   const pieData = [
     { name: "Atingido", value: displayPercentage },
     { name: "Restante", value: Math.max(100 - displayPercentage, 0) },
   ];
   const COLORS = goalPercentage >= 100 
-    ? ["hsl(142, 76%, 36%)", "hsl(var(--muted))"] // Green when goal exceeded
+    ? ["hsl(142, 76%, 36%)", "hsl(var(--muted))"]
     : ["hsl(var(--primary))", "hsl(var(--muted))"];
 
   return (
@@ -483,10 +409,10 @@ const DashboardIndicators = () => {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{loading ? "..." : activeEmployees}</div>
-            {!loading && unregisteredEmployees > 0 && (
+            <div className="text-2xl font-bold">{loading ? "..." : employeesData?.active || 0}</div>
+            {!loading && (employeesData?.unregistered || 0) > 0 && (
               <p className="text-xs text-muted-foreground mt-1">
-                {unregisteredEmployees} sem registro
+                {employeesData?.unregistered} sem registro
               </p>
             )}
           </CardContent>
@@ -601,8 +527,8 @@ const DashboardIndicators = () => {
           <CardContent>
             <div>
               <p className="text-xs text-muted-foreground">Fechamento de Caixa</p>
-              <div className={`text-lg font-bold ${daysSinceLastCash !== null && daysSinceLastCash > 3 ? "text-amber-600" : ""}`}>
-                {loading ? "..." : daysSinceLastCash !== null ? `${daysSinceLastCash} dia${daysSinceLastCash !== 1 ? 's' : ''}` : "Sem registros"}
+              <div className={`text-lg font-bold ${lastRegistrations?.daysSinceLastCash !== null && lastRegistrations.daysSinceLastCash > 3 ? "text-amber-600" : ""}`}>
+                {loading ? "..." : lastRegistrations?.daysSinceLastCash !== null ? `${lastRegistrations.daysSinceLastCash} dia${lastRegistrations.daysSinceLastCash !== 1 ? 's' : ''}` : "Sem registros"}
               </div>
             </div>
           </CardContent>
