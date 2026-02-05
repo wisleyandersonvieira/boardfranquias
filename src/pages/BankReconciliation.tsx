@@ -86,14 +86,17 @@ const BankReconciliation = () => {
 
   // OFX Data
   const [ofxTransactions, setOfxTransactions] = useState<OFXTransactionRow[]>([]);
-  const [selectedOfxId, setSelectedOfxId] = useState<string | null>(null);
+  const [selectedOfxIds, setSelectedOfxIds] = useState<string[]>([]);
   const [ofxFilter, setOfxFilter] = useState<'all' | 'pending' | 'reconciled'>('pending');
   const [ofxSearch, setOfxSearch] = useState("");
 
   // Internal Transactions
   const [internalTransactions, setInternalTransactions] = useState<InternalTransaction[]>([]);
   const [internalSearch, setInternalSearch] = useState("");
+  const [internalFilter, setInternalFilter] = useState<'all' | 'pending' | 'reconciled'>('pending');
   const [matchSuggestions, setMatchSuggestions] = useState<MatchSuggestion[]>([]);
+  const [reconciledInternalIds, setReconciledInternalIds] = useState<Set<string>>(new Set());
+  const [selectedInternalIds, setSelectedInternalIds] = useState<string[]>([]);
 
   // Sorting
   const [ofxSortBy, setOfxSortBy] = useState<'date' | 'amount'>('date');
@@ -121,22 +124,44 @@ const BankReconciliation = () => {
     if (selectedAccount && startDate && endDate) {
       loadOfxTransactions();
       loadInternalTransactions();
+      loadReconciledInternalIds();
     }
   }, [selectedAccount, startDate, endDate]);
 
-  // Find matches when an OFX transaction is selected
+  // Find matches when OFX transactions are selected
   useEffect(() => {
-    if (selectedOfxId && internalTransactions.length > 0) {
-      const ofxTx = ofxTransactions.find(t => t.id === selectedOfxId);
-      if (ofxTx) {
+    if (selectedOfxIds.length > 0 && internalTransactions.length > 0) {
+      // If single selection, find matches as before
+      if (selectedOfxIds.length === 1) {
+        const ofxTx = ofxTransactions.find(t => t.id === selectedOfxIds[0]);
+        if (ofxTx) {
+          const matches = findMatches(
+            {
+              id: ofxTx.id,
+              posted_at: parseDatePreservingLocal(ofxTx.posted_at),
+              amount: ofxTx.amount,
+              name: ofxTx.name,
+              memo: ofxTx.memo,
+              trntype: ofxTx.trntype,
+            },
+            internalTransactions
+          );
+          setMatchSuggestions(matches);
+        }
+      } else {
+        // Multiple selection - find matches based on sum
+        const selectedTxs = ofxTransactions.filter(t => selectedOfxIds.includes(t.id));
+        const totalAmount = selectedTxs.reduce((sum, t) => sum + t.amount, 0);
+        const avgDate = new Date(selectedTxs.reduce((sum, t) => sum + new Date(t.posted_at).getTime(), 0) / selectedTxs.length);
+        
         const matches = findMatches(
           {
-            id: ofxTx.id,
-            posted_at: parseDatePreservingLocal(ofxTx.posted_at),
-            amount: ofxTx.amount,
-            name: ofxTx.name,
-            memo: ofxTx.memo,
-            trntype: ofxTx.trntype,
+            id: 'multi',
+            posted_at: avgDate,
+            amount: totalAmount,
+            name: `${selectedTxs.length} transações selecionadas`,
+            memo: null,
+            trntype: totalAmount < 0 ? 'DEBIT' : 'CREDIT',
           },
           internalTransactions
         );
@@ -145,7 +170,7 @@ const BankReconciliation = () => {
     } else {
       setMatchSuggestions([]);
     }
-  }, [selectedOfxId, internalTransactions, ofxTransactions]);
+  }, [selectedOfxIds, internalTransactions, ofxTransactions]);
 
   const fetchAccounts = async () => {
     try {
@@ -314,6 +339,24 @@ const BankReconciliation = () => {
     }
   };
 
+  const loadReconciledInternalIds = async () => {
+    if (!selectedAccount || !selectedAccountType) return;
+
+    try {
+      const { data } = await supabase
+        .from('bank_reconciliations')
+        .select('internal_id')
+        .eq('account_id', selectedAccount)
+        .eq('account_type', selectedAccountType)
+        .not('internal_id', 'is', null);
+
+      const ids = new Set((data || []).map(r => r.internal_id).filter(Boolean) as string[]);
+      setReconciledInternalIds(ids);
+    } catch (error) {
+      console.error('Error loading reconciled internal ids:', error);
+    }
+  };
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -476,7 +519,7 @@ const BankReconciliation = () => {
   };
 
   const handleReconcile = async (internalTx: InternalTransaction, matchRule: string, score: number) => {
-    if (!selectedOfxId || reconciling) return;
+    if (selectedOfxIds.length === 0 || reconciling) return;
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user || !matrixId) return;
@@ -484,46 +527,51 @@ const BankReconciliation = () => {
     setReconciling(true);
 
     try {
-      // Create reconciliation record
-      const { error: reconcError } = await supabase
-        .from('bank_reconciliations')
-        .insert({
-          account_id: selectedAccount,
-          account_type: selectedAccountType,
-          ofx_transaction_id: selectedOfxId,
-          internal_type: internalTx.type,
-          internal_id: internalTx.id,
-          internal_table: internalTx.table,
-          matched_rule: matchRule,
-          match_score: score,
-          notes: reconciliationNote || null,
-          matrix_id: matrixId,
-          created_by: user.id,
-        });
+      // For each selected OFX transaction, create a reconciliation record
+      for (const ofxId of selectedOfxIds) {
+        const { error: reconcError } = await supabase
+          .from('bank_reconciliations')
+          .insert({
+            account_id: selectedAccount,
+            account_type: selectedAccountType,
+            ofx_transaction_id: ofxId,
+            internal_type: internalTx.type,
+            internal_id: internalTx.id,
+            internal_table: internalTx.table,
+            matched_rule: matchRule,
+            match_score: score,
+            notes: reconciliationNote || null,
+            matrix_id: matrixId,
+            created_by: user.id,
+          });
 
-      if (reconcError) throw reconcError;
+        if (reconcError) throw reconcError;
 
-      // Mark OFX transaction as reconciled
-      const { error: updateError } = await supabase
-        .from('bank_ofx_transactions')
-        .update({
-          is_reconciled: true,
-          reconciled_at: new Date().toISOString(),
-          reconciled_by: user.id,
-        })
-        .eq('id', selectedOfxId);
+        // Mark OFX transaction as reconciled
+        const { error: updateError } = await supabase
+          .from('bank_ofx_transactions')
+          .update({
+            is_reconciled: true,
+            reconciled_at: new Date().toISOString(),
+            reconciled_by: user.id,
+          })
+          .eq('id', ofxId);
 
-      if (updateError) throw updateError;
+        if (updateError) throw updateError;
+      }
 
-      toast({ title: "Conciliado!", description: "Transação conciliada com sucesso" });
+      toast({ title: "Conciliado!", description: `${selectedOfxIds.length} transação(ões) conciliada(s) com sucesso` });
 
       // Move to next pending
-      const nextPending = ofxTransactions.find(t => !t.is_reconciled && t.id !== selectedOfxId);
-      setSelectedOfxId(nextPending?.id || null);
+      const reconciledIds = new Set(selectedOfxIds);
+      const nextPending = ofxTransactions.find(t => !t.is_reconciled && !reconciledIds.has(t.id));
+      setSelectedOfxIds(nextPending ? [nextPending.id] : []);
+      setSelectedInternalIds([]);
       setReconciliationNote("");
       
       // Reload transactions
       await loadOfxTransactions();
+      await loadReconciledInternalIds();
 
     } catch (error: any) {
       console.error('Error reconciling:', error);
@@ -558,6 +606,7 @@ const BankReconciliation = () => {
       toast({ title: "Desconciliado", description: "Conciliação desfeita" });
       
       await loadOfxTransactions();
+      await loadReconciledInternalIds();
 
     } catch (error: any) {
       console.error('Error undoing reconciliation:', error);
@@ -568,7 +617,7 @@ const BankReconciliation = () => {
   };
 
   const handleMarkNotIdentified = async () => {
-    if (!selectedOfxId || reconciling) return;
+    if (selectedOfxIds.length === 0 || reconciling) return;
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user || !matrixId) return;
@@ -576,36 +625,40 @@ const BankReconciliation = () => {
     setReconciling(true);
 
     try {
-      await supabase
-        .from('bank_reconciliations')
-        .insert({
-          account_id: selectedAccount,
-          account_type: selectedAccountType,
-          ofx_transaction_id: selectedOfxId,
-          internal_type: 'other',
-          matched_rule: 'not_identified',
-          match_score: 0,
-          notes: reconciliationNote || 'Não identificado',
-          matrix_id: matrixId,
-          created_by: user.id,
-        });
+      for (const ofxId of selectedOfxIds) {
+        await supabase
+          .from('bank_reconciliations')
+          .insert({
+            account_id: selectedAccount,
+            account_type: selectedAccountType,
+            ofx_transaction_id: ofxId,
+            internal_type: 'other',
+            matched_rule: 'not_identified',
+            match_score: 0,
+            notes: reconciliationNote || 'Não identificado',
+            matrix_id: matrixId,
+            created_by: user.id,
+          });
 
-      await supabase
-        .from('bank_ofx_transactions')
-        .update({
-          is_reconciled: true,
-          reconciled_at: new Date().toISOString(),
-          reconciled_by: user.id,
-        })
-        .eq('id', selectedOfxId);
+        await supabase
+          .from('bank_ofx_transactions')
+          .update({
+            is_reconciled: true,
+            reconciled_at: new Date().toISOString(),
+            reconciled_by: user.id,
+          })
+          .eq('id', ofxId);
+      }
 
-      toast({ title: "Marcado", description: "Transação marcada como não identificada" });
+      toast({ title: "Marcado", description: `${selectedOfxIds.length} transação(ões) marcada(s) como não identificada(s)` });
 
-      const nextPending = ofxTransactions.find(t => !t.is_reconciled && t.id !== selectedOfxId);
-      setSelectedOfxId(nextPending?.id || null);
+      const reconciledIds = new Set(selectedOfxIds);
+      const nextPending = ofxTransactions.find(t => !t.is_reconciled && !reconciledIds.has(t.id));
+      setSelectedOfxIds(nextPending ? [nextPending.id] : []);
       setReconciliationNote("");
       
       await loadOfxTransactions();
+      await loadReconciledInternalIds();
 
     } catch (error: any) {
       console.error('Error marking as not identified:', error);
@@ -668,6 +721,7 @@ const BankReconciliation = () => {
       }
 
       await loadOfxTransactions();
+      await loadReconciledInternalIds();
 
       toast({
         title: "Conciliação automática concluída",
@@ -739,10 +793,17 @@ const BankReconciliation = () => {
     return sorted;
   }, [internalTransactions, internalSearch, internalSortBy]);
 
-  const selectedOfxTransaction = useMemo(() => 
-    ofxTransactions.find(t => t.id === selectedOfxId),
-    [ofxTransactions, selectedOfxId]
+  const selectedOfxTransactions = useMemo(() => 
+    ofxTransactions.filter(t => selectedOfxIds.includes(t.id)),
+    [ofxTransactions, selectedOfxIds]
   );
+
+  const selectedOfxTransaction = selectedOfxTransactions.length === 1 ? selectedOfxTransactions[0] : null;
+  const hasMultipleOfxSelected = selectedOfxTransactions.length > 1;
+  const anyOfxSelected = selectedOfxTransactions.length > 0;
+  const allSelectedReconciled = selectedOfxTransactions.length > 0 && selectedOfxTransactions.every(t => t.is_reconciled);
+  const anySelectedNotReconciled = selectedOfxTransactions.some(t => !t.is_reconciled);
+  const selectedOfxTotalAmount = selectedOfxTransactions.reduce((sum, t) => sum + t.amount, 0);
 
   const getAccountTypeLabel = (type: string) => {
     const labels: Record<string, string> = {
@@ -1016,10 +1077,23 @@ const BankReconciliation = () => {
                     filteredOfxTransactions.map((tx) => (
                       <div
                         key={tx.id}
-                        onClick={() => setSelectedOfxId(tx.id)}
+                        onClick={(e) => {
+                          if (e.ctrlKey || e.metaKey) {
+                            // Multi-select with Ctrl/Cmd
+                            setSelectedOfxIds(prev => 
+                              prev.includes(tx.id) 
+                                ? prev.filter(id => id !== tx.id)
+                                : [...prev, tx.id]
+                            );
+                          } else {
+                            // Single select
+                            setSelectedOfxIds([tx.id]);
+                          }
+                          setSelectedInternalIds([]);
+                        }}
                         className={cn(
                           "p-3 rounded-lg border cursor-pointer transition-colors",
-                          selectedOfxId === tx.id ? "border-primary bg-primary/5" : "hover:bg-muted/50",
+                          selectedOfxIds.includes(tx.id) ? "border-primary bg-primary/5" : "hover:bg-muted/50",
                           tx.is_reconciled && "opacity-60"
                         )}
                       >
@@ -1060,9 +1134,52 @@ const BankReconciliation = () => {
           {/* Right Panel - Internal Transactions & Matching */}
           <Card className="h-[600px] flex flex-col">
             <CardHeader className="pb-2">
-              <CardTitle className="text-lg">
-                {selectedOfxTransaction ? "Sugestões de Match" : "Lançamentos do Sistema"}
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">
+                  {anyOfxSelected ? "Sugestões de Match" : "Lançamentos do Sistema"}
+                </CardTitle>
+                <div className="flex gap-2">
+                  <Button
+                    variant={internalFilter === 'pending' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setInternalFilter('pending')}
+                  >
+                    Pendentes
+                  </Button>
+                  <Button
+                    variant={internalFilter === 'reconciled' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setInternalFilter('reconciled')}
+                  >
+                    Conciliados
+                  </Button>
+                  <Button
+                    variant={internalFilter === 'all' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setInternalFilter('all')}
+                  >
+                    Todos
+                  </Button>
+                </div>
+              </div>
+              {/* Show selected OFX info */}
+              {hasMultipleOfxSelected && (
+                <div className="mt-2 p-3 bg-muted rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">
+                        {selectedOfxTransactions.length} transações selecionadas
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Use Ctrl+Clique para selecionar múltiplas transações
+                      </p>
+                    </div>
+                    <p className={cn("font-bold", selectedOfxTotalAmount < 0 ? "text-red-600" : "text-green-600")}>
+                      {formatCurrency(selectedOfxTotalAmount)}
+                    </p>
+                  </div>
+                </div>
+              )}
               {selectedOfxTransaction && (
                 <div className="mt-2 p-3 bg-muted rounded-lg">
                   <div className="flex items-center justify-between">
@@ -1114,61 +1231,78 @@ const BankReconciliation = () => {
               <ScrollArea className="h-full">
                 <div className="p-4 space-y-2">
                   {/* Match Suggestions */}
-                  {selectedOfxTransaction && matchSuggestions.length > 0 && (
+                  {anyOfxSelected && matchSuggestions.length > 0 && (
                     <div className="mb-4">
                       <p className="text-sm font-medium text-muted-foreground mb-2">Sugestões de Match</p>
-                      {matchSuggestions.map((match) => (
-                        <div
-                          key={match.internalTransaction.id}
-                          className="p-3 rounded-lg border bg-card mb-2"
-                        >
-                          <div className="flex items-start justify-between mb-2">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <Badge className={cn("text-xs", getScoreColor(match.score))}>
-                                  Score: {match.score}%
-                                </Badge>
-                                <Badge variant="outline" className="text-xs">
-                                  {formatMatchRule(match.matchRule)}
-                                </Badge>
+                      {matchSuggestions
+                        .filter(match => {
+                          if (internalFilter === 'pending') return !reconciledInternalIds.has(match.internalTransaction.id);
+                          if (internalFilter === 'reconciled') return reconciledInternalIds.has(match.internalTransaction.id);
+                          return true;
+                        })
+                        .map((match) => {
+                          const isReconciled = reconciledInternalIds.has(match.internalTransaction.id);
+                          return (
+                            <div
+                              key={match.internalTransaction.id}
+                              className={cn("p-3 rounded-lg border bg-card mb-2", isReconciled && "opacity-60")}
+                            >
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <Badge className={cn("text-xs", getScoreColor(match.score))}>
+                                      Score: {match.score}%
+                                    </Badge>
+                                    <Badge variant="outline" className="text-xs">
+                                      {formatMatchRule(match.matchRule)}
+                                    </Badge>
+                                    {isReconciled && (
+                                      <Badge variant="outline" className="text-xs bg-green-50 text-green-700">
+                                        <Check className="h-3 w-3 mr-1" />
+                                        Conciliado
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <p className="text-sm font-medium mt-1">
+                                    {format(match.internalTransaction.date, "dd/MM/yyyy")} - {getTypeLabel(match.internalTransaction.type)}
+                                  </p>
+                                  {match.internalTransaction.entityName && (
+                                    <p className="text-sm font-semibold text-primary truncate">
+                                      {match.internalTransaction.entityName}
+                                    </p>
+                                  )}
+                                  <p className="text-xs text-muted-foreground truncate">
+                                    {match.internalTransaction.description}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    {match.reasons.join(' • ')}
+                                  </p>
+                                </div>
+                                <div className="text-right ml-4">
+                                  <p className={cn("font-semibold", match.internalTransaction.amount < 0 ? "text-red-600" : "text-green-600")}>
+                                    {formatCurrency(match.internalTransaction.amount)}
+                                  </p>
+                                  {!isReconciled && (
+                                    <Button
+                                      size="sm"
+                                      className="mt-2"
+                                      onClick={() => handleReconcile(match.internalTransaction, match.matchRule, match.score)}
+                                      disabled={reconciling}
+                                    >
+                                      {reconciling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4 mr-1" />}
+                                      Conciliar
+                                    </Button>
+                                  )}
+                                </div>
                               </div>
-                              <p className="text-sm font-medium mt-1">
-                                {format(match.internalTransaction.date, "dd/MM/yyyy")} - {getTypeLabel(match.internalTransaction.type)}
-                              </p>
-                              {match.internalTransaction.entityName && (
-                                <p className="text-sm font-semibold text-primary truncate">
-                                  {match.internalTransaction.entityName}
-                                </p>
-                              )}
-                              <p className="text-xs text-muted-foreground truncate">
-                                {match.internalTransaction.description}
-                              </p>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {match.reasons.join(' • ')}
-                              </p>
                             </div>
-                            <div className="text-right ml-4">
-                              <p className={cn("font-semibold", match.internalTransaction.amount < 0 ? "text-red-600" : "text-green-600")}>
-                                {formatCurrency(match.internalTransaction.amount)}
-                              </p>
-                              <Button
-                                size="sm"
-                                className="mt-2"
-                                onClick={() => handleReconcile(match.internalTransaction, match.matchRule, match.score)}
-                                disabled={reconciling}
-                              >
-                                {reconciling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4 mr-1" />}
-                                Conciliar
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                          );
+                        })}
                     </div>
                   )}
 
                   {/* Action Buttons for Selected OFX */}
-                  {selectedOfxTransaction && !selectedOfxTransaction.is_reconciled && (
+                  {anyOfxSelected && anySelectedNotReconciled && (
                     <div className="mb-4 p-3 border rounded-lg space-y-3">
                       <Textarea
                         placeholder="Notas (opcional)..."
@@ -1212,44 +1346,68 @@ const BankReconciliation = () => {
 
                   {/* All Internal Transactions */}
                   <p className="text-sm font-medium text-muted-foreground mb-2">Todos os Lançamentos</p>
-                  {filteredInternalTransactions.length === 0 ? (
+                  {filteredInternalTransactions
+                    .filter(tx => {
+                      if (internalFilter === 'pending') return !reconciledInternalIds.has(tx.id);
+                      if (internalFilter === 'reconciled') return reconciledInternalIds.has(tx.id);
+                      return true;
+                    })
+                    .length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground">
                       <p>Nenhum lançamento encontrado no período</p>
                     </div>
                   ) : (
-                    filteredInternalTransactions.map((tx) => (
-                      <div
-                        key={tx.id}
-                        className="p-3 rounded-lg border hover:bg-muted/50 cursor-pointer"
-                        onClick={() => {
-                          if (selectedOfxTransaction && !selectedOfxTransaction.is_reconciled) {
-                            handleReconcile(tx, 'manual', 50);
-                          }
-                        }}
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium">
-                                {format(tx.date, "dd/MM/yyyy")}
-                              </span>
-                              <Badge variant="outline" className="text-xs">
-                                {getTypeLabel(tx.type)}
-                              </Badge>
+                    filteredInternalTransactions
+                      .filter(tx => {
+                        if (internalFilter === 'pending') return !reconciledInternalIds.has(tx.id);
+                        if (internalFilter === 'reconciled') return reconciledInternalIds.has(tx.id);
+                        return true;
+                      })
+                      .map((tx) => {
+                        const isReconciled = reconciledInternalIds.has(tx.id);
+                        return (
+                          <div
+                            key={tx.id}
+                            className={cn(
+                              "p-3 rounded-lg border hover:bg-muted/50 cursor-pointer",
+                              isReconciled && "opacity-60"
+                            )}
+                            onClick={() => {
+                              if (anyOfxSelected && anySelectedNotReconciled && !isReconciled) {
+                                handleReconcile(tx, 'manual', 50);
+                              }
+                            }}
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-sm font-medium">
+                                    {format(tx.date, "dd/MM/yyyy")}
+                                  </span>
+                                  <Badge variant="outline" className="text-xs">
+                                    {getTypeLabel(tx.type)}
+                                  </Badge>
+                                  {isReconciled && (
+                                    <Badge variant="outline" className="text-xs bg-green-50 text-green-700">
+                                      <Check className="h-3 w-3 mr-1" />
+                                      Conciliado
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="text-sm text-muted-foreground truncate mt-1">
+                                  {tx.description}
+                                  {tx.entityName && ` - ${tx.entityName}`}
+                                </p>
+                              </div>
+                              <div className="text-right ml-4">
+                                <p className={cn("font-semibold", tx.amount < 0 ? "text-red-600" : "text-green-600")}>
+                                  {formatCurrency(tx.amount)}
+                                </p>
+                              </div>
                             </div>
-                            <p className="text-sm text-muted-foreground truncate mt-1">
-                              {tx.description}
-                              {tx.entityName && ` - ${tx.entityName}`}
-                            </p>
                           </div>
-                          <div className="text-right ml-4">
-                            <p className={cn("font-semibold", tx.amount < 0 ? "text-red-600" : "text-green-600")}>
-                              {formatCurrency(tx.amount)}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    ))
+                        );
+                      })
                   )}
                 </div>
               </ScrollArea>
