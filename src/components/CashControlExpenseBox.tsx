@@ -7,12 +7,14 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Eye, Pencil, Ban, Upload, X, FileText, ArrowUp, ArrowDown, Link2 } from "lucide-react";
+import { Plus, Eye, Pencil, Ban, Upload, X, FileText, ArrowUp, ArrowDown, Link2, Download } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { LinkToAccountsPayableModal } from "./LinkToAccountsPayableModal";
 import { useCaixaPermissions } from "@/hooks/useCaixaPermissions";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 interface AttachmentInfo {
   path: string;
@@ -420,9 +422,20 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
 
   // Filter by link status
   const filteredExpenses = expenses.filter((expense) => {
-    if (linkFilter === 'all') return true;
-    if (linkFilter === 'linked') return !!expense.linked_account_payable_id;
-    if (linkFilter === 'unlinked') return !expense.linked_account_payable_id;
+    // Only show disabled items when filter is 'all'
+    if (linkFilter === 'all') {
+      return true;
+    }
+    // For 'linked' and 'unlinked', hide disabled items
+    if (expense.is_disabled) {
+      return false;
+    }
+    if (linkFilter === 'linked') {
+      return !!expense.linked_account_payable_id;
+    }
+    if (linkFilter === 'unlinked') {
+      return !expense.linked_account_payable_id;
+    }
     return true;
   });
 
@@ -463,11 +476,79 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
     { value: 'unlinked', label: 'Não Vinculados' },
   ];
 
+  // Calculate total for filtered expenses
+  const filteredTotal = sortedExpenses.reduce((acc, expense) => acc + expense.amount, 0);
+  const filteredCount = sortedExpenses.length;
+
+  // Export to PDF
+  const handleExportPDF = () => {
+    try {
+      const doc = new jsPDF();
+      
+      // Title
+      doc.setFontSize(16);
+      doc.text(title, 14, 15);
+      
+      // Reference period
+      doc.setFontSize(10);
+      const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+      doc.text(`Período: ${monthNames[referenceMonth - 1]} / ${referenceYear}`, 14, 22);
+      
+      // Filter info
+      const filterLabel = linkFilterOptions.find(o => o.value === linkFilter)?.label || 'Todos';
+      doc.text(`Filtro: ${filterLabel}`, 14, 28);
+      
+      // Table data
+      const tableData = sortedExpenses.map(expense => [
+        format(new Date(expense.issue_date + 'T12:00:00'), "dd/MM/yyyy"),
+        format(new Date(expense.created_at), "dd/MM/yyyy HH:mm"),
+        expense.supplier + (expense.is_disabled ? ' (inabilitado)' : ''),
+        expense.description,
+        formatCurrency(expense.amount)
+      ]);
+      
+      autoTable(doc, {
+        head: [['Data', 'Criado em', 'Fornecedor', 'Descrição', 'Valor']],
+        body: tableData,
+        startY: 35,
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [59, 130, 246] },
+        columnStyles: {
+          0: { cellWidth: 25 },
+          1: { cellWidth: 35 },
+          2: { cellWidth: 40 },
+          3: { cellWidth: 'auto' },
+          4: { cellWidth: 30, halign: 'right' }
+        }
+      });
+      
+      // Total
+      const finalY = (doc as any).lastAutoTable.finalY || 35;
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'bold');
+      doc.text(`Total: ${formatCurrency(filteredTotal)} (${filteredCount} registro${filteredCount !== 1 ? 's' : ''})`, 14, finalY + 10);
+      
+      // Save
+      const fileName = `${title.replace(/\s+/g, '_')}_${referenceMonth}_${referenceYear}.pdf`;
+      doc.save(fileName);
+      
+      toast.success("PDF exportado com sucesso!");
+    } catch (error) {
+      console.error("Erro ao exportar PDF:", error);
+      toast.error("Erro ao exportar PDF");
+    }
+  };
+
   return (
     <Card className="h-full">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg">{title}</CardTitle>
+          <CardTitle className="text-lg flex items-center gap-2">
+            {title}
+            <span className="text-sm font-normal text-muted-foreground">
+              ({filteredCount} registro{filteredCount !== 1 ? 's' : ''})
+            </span>
+          </CardTitle>
           {canEdit && (
             <Button size="sm" onClick={() => handleOpenForm()}>
               <Plus className="h-4 w-4 mr-1" />
@@ -488,20 +569,39 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
         ) : (
           <>
           {/* Filter by link status */}
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-xs text-muted-foreground">Filtrar:</span>
-            <div className="flex gap-1">
-              {linkFilterOptions.map((option) => (
-                <Button
-                  key={option.value}
-                  variant={linkFilter === option.value ? "default" : "outline"}
-                  size="sm"
-                  className="h-6 text-xs px-2"
-                  onClick={() => setLinkFilter(option.value)}
-                >
-                  {option.label}
-                </Button>
-              ))}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Filtrar:</span>
+              <div className="flex gap-1">
+                {linkFilterOptions.map((option) => (
+                  <Button
+                    key={option.value}
+                    variant={linkFilter === option.value ? "default" : "outline"}
+                    size="sm"
+                    className="h-6 text-xs px-2"
+                    onClick={() => setLinkFilter(option.value)}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
+              {linkFilter !== 'all' && (
+                <span className="text-xs font-medium text-primary ml-2">
+                  Total: {formatCurrency(filteredTotal)}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-6 text-xs px-2"
+                onClick={handleExportPDF}
+                title="Exportar PDF"
+              >
+                <Download className="h-3 w-3 mr-1" />
+                PDF
+              </Button>
             </div>
           </div>
           <div className="border rounded">
