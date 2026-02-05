@@ -130,6 +130,9 @@ const BankReconciliation = () => {
 
   // Find matches when OFX transactions are selected
   useEffect(() => {
+    // Clear internal selection when OFX selection changes
+    setSelectedInternalIds([]);
+    
     if (selectedOfxIds.length > 0 && internalTransactions.length > 0) {
       // If single selection, find matches as before
       if (selectedOfxIds.length === 1) {
@@ -805,6 +808,19 @@ const BankReconciliation = () => {
   const anySelectedNotReconciled = selectedOfxTransactions.some(t => !t.is_reconciled);
   const selectedOfxTotalAmount = selectedOfxTransactions.reduce((sum, t) => sum + t.amount, 0);
 
+  // Selected internal transactions
+  const selectedInternalTransactions = useMemo(() =>
+    internalTransactions.filter(t => selectedInternalIds.includes(t.id)),
+    [internalTransactions, selectedInternalIds]
+  );
+  const hasMultipleInternalSelected = selectedInternalTransactions.length > 1;
+  const anyInternalSelected = selectedInternalTransactions.length > 0;
+  const selectedInternalTotalAmount = selectedInternalTransactions.reduce((sum, t) => sum + t.amount, 0);
+
+  // Check if values match for manual reconciliation
+  const valuesMatch = anyOfxSelected && anyInternalSelected && 
+    Math.abs(Math.abs(selectedOfxTotalAmount) - Math.abs(selectedInternalTotalAmount)) < 0.01;
+
   const getAccountTypeLabel = (type: string) => {
     const labels: Record<string, string> = {
       current: 'Conta Corrente',
@@ -833,6 +849,98 @@ const BankReconciliation = () => {
       other: 'Outro',
     };
     return labels[type] || type;
+  };
+
+  // Handle internal transaction click (multi-select with Ctrl)
+  const handleInternalClick = (tx: InternalTransaction, event: React.MouseEvent) => {
+    const isReconciled = reconciledInternalIds.has(tx.id);
+    if (isReconciled) return;
+    
+    if (event.ctrlKey || event.metaKey) {
+      // Multi-select mode
+      setSelectedInternalIds(prev => 
+        prev.includes(tx.id)
+          ? prev.filter(id => id !== tx.id)
+          : [...prev, tx.id]
+      );
+    } else {
+      // Single select - toggle
+      setSelectedInternalIds(prev => 
+        prev.includes(tx.id) ? [] : [tx.id]
+      );
+    }
+  };
+
+  // Handle manual reconciliation of selected items
+  const handleManualReconcile = async () => {
+    if (selectedOfxIds.length === 0 || selectedInternalIds.length === 0 || reconciling) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user || !matrixId) return;
+
+    setReconciling(true);
+
+    try {
+      // Create reconciliation records linking OFX to internal transactions
+      for (const ofxId of selectedOfxIds) {
+        for (const internalId of selectedInternalIds) {
+          const internalTx = internalTransactions.find(t => t.id === internalId);
+          if (!internalTx) continue;
+
+          const { error: reconcError } = await supabase
+            .from('bank_reconciliations')
+            .insert({
+              account_id: selectedAccount,
+              account_type: selectedAccountType,
+              ofx_transaction_id: ofxId,
+              internal_type: internalTx.type,
+              internal_id: internalTx.id,
+              internal_table: internalTx.table,
+              matched_rule: 'manual',
+              match_score: valuesMatch ? 100 : 50,
+              notes: reconciliationNote || null,
+              matrix_id: matrixId,
+              created_by: user.id,
+            });
+
+          if (reconcError) throw reconcError;
+        }
+
+        // Mark OFX transaction as reconciled
+        const { error: updateError } = await supabase
+          .from('bank_ofx_transactions')
+          .update({
+            is_reconciled: true,
+            reconciled_at: new Date().toISOString(),
+            reconciled_by: user.id,
+          })
+          .eq('id', ofxId);
+
+        if (updateError) throw updateError;
+      }
+
+      toast({ 
+        title: "Conciliado!", 
+        description: `${selectedOfxIds.length} transação(ões) OFX conciliada(s) com ${selectedInternalIds.length} lançamento(s) do sistema` 
+      });
+
+      // Clear selections and move to next pending
+      const reconciledIds = new Set(selectedOfxIds);
+      const nextPending = ofxTransactions.find(t => !t.is_reconciled && !reconciledIds.has(t.id));
+      setSelectedOfxIds(nextPending ? [nextPending.id] : []);
+      setSelectedInternalIds([]);
+      setReconciliationNote("");
+      
+      // Reload transactions
+      await loadOfxTransactions();
+      await loadReconciledInternalIds();
+
+    } catch (error: any) {
+      console.error('Error reconciling:', error);
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    } finally {
+      setReconciling(false);
+    }
   };
 
   if (permLoading) {
@@ -1266,10 +1374,82 @@ const BankReconciliation = () => {
             <CardContent className="flex-1 overflow-hidden p-0">
               <ScrollArea className="h-full">
                 <div className="p-4 space-y-2">
+                  {/* Selected Internal Transactions Summary */}
+                  {anyInternalSelected && (
+                    <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg relative">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="absolute top-1 right-1 h-6 w-6 p-0"
+                        onClick={() => setSelectedInternalIds([])}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                      <div className="pr-6">
+                        <p className="text-sm font-medium text-blue-900">
+                          {selectedInternalTransactions.length} lançamento(s) selecionado(s)
+                        </p>
+                        <p className="text-xs text-blue-700">
+                          Use Ctrl+Clique para selecionar múltiplos lançamentos
+                        </p>
+                        <p className={cn("font-bold mt-1", selectedInternalTotalAmount < 0 ? "text-destructive" : "text-green-600")}>
+                          Total: {formatCurrency(selectedInternalTotalAmount)}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Manual Reconcile Button - appears when both sides have selections */}
+                  {anyOfxSelected && anySelectedNotReconciled && anyInternalSelected && (
+                    <div className="mb-4 p-3 border-2 border-primary rounded-lg bg-primary/5 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium">Conciliar Selecionados</p>
+                          <p className="text-xs text-muted-foreground">
+                            {selectedOfxIds.length} transação(ões) OFX ↔ {selectedInternalIds.length} lançamento(s) do sistema
+                          </p>
+                          <div className="flex gap-4 mt-1">
+                            <span className={cn("text-sm font-semibold", selectedOfxTotalAmount < 0 ? "text-destructive" : "text-green-600")}>
+                              OFX: {formatCurrency(selectedOfxTotalAmount)}
+                            </span>
+                            <span className={cn("text-sm font-semibold", selectedInternalTotalAmount < 0 ? "text-destructive" : "text-green-600")}>
+                              Sistema: {formatCurrency(selectedInternalTotalAmount)}
+                            </span>
+                            {!valuesMatch && (
+                              <Badge variant="outline" className="text-xs text-orange-600 border-orange-300">
+                                <AlertCircle className="h-3 w-3 mr-1" />
+                                Valores diferentes
+                              </Badge>
+                            )}
+                            {valuesMatch && (
+                              <Badge variant="outline" className="text-xs text-green-600 border-green-300">
+                                <Check className="h-3 w-3 mr-1" />
+                                Valores conferem
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        <Button
+                          onClick={handleManualReconcile}
+                          disabled={reconciling}
+                        >
+                          {reconciling ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Link2 className="h-4 w-4 mr-1" />}
+                          Conciliar
+                        </Button>
+                      </div>
+                      <Textarea
+                        placeholder="Notas (opcional)..."
+                        value={reconciliationNote}
+                        onChange={(e) => setReconciliationNote(e.target.value)}
+                        rows={2}
+                      />
+                    </div>
+                  )}
+
                   {/* Match Suggestions */}
                   {anyOfxSelected && matchSuggestions.length > 0 && (
                     <div className="mb-4">
-                      <p className="text-sm font-medium text-muted-foreground mb-2">Sugestões de Match</p>
+                      <p className="text-sm font-medium text-muted-foreground mb-2">Sugestões de Match (clique para selecionar)</p>
                       {matchSuggestions
                         .filter(match => {
                           if (internalFilter === 'pending') return !reconciledInternalIds.has(match.internalTransaction.id);
@@ -1278,10 +1458,17 @@ const BankReconciliation = () => {
                         })
                         .map((match) => {
                           const isReconciled = reconciledInternalIds.has(match.internalTransaction.id);
+                          const isSelected = selectedInternalIds.includes(match.internalTransaction.id);
                           return (
                             <div
                               key={match.internalTransaction.id}
-                              className={cn("p-3 rounded-lg border bg-card mb-2", isReconciled && "opacity-60")}
+                              className={cn(
+                                "p-3 rounded-lg border bg-card mb-2 cursor-pointer transition-colors",
+                                isReconciled && "opacity-60",
+                                isSelected && "ring-2 ring-primary bg-primary/5",
+                                !isReconciled && !isSelected && "hover:bg-muted/50"
+                              )}
+                              onClick={(e) => handleInternalClick(match.internalTransaction, e)}
                             >
                               <div className="flex items-start justify-between mb-2">
                                 <div className="flex-1">
@@ -1296,6 +1483,12 @@ const BankReconciliation = () => {
                                       <Badge variant="outline" className="text-xs bg-green-50 text-green-700">
                                         <Check className="h-3 w-3 mr-1" />
                                         Conciliado
+                                      </Badge>
+                                    )}
+                                    {isSelected && (
+                                      <Badge className="text-xs bg-primary text-primary-foreground">
+                                        <Check className="h-3 w-3 mr-1" />
+                                        Selecionado
                                       </Badge>
                                     )}
                                   </div>
@@ -1315,20 +1508,9 @@ const BankReconciliation = () => {
                                   </p>
                                 </div>
                                 <div className="text-right ml-4">
-                                  <p className={cn("font-semibold", match.internalTransaction.amount < 0 ? "text-red-600" : "text-green-600")}>
+                                  <p className={cn("font-semibold", match.internalTransaction.amount < 0 ? "text-destructive" : "text-green-600")}>
                                     {formatCurrency(match.internalTransaction.amount)}
                                   </p>
-                                  {!isReconciled && (
-                                    <Button
-                                      size="sm"
-                                      className="mt-2"
-                                      onClick={() => handleReconcile(match.internalTransaction, match.matchRule, match.score)}
-                                      disabled={reconciling}
-                                    >
-                                      {reconciling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4 mr-1" />}
-                                      Conciliar
-                                    </Button>
-                                  )}
                                 </div>
                               </div>
                             </div>
@@ -1337,8 +1519,8 @@ const BankReconciliation = () => {
                     </div>
                   )}
 
-                  {/* Action Buttons for Selected OFX */}
-                  {anyOfxSelected && anySelectedNotReconciled && (
+                  {/* Action Buttons for Selected OFX - only show Not Identified when no internal selected */}
+                  {anyOfxSelected && anySelectedNotReconciled && !anyInternalSelected && (
                     <div className="mb-4 p-3 border rounded-lg space-y-3">
                       <Textarea
                         placeholder="Notas (opcional)..."
@@ -1381,7 +1563,7 @@ const BankReconciliation = () => {
                   <Separator className="my-4" />
 
                   {/* All Internal Transactions */}
-                  <p className="text-sm font-medium text-muted-foreground mb-2">Todos os Lançamentos</p>
+                  <p className="text-sm font-medium text-muted-foreground mb-2">Todos os Lançamentos (clique para selecionar)</p>
                   {filteredInternalTransactions
                     .filter(tx => {
                       if (internalFilter === 'pending') return !reconciledInternalIds.has(tx.id);
@@ -1401,18 +1583,17 @@ const BankReconciliation = () => {
                       })
                       .map((tx) => {
                         const isReconciled = reconciledInternalIds.has(tx.id);
+                        const isSelected = selectedInternalIds.includes(tx.id);
                         return (
                           <div
                             key={tx.id}
                             className={cn(
-                              "p-3 rounded-lg border hover:bg-muted/50 cursor-pointer",
-                              isReconciled && "opacity-60"
+                              "p-3 rounded-lg border cursor-pointer transition-colors mb-2",
+                              isReconciled && "opacity-60",
+                              isSelected && "ring-2 ring-primary bg-primary/5",
+                              !isReconciled && !isSelected && "hover:bg-muted/50"
                             )}
-                            onClick={() => {
-                              if (anyOfxSelected && anySelectedNotReconciled && !isReconciled) {
-                                handleReconcile(tx, 'manual', 50);
-                              }
-                            }}
+                            onClick={(e) => handleInternalClick(tx, e)}
                           >
                             <div className="flex items-start justify-between">
                               <div className="flex-1 min-w-0">
@@ -1429,6 +1610,12 @@ const BankReconciliation = () => {
                                       Conciliado
                                     </Badge>
                                   )}
+                                  {isSelected && (
+                                    <Badge className="text-xs bg-primary text-primary-foreground">
+                                      <Check className="h-3 w-3 mr-1" />
+                                      Selecionado
+                                    </Badge>
+                                  )}
                                 </div>
                                 <p className="text-sm text-muted-foreground truncate mt-1">
                                   {tx.description}
@@ -1436,7 +1623,7 @@ const BankReconciliation = () => {
                                 </p>
                               </div>
                               <div className="text-right ml-4">
-                                <p className={cn("font-semibold", tx.amount < 0 ? "text-red-600" : "text-green-600")}>
+                                <p className={cn("font-semibold", tx.amount < 0 ? "text-destructive" : "text-green-600")}>
                                   {formatCurrency(tx.amount)}
                                 </p>
                               </div>
