@@ -1,9 +1,10 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { CreditCard, TrendingUp, ArrowLeftRight, Shield, Lock, Wallet } from "lucide-react";
+import { CreditCard, TrendingUp, ArrowLeftRight, Shield, Lock, Wallet, FileSearch } from "lucide-react";
 import { useFinanceiroPermissions } from "@/hooks/useFinanceiroPermissions";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useNavigate } from "react-router-dom";
 
 interface FinanceiroModalProps {
   open: boolean;
@@ -25,6 +26,7 @@ export const FinanceiroModal = ({
   onPartnerTransactionsOpen
 }: FinanceiroModalProps) => {
   const { permissionLevel, loading, canView, canAdmin } = useFinanceiroPermissions();
+  const navigate = useNavigate();
 
   const modules = [
     {
@@ -85,6 +87,18 @@ export const FinanceiroModal = ({
       onClick: () => {
         onOpenChange(false);
         onPeriodControlOpen();
+      }
+    },
+    {
+      id: "conciliacao-bancaria",
+      title: "Conciliação Bancária",
+      description: "Importar OFX e conciliar com o sistema",
+      icon: FileSearch,
+      color: "bg-teal-500",
+      requiresAdmin: false,
+      onClick: () => {
+        onOpenChange(false);
+        navigate('/bank-reconciliation');
       }
     }
   ];
