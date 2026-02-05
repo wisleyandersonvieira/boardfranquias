@@ -13,7 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 // Helper to avoid TS2589 deep type instantiation errors
 const query = (table: string) => (supabase as any).from(table);
 import { toast } from "@/hooks/use-toast";
-import { format } from "date-fns";
+import { format, differenceInDays, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import JSZip from "jszip";
 import jsPDF from "jspdf";
@@ -222,6 +222,28 @@ const AccountingExportReport = () => {
       return;
     }
 
+    // Validar período máximo de 35 dias
+    const startDate = parseISO(paymentStartDate);
+    const endDate = parseISO(paymentEndDate);
+    const daysDiff = differenceInDays(endDate, startDate);
+    
+    if (daysDiff > 35) {
+      toast({ 
+        title: "Período máximo permitido: 35 dias", 
+        description: `O período selecionado tem ${daysDiff} dias.`,
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    if (daysDiff < 0) {
+      toast({ 
+        title: "Data inicial deve ser anterior à data final", 
+        variant: "destructive" 
+      });
+      return;
+    }
+
     setLoading(true);
     try {
       // Buscar transações financeiras de saída (pagamentos) das contas selecionadas
@@ -254,10 +276,153 @@ const AccountingExportReport = () => {
         return;
       }
 
-      // Processar cada transação para obter os dados completos
-      const paymentRecordsData: PaymentRecord[] = [];
+      // Separar transações por tipo
+      const installmentRefIds: string[] = [];
+      const accountPayableRefIds: string[] = [];
+      
+      transactions.forEach(t => {
+        if (t.reference_type === "accounts_payable_installments") {
+          installmentRefIds.push(t.reference_id);
+        } else if (t.reference_type === "accounts_payable") {
+          accountPayableRefIds.push(t.reference_id);
+        }
+      });
 
-      for (const transaction of transactions) {
+      // Buscar todos os dados em paralelo
+      const [
+        installmentsResult,
+        directAccountsResult,
+        installmentPaymentsResult,
+        directPaymentsResult
+      ] = await Promise.all([
+        // Buscar parcelas e contas a pagar relacionadas
+        installmentRefIds.length > 0
+          ? supabase
+              .from("accounts_payable_installments")
+              .select(`
+                id,
+                installment_number,
+                account_payable_id,
+                accounts_payable!inner (
+                  id,
+                  document_number,
+                  description,
+                  attachments,
+                  employee_id,
+                  supplier_id
+                )
+              `)
+              .in("id", installmentRefIds)
+          : Promise.resolve({ data: [] }),
+        
+        // Buscar contas a pagar diretas
+        accountPayableRefIds.length > 0
+          ? supabase
+              .from("accounts_payable")
+              .select(`
+                id,
+                document_number,
+                description,
+                attachments,
+                employee_id,
+                supplier_id
+              `)
+              .in("id", accountPayableRefIds)
+          : Promise.resolve({ data: [] }),
+        
+        // Buscar pagamentos das parcelas
+        installmentRefIds.length > 0
+          ? supabase
+              .from("accounts_payable_payments")
+              .select("installment_id, interest_amount, discount_amount")
+              .in("installment_id", installmentRefIds)
+          : Promise.resolve({ data: [] }),
+        
+        // Buscar pagamentos diretos
+        accountPayableRefIds.length > 0
+          ? supabase
+              .from("accounts_payable_payments")
+              .select("account_payable_id, interest_amount, discount_amount")
+              .in("account_payable_id", accountPayableRefIds)
+          : Promise.resolve({ data: [] })
+      ]);
+
+      // Criar mapas para lookup rápido
+      const installmentsMap = new Map<string, any>();
+      (installmentsResult.data || []).forEach((inst: any) => {
+        installmentsMap.set(inst.id, inst);
+      });
+
+      const directAccountsMap = new Map<string, any>();
+      (directAccountsResult.data || []).forEach((ap: any) => {
+        directAccountsMap.set(ap.id, ap);
+      });
+
+      const installmentPaymentsMap = new Map<string, any>();
+      (installmentPaymentsResult.data || []).forEach((p: any) => {
+        installmentPaymentsMap.set(p.installment_id, p);
+      });
+
+      const directPaymentsMap = new Map<string, any>();
+      (directPaymentsResult.data || []).forEach((p: any) => {
+        directPaymentsMap.set(p.account_payable_id, p);
+      });
+
+      // Coletar IDs únicos de fornecedores, funcionários e contas a pagar para buscar nomes e totais de parcelas
+      const supplierIds = new Set<string>();
+      const employeeIds = new Set<string>();
+      const accountPayableIdsForInstallmentCount = new Set<string>();
+
+      installmentsMap.forEach((inst) => {
+        const ap = inst.accounts_payable;
+        if (ap?.supplier_id) supplierIds.add(ap.supplier_id);
+        if (ap?.employee_id) employeeIds.add(ap.employee_id);
+        if (inst.account_payable_id) accountPayableIdsForInstallmentCount.add(inst.account_payable_id);
+      });
+
+      directAccountsMap.forEach((ap) => {
+        if (ap.supplier_id) supplierIds.add(ap.supplier_id);
+        if (ap.employee_id) employeeIds.add(ap.employee_id);
+      });
+
+      // Buscar fornecedores, funcionários e contagem de parcelas em paralelo
+      const [suppliersResult, employeesResult, installmentCountsResult] = await Promise.all([
+        supplierIds.size > 0
+          ? supabase.from("suppliers").select("id, name").in("id", Array.from(supplierIds))
+          : Promise.resolve({ data: [] }),
+        
+        employeeIds.size > 0
+          ? supabase.from("employees").select("id, name").in("id", Array.from(employeeIds))
+          : Promise.resolve({ data: [] }),
+        
+        accountPayableIdsForInstallmentCount.size > 0
+          ? supabase
+              .from("accounts_payable_installments")
+              .select("account_payable_id, installment_number")
+              .in("account_payable_id", Array.from(accountPayableIdsForInstallmentCount))
+          : Promise.resolve({ data: [] })
+      ]);
+
+      // Criar mapas para lookup
+      const suppliersMap = new Map<string, string>();
+      (suppliersResult.data || []).forEach((s: any) => {
+        suppliersMap.set(s.id, s.name);
+      });
+
+      const employeesMap = new Map<string, string>();
+      (employeesResult.data || []).forEach((e: any) => {
+        employeesMap.set(e.id, e.name);
+      });
+
+      // Calcular total de parcelas por conta
+      const totalInstallmentsMap = new Map<string, number>();
+      (installmentCountsResult.data || []).forEach((inst: any) => {
+        const current = totalInstallmentsMap.get(inst.account_payable_id) || 0;
+        totalInstallmentsMap.set(inst.account_payable_id, Math.max(current, inst.installment_number));
+      });
+
+      // Processar transações com os dados em cache
+      const paymentRecordsData: PaymentRecord[] = transactions.map((transaction) => {
         let accountPayableId: string | null = null;
         let installmentNumber: number | null = null;
         let totalInstallments: number | null = null;
@@ -270,100 +435,46 @@ const AccountingExportReport = () => {
         let discountAmount = 0;
 
         if (transaction.reference_type === "accounts_payable_installments") {
-          // Buscar dados da parcela e conta a pagar
-          const { data: installmentData } = await supabase
-            .from("accounts_payable_installments")
-            .select(`
-              installment_number,
-              account_payable_id,
-              accounts_payable!inner (
-                id,
-                document_number,
-                description,
-                attachments,
-                employee_id,
-                suppliers (name)
-              )
-            `)
-            .eq("id", transaction.reference_id)
-            .maybeSingle();
-
+          const installmentData = installmentsMap.get(transaction.reference_id);
           if (installmentData) {
+            const ap = installmentData.accounts_payable;
             accountPayableId = installmentData.account_payable_id;
             installmentNumber = installmentData.installment_number;
-            documentNumber = (installmentData.accounts_payable as any)?.document_number || null;
-            description = (installmentData.accounts_payable as any)?.description || description;
-            attachments = (installmentData.accounts_payable as any)?.attachments || null;
-            supplierName = (installmentData.accounts_payable as any)?.suppliers?.name || null;
-
-            // Buscar total de parcelas
-            const { data: totalInst } = await supabase
-              .from("accounts_payable_installments")
-              .select("installment_number")
-              .eq("account_payable_id", accountPayableId)
-              .order("installment_number", { ascending: false })
-              .limit(1);
-            totalInstallments = totalInst?.[0]?.installment_number || 1;
-
-            // Verificar se é funcionário
-            const employeeId = (installmentData.accounts_payable as any)?.employee_id;
-            if (employeeId) {
-              const { data: empData } = await supabase
-                .from("employees")
-                .select("name")
-                .eq("id", employeeId)
-                .maybeSingle();
-              employeeName = empData?.name || null;
+            documentNumber = ap?.document_number || null;
+            description = ap?.description || description;
+            attachments = ap?.attachments || null;
+            
+            if (ap?.supplier_id) {
+              supplierName = suppliersMap.get(ap.supplier_id) || null;
             }
+            if (ap?.employee_id) {
+              employeeName = employeesMap.get(ap.employee_id) || null;
+            }
+            
+            totalInstallments = totalInstallmentsMap.get(accountPayableId!) || 1;
 
-            // Buscar juros e desconto do pagamento
-            const { data: paymentData } = await supabase
-              .from("accounts_payable_payments")
-              .select("interest_amount, discount_amount")
-              .eq("installment_id", transaction.reference_id)
-              .maybeSingle();
+            const paymentData = installmentPaymentsMap.get(transaction.reference_id);
             if (paymentData) {
               interestAmount = paymentData.interest_amount || 0;
               discountAmount = paymentData.discount_amount || 0;
             }
           }
         } else if (transaction.reference_type === "accounts_payable") {
-          // Pagamento direto (sem parcelas)
-          const { data: apData } = await supabase
-            .from("accounts_payable")
-            .select(`
-              id,
-              document_number,
-              description,
-              attachments,
-              employee_id,
-              suppliers (name)
-            `)
-            .eq("id", transaction.reference_id)
-            .maybeSingle();
-
+          const apData = directAccountsMap.get(transaction.reference_id);
           if (apData) {
             accountPayableId = apData.id;
             documentNumber = apData.document_number;
             description = apData.description || description;
             attachments = apData.attachments;
-            supplierName = apData.suppliers?.name || null;
-
+            
+            if (apData.supplier_id) {
+              supplierName = suppliersMap.get(apData.supplier_id) || null;
+            }
             if (apData.employee_id) {
-              const { data: empData } = await supabase
-                .from("employees")
-                .select("name")
-                .eq("id", apData.employee_id)
-                .maybeSingle();
-              employeeName = empData?.name || null;
+              employeeName = employeesMap.get(apData.employee_id) || null;
             }
 
-            // Buscar juros e desconto do pagamento
-            const { data: paymentData } = await supabase
-              .from("accounts_payable_payments")
-              .select("interest_amount, discount_amount")
-              .eq("account_payable_id", transaction.reference_id)
-              .maybeSingle();
+            const paymentData = directPaymentsMap.get(transaction.reference_id);
             if (paymentData) {
               interestAmount = paymentData.interest_amount || 0;
               discountAmount = paymentData.discount_amount || 0;
@@ -371,7 +482,7 @@ const AccountingExportReport = () => {
           }
         }
 
-        paymentRecordsData.push({
+        return {
           id: transaction.id,
           payment_date: transaction.transaction_date,
           amount_paid: transaction.amount,
@@ -387,8 +498,8 @@ const AccountingExportReport = () => {
           total_installments: totalInstallments,
           attachments,
           account_payable_id: accountPayableId,
-        });
-      }
+        };
+      });
 
       setPaymentRecords(paymentRecordsData);
       setShowResults(true);
