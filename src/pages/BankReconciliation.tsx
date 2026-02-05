@@ -29,7 +29,10 @@ import {
   Loader2,
   ChevronRight,
   Search,
-  Filter
+  Filter,
+  ArrowUpDown,
+  Calendar as CalendarIconLucide,
+  DollarSign
 } from "lucide-react";
 import { format, subDays, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -91,6 +94,10 @@ const BankReconciliation = () => {
   const [internalTransactions, setInternalTransactions] = useState<InternalTransaction[]>([]);
   const [internalSearch, setInternalSearch] = useState("");
   const [matchSuggestions, setMatchSuggestions] = useState<MatchSuggestion[]>([]);
+
+  // Sorting
+  const [ofxSortBy, setOfxSortBy] = useState<'date' | 'amount'>('date');
+  const [internalSortBy, setInternalSortBy] = useState<'date' | 'amount'>('date');
 
   // Reconciliation
   const [reconciliationNote, setReconciliationNote] = useState("");
@@ -675,7 +682,7 @@ const BankReconciliation = () => {
     }
   };
 
-  // Filtered OFX transactions
+  // Filtered and sorted OFX transactions
   const filteredOfxTransactions = useMemo(() => {
     let filtered = ofxTransactions;
 
@@ -695,20 +702,42 @@ const BankReconciliation = () => {
       );
     }
 
-    return filtered;
-  }, [ofxTransactions, ofxFilter, ofxSearch]);
+    // Apply sorting
+    const sorted = [...filtered].sort((a, b) => {
+      if (ofxSortBy === 'date') {
+        return new Date(a.posted_at).getTime() - new Date(b.posted_at).getTime();
+      } else {
+        return Math.abs(a.amount) - Math.abs(b.amount);
+      }
+    });
 
-  // Filtered internal transactions
+    return sorted;
+  }, [ofxTransactions, ofxFilter, ofxSearch, ofxSortBy]);
+
+  // Filtered and sorted internal transactions
   const filteredInternalTransactions = useMemo(() => {
-    if (!internalSearch) return internalTransactions;
+    let filtered = internalTransactions;
     
-    const search = internalSearch.toLowerCase();
-    return internalTransactions.filter(t =>
-      t.description.toLowerCase().includes(search) ||
-      t.entityName?.toLowerCase().includes(search) ||
-      t.amount.toString().includes(search)
-    );
-  }, [internalTransactions, internalSearch]);
+    if (internalSearch) {
+      const search = internalSearch.toLowerCase();
+      filtered = filtered.filter(t =>
+        t.description.toLowerCase().includes(search) ||
+        t.entityName?.toLowerCase().includes(search) ||
+        t.amount.toString().includes(search)
+      );
+    }
+
+    // Apply sorting
+    const sorted = [...filtered].sort((a, b) => {
+      if (internalSortBy === 'date') {
+        return a.date.getTime() - b.date.getTime();
+      } else {
+        return Math.abs(a.amount) - Math.abs(b.amount);
+      }
+    });
+
+    return sorted;
+  }, [internalTransactions, internalSearch, internalSortBy]);
 
   const selectedOfxTransaction = useMemo(() => 
     ofxTransactions.find(t => t.id === selectedOfxId),
@@ -944,14 +973,34 @@ const BankReconciliation = () => {
                   </Button>
                 </div>
               </div>
-              <div className="relative mt-2">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar por descrição, valor..."
-                  value={ofxSearch}
-                  onChange={(e) => setOfxSearch(e.target.value)}
-                  className="pl-8"
-                />
+              <div className="flex gap-2 mt-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por descrição, valor..."
+                    value={ofxSearch}
+                    onChange={(e) => setOfxSearch(e.target.value)}
+                    className="pl-8"
+                  />
+                </div>
+                <div className="flex gap-1">
+                  <Button
+                    variant={ofxSortBy === 'date' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setOfxSortBy('date')}
+                    title="Ordenar por data"
+                  >
+                    <CalendarIconLucide className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant={ofxSortBy === 'amount' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setOfxSortBy('amount')}
+                    title="Ordenar por valor"
+                  >
+                    <DollarSign className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="flex-1 overflow-hidden p-0">
@@ -1031,14 +1080,34 @@ const BankReconciliation = () => {
                   </div>
                 </div>
               )}
-              <div className="relative mt-2">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar lançamentos..."
-                  value={internalSearch}
-                  onChange={(e) => setInternalSearch(e.target.value)}
-                  className="pl-8"
-                />
+              <div className="flex gap-2 mt-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar lançamentos..."
+                    value={internalSearch}
+                    onChange={(e) => setInternalSearch(e.target.value)}
+                    className="pl-8"
+                  />
+                </div>
+                <div className="flex gap-1">
+                  <Button
+                    variant={internalSortBy === 'date' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setInternalSortBy('date')}
+                    title="Ordenar por data"
+                  >
+                    <CalendarIconLucide className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant={internalSortBy === 'amount' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setInternalSortBy('amount')}
+                    title="Ordenar por valor"
+                  >
+                    <DollarSign className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="flex-1 overflow-hidden p-0">
