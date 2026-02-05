@@ -402,14 +402,23 @@ export function LinkToAccountsPayableModal({
     return items.reduce((sum, item) => sum + item.total_price, 0);
   };
 
-  // Filtered products based on search term
+  // Helper function to normalize text (remove accents)
+  const normalizeText = (text: string): string => {
+    return text
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+  };
+
+  // Filtered products based on search term with accent-insensitive search
   const filteredProducts = useMemo(() => {
     if (!productSearchTerm) return products;
-    const searchLower = productSearchTerm.toLowerCase();
-    return products.filter(product => 
-      product.name.toLowerCase().includes(searchLower) ||
-      (product.code && product.code.toLowerCase().includes(searchLower))
-    );
+    const searchNormalized = normalizeText(productSearchTerm);
+    return products.filter(product => {
+      const nameNormalized = normalizeText(product.name);
+      const codeNormalized = product.code ? normalizeText(product.code) : "";
+      return nameNormalized.includes(searchNormalized) || codeNormalized.includes(searchNormalized);
+    });
   }, [products, productSearchTerm]);
 
   const selectedProductData = products.find(p => p.id === selectedProduct);
@@ -1039,9 +1048,10 @@ export function LinkToAccountsPayableModal({
                       <PopoverContent className="w-[400px] p-0" align="start">
                         <Command shouldFilter={false}>
                           <CommandInput 
-                            placeholder="Buscar produto..." 
+                            placeholder="Digite o nome do produto..." 
                             value={productSearchTerm}
                             onValueChange={setProductSearchTerm}
+                            autoFocus
                           />
                           <CommandList className="max-h-[300px] overflow-y-auto" style={{ maxHeight: '300px', overflowY: 'auto' }}>
                             <CommandEmpty>Nenhum produto encontrado.</CommandEmpty>
