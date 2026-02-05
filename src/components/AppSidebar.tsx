@@ -230,6 +230,7 @@ const AppSidebar = ({
         { id: "transferencias", label: "Transferências", action: "openTransfers" },
         { id: "aportes-retiradas", label: "Aportes e Retiradas", action: "openPartnerTransactions" },
         { id: "registro-os", label: "Registro de OS", action: "openServiceOrders" },
+        { id: "conciliacao-bancaria", label: "Conciliação Bancária", route: "/bank-reconciliation" },
         { id: "controle-periodo", label: "Controle de Período", action: "openPeriodControl" },
       ],
     },
