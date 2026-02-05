@@ -969,6 +969,28 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
                 <p className="font-medium">{viewingExpense.description}</p>
               </div>
 
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-muted-foreground text-xs">Despesa paga?</Label>
+                  <p className="font-medium">{viewingExpense.is_paid ? "Sim" : "Não"}</p>
+                </div>
+                {viewingExpense.is_paid && viewingExpense.payment_date && (
+                  <div>
+                    <Label className="text-muted-foreground text-xs">Data do Pagamento</Label>
+                    <p className="font-medium">
+                      {format(new Date(viewingExpense.payment_date + 'T12:00:00'), "dd/MM/yyyy")}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {viewingExpense.notes && (
+                <div>
+                  <Label className="text-muted-foreground text-xs">Observações</Label>
+                  <p className="font-medium whitespace-pre-wrap">{viewingExpense.notes}</p>
+                </div>
+              )}
+
               {viewingExpense.attachments.length > 0 && (
                 <div>
                   <Label className="text-muted-foreground text-xs">Anexos</Label>

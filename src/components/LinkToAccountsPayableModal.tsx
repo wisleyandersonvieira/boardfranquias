@@ -30,6 +30,9 @@ interface ExpenseData {
   description: string;
   amount: number;
   attachments: AttachmentInfo[];
+  is_paid?: boolean;
+  payment_date?: string | null;
+  notes?: string | null;
 }
 
 interface LinkToAccountsPayableModalProps {
@@ -151,7 +154,24 @@ export function LinkToAccountsPayableModal({
       // Pre-fill form with expense data
       if (expense) {
         setIssueDate(expense.issue_date);
-        setNotes(`Vinculado da despesa de caixa: ${expense.description}`);
+        
+        // Set due date to payment_date if the expense was paid, otherwise leave blank
+        if (expense.is_paid && expense.payment_date) {
+          setDueDate(expense.payment_date);
+        } else {
+          setDueDate("");
+        }
+        
+        // Set competence date to issue_date
+        setDataCompetencia(expense.issue_date);
+        
+        // Build notes with expense description and any expense notes
+        let notesText = `Vinculado da despesa de caixa: ${expense.description}`;
+        if (expense.notes) {
+          notesText += `\n${expense.notes}`;
+        }
+        setNotes(notesText);
+        
         setDefaultStore(storeId);
         
         // Try to find supplier by name
