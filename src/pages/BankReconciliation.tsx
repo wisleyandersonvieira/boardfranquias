@@ -1009,7 +1009,13 @@ const BankReconciliation = () => {
           <Card className="h-[600px] flex flex-col">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Transações OFX</CardTitle>
+                <CardTitle className="text-lg">
+                  Transações OFX
+                  <Badge variant="secondary" className="ml-2 font-normal">
+                    {filteredOfxTransactions.length}
+                  </Badge>
+                </CardTitle>
+                
                 <div className="flex gap-2">
                   <Button
                     variant={ofxFilter === 'pending' ? 'default' : 'outline'}
@@ -1137,6 +1143,20 @@ const BankReconciliation = () => {
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg">
                   {anyOfxSelected ? "Sugestões de Match" : "Lançamentos do Sistema"}
+                  <Badge variant="secondary" className="ml-2 font-normal">
+                    {anyOfxSelected 
+                      ? matchSuggestions.filter(match => {
+                          if (internalFilter === 'pending') return !reconciledInternalIds.has(match.internalTransaction.id);
+                          if (internalFilter === 'reconciled') return reconciledInternalIds.has(match.internalTransaction.id);
+                          return true;
+                        }).length
+                      : filteredInternalTransactions.filter(tx => {
+                          if (internalFilter === 'pending') return !reconciledInternalIds.has(tx.id);
+                          if (internalFilter === 'reconciled') return reconciledInternalIds.has(tx.id);
+                          return true;
+                        }).length
+                    }
+                  </Badge>
                 </CardTitle>
                 <div className="flex gap-2">
                   <Button
@@ -1164,8 +1184,16 @@ const BankReconciliation = () => {
               </div>
               {/* Show selected OFX info */}
               {hasMultipleOfxSelected && (
-                <div className="mt-2 p-3 bg-muted rounded-lg">
-                  <div className="flex items-center justify-between">
+                <div className="mt-2 p-3 bg-muted rounded-lg relative">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="absolute top-1 right-1 h-6 w-6 p-0"
+                    onClick={() => setSelectedOfxIds([])}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                  <div className="flex items-center justify-between pr-6">
                     <div>
                       <p className="text-sm font-medium">
                         {selectedOfxTransactions.length} transações selecionadas
@@ -1174,15 +1202,23 @@ const BankReconciliation = () => {
                         Use Ctrl+Clique para selecionar múltiplas transações
                       </p>
                     </div>
-                    <p className={cn("font-bold", selectedOfxTotalAmount < 0 ? "text-red-600" : "text-green-600")}>
+                    <p className={cn("font-bold", selectedOfxTotalAmount < 0 ? "text-destructive" : "text-green-600")}>
                       {formatCurrency(selectedOfxTotalAmount)}
                     </p>
                   </div>
                 </div>
               )}
               {selectedOfxTransaction && (
-                <div className="mt-2 p-3 bg-muted rounded-lg">
-                  <div className="flex items-center justify-between">
+                <div className="mt-2 p-3 bg-muted rounded-lg relative">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="absolute top-1 right-1 h-6 w-6 p-0"
+                    onClick={() => setSelectedOfxIds([])}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                  <div className="flex items-center justify-between pr-6">
                     <div>
                       <p className="text-sm font-medium">
                         {format(new Date(selectedOfxTransaction.posted_at), "dd/MM/yyyy")} - {selectedOfxTransaction.trntype}
@@ -1191,7 +1227,7 @@ const BankReconciliation = () => {
                         {selectedOfxTransaction.name || selectedOfxTransaction.memo || selectedOfxTransaction.fitid}
                       </p>
                     </div>
-                    <p className={cn("font-bold", selectedOfxTransaction.amount < 0 ? "text-red-600" : "text-green-600")}>
+                    <p className={cn("font-bold", selectedOfxTransaction.amount < 0 ? "text-destructive" : "text-green-600")}>
                       {formatCurrency(selectedOfxTransaction.amount)}
                     </p>
                   </div>
