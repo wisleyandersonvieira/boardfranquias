@@ -376,7 +376,15 @@ const AppSidebar = ({
     }
   };
 
+  const { canEdit: canEditFinanceiro } = useFinanceiroPermissions();
+
   const handleSubMenuClick = (subMenu: SubMenuItem) => {
+    // Block bank reconciliation for read-only financeiro users
+    if (subMenu.id === "conciliacao-bancaria" && !canEditFinanceiro) {
+      toast.error("Acesso bloqueado para o perfil");
+      return;
+    }
+
     if (subMenu.route) {
       navigate(subMenu.route);
     } else if (subMenu.action) {

@@ -25,7 +25,7 @@ export const FinanceiroModal = ({
   onPeriodControlOpen,
   onPartnerTransactionsOpen
 }: FinanceiroModalProps) => {
-  const { permissionLevel, loading, canView, canAdmin } = useFinanceiroPermissions();
+  const { permissionLevel, loading, canView, canEdit, canAdmin } = useFinanceiroPermissions();
   const navigate = useNavigate();
 
   const modules = [
@@ -96,6 +96,7 @@ export const FinanceiroModal = ({
       icon: FileSearch,
       color: "bg-teal-500",
       requiresAdmin: false,
+      requiresEdit: true,
       onClick: () => {
         onOpenChange(false);
         navigate('/bank-reconciliation');
@@ -107,6 +108,9 @@ export const FinanceiroModal = ({
   const visibleModules = modules.filter(module => {
     if (module.requiresAdmin) {
       return canAdmin;
+    }
+    if (module.requiresEdit) {
+      return canEdit;
     }
     return canView;
   });
