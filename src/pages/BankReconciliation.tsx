@@ -72,8 +72,20 @@ interface ReconciliationStats {
 const BankReconciliation = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { canView, canAdmin, loading: permLoading } = useFinanceiroPermissions();
+  const { canView, canEdit, canAdmin, loading: permLoading } = useFinanceiroPermissions();
   const { matrixId } = useUserMatrix();
+
+  // Block access for read-only users
+  useEffect(() => {
+    if (!permLoading && canView && !canEdit) {
+      toast({
+        variant: "destructive",
+        title: "Acesso bloqueado",
+        description: "Acesso bloqueado para o perfil.",
+      });
+      navigate('/dashboard');
+    }
+  }, [permLoading, canView, canEdit, navigate, toast]);
 
   // State
   const [userStores, setUserStores] = useState<{ id: string; name: string; code: string }[]>([]);
