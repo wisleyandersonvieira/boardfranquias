@@ -846,9 +846,11 @@ const BankReconciliation = () => {
     return sorted;
   }, [ofxTransactions, ofxFilter, ofxSearch, ofxSortBy]);
 
-  // Sum of filtered OFX transactions
-  const filteredOfxSum = useMemo(() => {
-    return filteredOfxTransactions.reduce((sum, t) => sum + t.amount, 0);
+  // Sum of filtered OFX transactions (entries and exits)
+  const filteredOfxSums = useMemo(() => {
+    const entries = filteredOfxTransactions.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0);
+    const exits = filteredOfxTransactions.filter(t => t.amount < 0).reduce((sum, t) => sum + t.amount, 0);
+    return { entries, exits };
   }, [filteredOfxTransactions]);
 
   // Filtered and sorted internal transactions
@@ -882,9 +884,11 @@ const BankReconciliation = () => {
     return sorted;
   }, [internalTransactions, internalSearch, internalSortBy, internalFilter, reconciledInternalIds]);
 
-  // Sum of filtered internal transactions
-  const filteredInternalSum = useMemo(() => {
-    return filteredInternalTransactions.reduce((sum, t) => sum + t.amount, 0);
+  // Sum of filtered internal transactions (entries and exits)
+  const filteredInternalSums = useMemo(() => {
+    const entries = filteredInternalTransactions.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0);
+    const exits = filteredInternalTransactions.filter(t => t.amount < 0).reduce((sum, t) => sum + t.amount, 0);
+    return { entries, exits };
   }, [filteredInternalTransactions]);
 
   const selectedOfxTransactions = useMemo(() => 
@@ -1260,21 +1264,15 @@ const BankReconciliation = () => {
                   </Button>
                 </div>
               </div>
-              <div className="flex gap-2 mt-2 items-center">
-                <div className="relative w-1/2">
+              <div className="flex gap-2 mt-2">
+                <div className="relative flex-1">
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Buscar..."
+                    placeholder="Buscar por descrição, valor..."
                     value={ofxSearch}
                     onChange={(e) => setOfxSearch(e.target.value)}
                     className="pl-8"
                   />
-                </div>
-                <div className={cn(
-                  "flex-1 text-right font-semibold text-sm px-2 py-1.5 rounded-md",
-                  filteredOfxSum < 0 ? "text-destructive bg-destructive/10" : "text-green-600 bg-green-50"
-                )}>
-                  Total: {formatCurrency(filteredOfxSum)}
                 </div>
                 <div className="flex gap-1">
                   <Button
@@ -1293,6 +1291,16 @@ const BankReconciliation = () => {
                   >
                     <DollarSign className="h-4 w-4" />
                   </Button>
+                </div>
+              </div>
+              <div className="flex gap-4 mt-2">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-muted-foreground">Entradas:</span>
+                  <span className="font-semibold text-green-600">{formatCurrency(filteredOfxSums.entries)}</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-muted-foreground">Saídas:</span>
+                  <span className="font-semibold text-destructive">{formatCurrency(filteredOfxSums.exits)}</span>
                 </div>
               </div>
             </CardHeader>
@@ -1459,21 +1467,15 @@ const BankReconciliation = () => {
                   </div>
                 </div>
               )}
-              <div className="flex gap-2 mt-2 items-center">
-                <div className="relative w-1/2">
+              <div className="flex gap-2 mt-2">
+                <div className="relative flex-1">
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Buscar..."
+                    placeholder="Buscar lançamentos..."
                     value={internalSearch}
                     onChange={(e) => setInternalSearch(e.target.value)}
                     className="pl-8"
                   />
-                </div>
-                <div className={cn(
-                  "flex-1 text-right font-semibold text-sm px-2 py-1.5 rounded-md",
-                  filteredInternalSum < 0 ? "text-destructive bg-destructive/10" : "text-green-600 bg-green-50"
-                )}>
-                  Total: {formatCurrency(filteredInternalSum)}
                 </div>
                 <div className="flex gap-1">
                   <Button
@@ -1492,6 +1494,16 @@ const BankReconciliation = () => {
                   >
                     <DollarSign className="h-4 w-4" />
                   </Button>
+                </div>
+              </div>
+              <div className="flex gap-4 mt-2">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-muted-foreground">Entradas:</span>
+                  <span className="font-semibold text-green-600">{formatCurrency(filteredInternalSums.entries)}</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-muted-foreground">Saídas:</span>
+                  <span className="font-semibold text-destructive">{formatCurrency(filteredInternalSums.exits)}</span>
                 </div>
               </div>
             </CardHeader>
