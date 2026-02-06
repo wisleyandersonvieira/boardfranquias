@@ -354,10 +354,13 @@ const BankReconciliation = () => {
           type = 'partner_transaction';
         }
 
+        // Determine sign based on transaction_type: saida = outflow (negative), entrada = inflow (positive)
+        const signedAmount = t.transaction_type === 'saida' ? -Math.abs(t.amount) : Math.abs(t.amount);
+
         return {
           id: t.id,
           date: parseDatePreservingLocal(t.transaction_date),
-          amount: t.amount,
+          amount: signedAmount,
           description: t.description,
           type,
           table: 'financial_transactions',
