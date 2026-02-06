@@ -14,6 +14,10 @@ import { ptBR } from "date-fns/locale";
 
 import { supabase } from "@/integrations/supabase/client";
 
+const formatCurrency = (value: number) => {
+  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+};
+
 const TurnoverReport = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -344,8 +348,8 @@ const TurnoverReport = () => {
           }
         }
 
-        const total = dinheiro + cartao + contas + delivery;
         const contasRecebidas = contasRecebidasMap[date] || 0;
+        const total = dinheiro + cartao + contas + delivery + contasRecebidas;
 
         return {
           date,
@@ -353,8 +357,8 @@ const TurnoverReport = () => {
           cartao,
           contas,
           delivery,
-          total,
-          contasRecebidas
+          contasRecebidas,
+          total
         };
       });
 
@@ -378,10 +382,10 @@ const TurnoverReport = () => {
         cartao: acc.cartao + row.cartao,
         contas: acc.contas + row.contas,
         delivery: acc.delivery + row.delivery,
-        total: acc.total + row.total,
-        contasRecebidas: acc.contasRecebidas + row.contasRecebidas
+        contasRecebidas: acc.contasRecebidas + row.contasRecebidas,
+        total: acc.total + row.total
       }),
-      { dinheiro: 0, cartao: 0, contas: 0, delivery: 0, total: 0, contasRecebidas: 0 }
+      { dinheiro: 0, cartao: 0, contas: 0, delivery: 0, contasRecebidas: 0, total: 0 }
     );
   };
 
@@ -528,8 +532,8 @@ const TurnoverReport = () => {
                       <TableHead className="text-right">Cartão</TableHead>
                       <TableHead className="text-right">Contas</TableHead>
                       <TableHead className="text-right">Delivery</TableHead>
-                      <TableHead className="text-right">Total</TableHead>
                       <TableHead className="text-right">Contas Recebidas</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -539,22 +543,22 @@ const TurnoverReport = () => {
                           {format(parseISO(row.date), "dd/MM/yyyy", { locale: ptBR })}
                         </TableCell>
                         <TableCell className="text-right">
-                          R$ {row.dinheiro.toFixed(2)}
+                          {formatCurrency(row.dinheiro)}
                         </TableCell>
                         <TableCell className="text-right">
-                          R$ {row.cartao.toFixed(2)}
+                          {formatCurrency(row.cartao)}
                         </TableCell>
                         <TableCell className="text-right">
-                          R$ {row.contas.toFixed(2)}
+                          {formatCurrency(row.contas)}
                         </TableCell>
                         <TableCell className="text-right">
-                          R$ {row.delivery.toFixed(2)}
+                          {formatCurrency(row.delivery)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {formatCurrency(row.contasRecebidas)}
                         </TableCell>
                         <TableCell className="text-right font-semibold">
-                          R$ {row.total.toFixed(2)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          R$ {row.contasRecebidas.toFixed(2)}
+                          {formatCurrency(row.total)}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -562,22 +566,22 @@ const TurnoverReport = () => {
                     <TableRow className="bg-muted/50 font-semibold">
                       <TableCell className="font-bold">TOTAL</TableCell>
                       <TableCell className="text-right font-bold">
-                        R$ {totals.dinheiro.toFixed(2)}
+                        {formatCurrency(totals.dinheiro)}
                       </TableCell>
                       <TableCell className="text-right font-bold">
-                        R$ {totals.cartao.toFixed(2)}
+                        {formatCurrency(totals.cartao)}
                       </TableCell>
                       <TableCell className="text-right font-bold">
-                        R$ {totals.contas.toFixed(2)}
+                        {formatCurrency(totals.contas)}
                       </TableCell>
                       <TableCell className="text-right font-bold">
-                        R$ {totals.delivery.toFixed(2)}
+                        {formatCurrency(totals.delivery)}
                       </TableCell>
                       <TableCell className="text-right font-bold">
-                        R$ {totals.total.toFixed(2)}
+                        {formatCurrency(totals.contasRecebidas)}
                       </TableCell>
                       <TableCell className="text-right font-bold">
-                        R$ {totals.contasRecebidas.toFixed(2)}
+                        {formatCurrency(totals.total)}
                       </TableCell>
                     </TableRow>
                   </TableBody>
