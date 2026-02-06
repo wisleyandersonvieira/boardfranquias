@@ -150,6 +150,11 @@ const BankReconciliation = () => {
     setSelectedInternalIds([]);
     
     if (selectedOfxIds.length > 0 && internalTransactions.length > 0) {
+      // Filter out already reconciled internal transactions from suggestions
+      const availableInternalTransactions = internalTransactions.filter(
+        t => !reconciledInternalIds.has(t.id)
+      );
+
       // If single selection, find matches as before
       if (selectedOfxIds.length === 1) {
         const ofxTx = ofxTransactions.find(t => t.id === selectedOfxIds[0]);
@@ -163,7 +168,7 @@ const BankReconciliation = () => {
               memo: ofxTx.memo,
               trntype: ofxTx.trntype,
             },
-            internalTransactions
+            availableInternalTransactions
           );
           setMatchSuggestions(matches);
         }
@@ -182,14 +187,14 @@ const BankReconciliation = () => {
             memo: null,
             trntype: totalAmount < 0 ? 'DEBIT' : 'CREDIT',
           },
-          internalTransactions
+          availableInternalTransactions
         );
         setMatchSuggestions(matches);
       }
     } else {
       setMatchSuggestions([]);
     }
-  }, [selectedOfxIds, internalTransactions, ofxTransactions]);
+  }, [selectedOfxIds, internalTransactions, ofxTransactions, reconciledInternalIds]);
 
   const fetchUserStores = async () => {
     try {
@@ -760,8 +765,16 @@ const BankReconciliation = () => {
 
       let reconciled = 0;
       const pending = ofxTransactions.filter(t => !t.is_reconciled);
+      
+      // Track internal IDs that have been reconciled in this batch to prevent duplicates
+      const usedInternalIds = new Set<string>(reconciledInternalIds);
 
       for (const ofxTx of pending) {
+        // Filter out already used internal transactions before finding matches
+        const availableInternalTransactions = internalTransactions.filter(
+          t => !usedInternalIds.has(t.id)
+        );
+
         const matches = findMatches(
           {
             id: ofxTx.id,
@@ -771,7 +784,7 @@ const BankReconciliation = () => {
             memo: ofxTx.memo,
             trntype: ofxTx.trntype,
           },
-          internalTransactions
+          availableInternalTransactions
         );
 
         // Auto reconcile if score >= 70% (auto_exact or auto_fuzzy)
@@ -797,6 +810,8 @@ const BankReconciliation = () => {
             reconciled_by: user.id,
           }).eq('id', ofxTx.id);
 
+          // Mark this internal transaction as used so it won't be matched again
+          usedInternalIds.add(autoMatch.internalTransaction.id);
           reconciled++;
         }
       }
@@ -972,6 +987,17 @@ const BankReconciliation = () => {
   // Handle manual reconciliation of selected items
   const handleManualReconcile = async () => {
     if (selectedOfxIds.length === 0 || selectedInternalIds.length === 0 || reconciling) return;
+
+    // Validate that selected internal transactions are not already reconciled
+    const alreadyReconciled = selectedInternalIds.filter(id => reconciledInternalIds.has(id));
+    if (alreadyReconciled.length > 0) {
+      toast({
+        title: "Erro",
+        description: "Um ou mais lançamentos do sistema selecionados já foram conciliados anteriormente.",
+        variant: "destructive"
+      });
+      return;
+    }
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user || !matrixId) return;
