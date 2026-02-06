@@ -76,6 +76,8 @@ const BankReconciliation = () => {
   const { matrixId } = useUserMatrix();
 
   // State
+  const [userStores, setUserStores] = useState<{ id: string; name: string; code: string }[]>([]);
+  const [selectedStoreId, setSelectedStoreId] = useState<string>("");
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<string>("");
   const [selectedAccountType, setSelectedAccountType] = useState<string>("");
@@ -114,10 +116,24 @@ const BankReconciliation = () => {
     return { total: ofxTransactions.length, reconciled, pending, totalAmount };
   }, [ofxTransactions]);
 
-  // Load accounts on mount
+  // Load user stores on mount
   useEffect(() => {
-    fetchAccounts();
+    fetchUserStores();
   }, []);
+
+  // Load accounts when store is selected
+  useEffect(() => {
+    if (selectedStoreId) {
+      fetchAccountsByStore(selectedStoreId);
+      // Clear selected account when store changes
+      setSelectedAccount("");
+      setSelectedAccountType("");
+      setOfxTransactions([]);
+      setInternalTransactions([]);
+    } else {
+      setAccounts([]);
+    }
+  }, [selectedStoreId]);
 
   // Load OFX transactions when account or dates change
   useEffect(() => {
@@ -175,13 +191,72 @@ const BankReconciliation = () => {
     }
   }, [selectedOfxIds, internalTransactions, ofxTransactions]);
 
-  const fetchAccounts = async () => {
+  const fetchUserStores = async () => {
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Get user's role
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+
+      let stores: { id: string; name: string; code: string }[] = [];
+
+      if (profile?.role === 'admin') {
+        // Admin sees all stores
+        const { data: storesData } = await (supabase as any).from('stores').select('id, name, code').eq('is_active', true);
+        stores = (storesData || []).sort((a: any, b: any) => a.name.localeCompare(b.name));
+      } else {
+        // Regular user - get stores from user_stores
+        const { data: userStoreLinks } = await supabase
+          .from('user_stores')
+          .select('store_id')
+          .eq('user_id', user.id);
+
+        if (userStoreLinks && userStoreLinks.length > 0) {
+          const storeIds = userStoreLinks.map(us => us.store_id);
+          const { data: storesData } = await (supabase as any).from('stores').select('id, name, code').in('id', storeIds).eq('is_active', true);
+          stores = (storesData || []).sort((a: any, b: any) => a.name.localeCompare(b.name));
+        }
+      }
+
+      setUserStores(stores);
+    } catch (error) {
+      console.error('Error fetching user stores:', error);
+    }
+  };
+
+  const fetchAccountsByStore = async (storeId: string) => {
+    try {
+      // Fetch accounts linked to the selected store
+      const [currentStoreLinks, cashStoreLinks, cardStoreLinks, deliveryStoreLinks] = await Promise.all([
+        supabase.from('current_account_stores').select('account_id').eq('store_id', storeId),
+        supabase.from('cash_account_stores').select('account_id').eq('store_id', storeId),
+        supabase.from('card_account_stores').select('account_id').eq('store_id', storeId),
+        supabase.from('delivery_account_stores').select('account_id').eq('store_id', storeId),
+      ]);
+
+      const currentAccountIds = (currentStoreLinks.data || []).map(l => l.account_id);
+      const cashAccountIds = (cashStoreLinks.data || []).map(l => l.account_id);
+      const cardAccountIds = (cardStoreLinks.data || []).map(l => l.account_id);
+      const deliveryAccountIds = (deliveryStoreLinks.data || []).map(l => l.account_id);
+
       const [currentResult, cashResult, cardResult, deliveryResult] = await Promise.all([
-        supabase.from('current_accounts').select('id, name').eq('is_active', true),
-        supabase.from('cash_accounts').select('id, name').eq('is_active', true),
-        supabase.from('card_accounts').select('id, name').eq('is_active', true),
-        supabase.from('delivery_accounts').select('id, name').eq('is_active', true),
+        currentAccountIds.length > 0 
+          ? supabase.from('current_accounts').select('id, name').in('id', currentAccountIds).eq('is_active', true)
+          : Promise.resolve({ data: [] }),
+        cashAccountIds.length > 0
+          ? supabase.from('cash_accounts').select('id, name').in('id', cashAccountIds).eq('is_active', true)
+          : Promise.resolve({ data: [] }),
+        cardAccountIds.length > 0
+          ? supabase.from('card_accounts').select('id, name').in('id', cardAccountIds).eq('is_active', true)
+          : Promise.resolve({ data: [] }),
+        deliveryAccountIds.length > 0
+          ? supabase.from('delivery_accounts').select('id, name').in('id', deliveryAccountIds).eq('is_active', true)
+          : Promise.resolve({ data: [] }),
       ]);
 
       const allAccounts: Account[] = [
@@ -193,7 +268,7 @@ const BankReconciliation = () => {
 
       setAccounts(allAccounts);
     } catch (error) {
-      console.error('Error fetching accounts:', error);
+      console.error('Error fetching accounts by store:', error);
     }
   };
 
@@ -986,7 +1061,27 @@ const BankReconciliation = () => {
             <CardTitle className="text-lg">Filtros e Importação</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+              {/* Store Select */}
+              <div className="space-y-2">
+                <Label>Loja</Label>
+                <Select
+                  value={selectedStoreId}
+                  onValueChange={setSelectedStoreId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione uma loja" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {userStores.map((store) => (
+                      <SelectItem key={store.id} value={store.id}>
+                        {store.code} - {store.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               {/* Account Select */}
               <div className="space-y-2">
                 <Label>Conta</Label>
@@ -997,9 +1092,10 @@ const BankReconciliation = () => {
                     setSelectedAccount(accId);
                     setSelectedAccountType(accType);
                   }}
+                  disabled={!selectedStoreId}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecione uma conta" />
+                    <SelectValue placeholder={selectedStoreId ? "Selecione uma conta" : "Selecione uma loja primeiro"} />
                   </SelectTrigger>
                   <SelectContent>
                     {accounts.map((acc) => (
