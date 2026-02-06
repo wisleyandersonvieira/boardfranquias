@@ -846,9 +846,20 @@ const BankReconciliation = () => {
     return sorted;
   }, [ofxTransactions, ofxFilter, ofxSearch, ofxSortBy]);
 
+  // Sum of filtered OFX transactions
+  const filteredOfxSum = useMemo(() => {
+    return filteredOfxTransactions.reduce((sum, t) => sum + t.amount, 0);
+  }, [filteredOfxTransactions]);
+
   // Filtered and sorted internal transactions
   const filteredInternalTransactions = useMemo(() => {
     let filtered = internalTransactions;
+
+    if (internalFilter === 'pending') {
+      filtered = filtered.filter(t => !reconciledInternalIds.has(t.id));
+    } else if (internalFilter === 'reconciled') {
+      filtered = filtered.filter(t => reconciledInternalIds.has(t.id));
+    }
     
     if (internalSearch) {
       const search = internalSearch.toLowerCase();
@@ -869,7 +880,12 @@ const BankReconciliation = () => {
     });
 
     return sorted;
-  }, [internalTransactions, internalSearch, internalSortBy]);
+  }, [internalTransactions, internalSearch, internalSortBy, internalFilter, reconciledInternalIds]);
+
+  // Sum of filtered internal transactions
+  const filteredInternalSum = useMemo(() => {
+    return filteredInternalTransactions.reduce((sum, t) => sum + t.amount, 0);
+  }, [filteredInternalTransactions]);
 
   const selectedOfxTransactions = useMemo(() => 
     ofxTransactions.filter(t => selectedOfxIds.includes(t.id)),
@@ -1244,15 +1260,21 @@ const BankReconciliation = () => {
                   </Button>
                 </div>
               </div>
-              <div className="flex gap-2 mt-2">
-                <div className="relative flex-1">
+              <div className="flex gap-2 mt-2 items-center">
+                <div className="relative w-1/2">
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Buscar por descrição, valor..."
+                    placeholder="Buscar..."
                     value={ofxSearch}
                     onChange={(e) => setOfxSearch(e.target.value)}
                     className="pl-8"
                   />
+                </div>
+                <div className={cn(
+                  "flex-1 text-right font-semibold text-sm px-2 py-1.5 rounded-md",
+                  filteredOfxSum < 0 ? "text-destructive bg-destructive/10" : "text-green-600 bg-green-50"
+                )}>
+                  Total: {formatCurrency(filteredOfxSum)}
                 </div>
                 <div className="flex gap-1">
                   <Button
@@ -1437,15 +1459,21 @@ const BankReconciliation = () => {
                   </div>
                 </div>
               )}
-              <div className="flex gap-2 mt-2">
-                <div className="relative flex-1">
+              <div className="flex gap-2 mt-2 items-center">
+                <div className="relative w-1/2">
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Buscar lançamentos..."
+                    placeholder="Buscar..."
                     value={internalSearch}
                     onChange={(e) => setInternalSearch(e.target.value)}
                     className="pl-8"
                   />
+                </div>
+                <div className={cn(
+                  "flex-1 text-right font-semibold text-sm px-2 py-1.5 rounded-md",
+                  filteredInternalSum < 0 ? "text-destructive bg-destructive/10" : "text-green-600 bg-green-50"
+                )}>
+                  Total: {formatCurrency(filteredInternalSum)}
                 </div>
                 <div className="flex gap-1">
                   <Button
