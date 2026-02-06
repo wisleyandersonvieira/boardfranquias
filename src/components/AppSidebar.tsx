@@ -2,13 +2,12 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Calculator, 
-  CreditCard, 
+  DollarSign, 
   Users, 
   Package,
   BarChart3,
   Settings,
-  Database,
-  FileBarChart,
+  ClipboardList,
   ListTodo,
   Home,
   ChevronRight,
@@ -19,6 +18,7 @@ import {
   UserCircle,
   Sparkles
 } from "lucide-react";
+import React from "react";
 import {
   Tooltip,
   TooltipContent,
@@ -46,7 +46,8 @@ interface SubMenuItem {
 interface MenuItem {
   id: string;
   title: string;
-  icon: LucideIcon;
+  icon?: LucideIcon;
+  customIcon?: React.ReactNode;
   route?: string;
   subMenus?: SubMenuItem[];
   dynamicSubMenus?: boolean;
@@ -223,7 +224,7 @@ const AppSidebar = ({
     {
       id: "financeiro",
       title: "Financeiro",
-      icon: CreditCard,
+      icon: DollarSign,
       subMenus: [
         { id: "contas-pagar", label: "Contas a Pagar", action: "openAccountsPayable" },
         { id: "contas-receber", label: "Contas a Receber", action: "openAccountsReceivable" },
@@ -243,7 +244,7 @@ const AppSidebar = ({
     {
       id: "cadastros",
       title: "Cadastros",
-      icon: Database,
+      icon: ClipboardList,
       subMenus: [
         { id: "contas", label: "Contas", action: "openContas" },
         { id: "credores", label: "Credores", action: "openCreditors" },
@@ -261,7 +262,7 @@ const AppSidebar = ({
     {
       id: "dre",
       title: "DRE",
-      icon: FileBarChart,
+      customIcon: <span className="text-[11px] font-bold leading-none">DRE</span>,
       subMenus: [
         { id: "dre-competencia", label: "DRE Competência", route: "/dre/competencia" },
         { id: "dre-caixa", label: "DRE Regime de Caixa", route: "/dre/caixa" },
@@ -505,10 +506,18 @@ const AppSidebar = ({
                       isActive && "bg-primary text-primary-foreground"
                     )}
                   >
-                    <IconComponent className={cn(
-                      "h-6 w-6",
-                      isActive ? "text-primary-foreground" : "text-secondary-foreground"
-                    )} />
+                    {item.customIcon ? (
+                      <span className={cn(
+                        isActive ? "text-primary-foreground" : "text-secondary-foreground"
+                      )}>
+                        {item.customIcon}
+                      </span>
+                    ) : IconComponent ? (
+                      <IconComponent className={cn(
+                        "h-6 w-6",
+                        isActive ? "text-primary-foreground" : "text-secondary-foreground"
+                      )} />
+                    ) : null}
                   </button>
                 </TooltipTrigger>
                 <TooltipContent 
