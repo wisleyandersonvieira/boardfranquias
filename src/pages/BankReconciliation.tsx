@@ -207,7 +207,7 @@ const BankReconciliation = () => {
 
       if (profile?.role === 'admin') {
         // Admin sees all stores
-        const { data: storesData } = await (supabase as any).from('stores').select('id, name, code').eq('is_active', true);
+        const { data: storesData } = await (supabase as any).from('stores').select('id, name, code');
         stores = (storesData || []).sort((a: any, b: any) => a.name.localeCompare(b.name));
       } else {
         // Regular user - get stores from user_stores
@@ -218,7 +218,7 @@ const BankReconciliation = () => {
 
         if (userStoreLinks && userStoreLinks.length > 0) {
           const storeIds = userStoreLinks.map(us => us.store_id);
-          const { data: storesData } = await (supabase as any).from('stores').select('id, name, code').in('id', storeIds).eq('is_active', true);
+          const { data: storesData } = await (supabase as any).from('stores').select('id, name, code').in('id', storeIds);
           stores = (storesData || []).sort((a: any, b: any) => a.name.localeCompare(b.name));
         }
       }
