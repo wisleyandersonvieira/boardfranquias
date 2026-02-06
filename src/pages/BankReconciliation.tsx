@@ -149,8 +149,43 @@ const BankReconciliation = () => {
     // Clear internal selection when OFX selection changes
     setSelectedInternalIds([]);
     
-    if (selectedOfxIds.length > 0 && internalTransactions.length > 0) {
-      // Filter out already reconciled internal transactions from suggestions
+    const findMatchesForSelection = async () => {
+      if (selectedOfxIds.length === 0 || internalTransactions.length === 0) {
+        setMatchSuggestions([]);
+        return;
+      }
+
+      // Check if the selected OFX transaction is already reconciled (single selection only)
+      if (selectedOfxIds.length === 1) {
+        const ofxTx = ofxTransactions.find(t => t.id === selectedOfxIds[0]);
+        if (ofxTx?.is_reconciled) {
+          // Fetch the existing reconciliation to show which internal transaction it was matched with
+          const { data: reconciliation } = await supabase
+            .from('bank_reconciliations')
+            .select('internal_id, internal_table, internal_type, matched_rule, match_score')
+            .eq('ofx_transaction_id', ofxTx.id)
+            .maybeSingle();
+
+          if (reconciliation && reconciliation.internal_id) {
+            // Find the internal transaction that was matched
+            const matchedInternal = internalTransactions.find(t => t.id === reconciliation.internal_id);
+            if (matchedInternal) {
+              setMatchSuggestions([{
+                internalTransaction: matchedInternal,
+                score: reconciliation.match_score || 100,
+                matchRule: reconciliation.matched_rule as 'auto_exact' | 'auto_fuzzy' | 'manual',
+                reasons: ['Já conciliado'],
+              }]);
+              return;
+            }
+          }
+          // If no match found in current data, clear suggestions
+          setMatchSuggestions([]);
+          return;
+        }
+      }
+
+      // Filter out already reconciled internal transactions from suggestions for new reconciliations
       const availableInternalTransactions = internalTransactions.filter(
         t => !reconciledInternalIds.has(t.id)
       );
@@ -191,9 +226,9 @@ const BankReconciliation = () => {
         );
         setMatchSuggestions(matches);
       }
-    } else {
-      setMatchSuggestions([]);
-    }
+    };
+
+    findMatchesForSelection();
   }, [selectedOfxIds, internalTransactions, ofxTransactions, reconciledInternalIds]);
 
   const fetchUserStores = async () => {
