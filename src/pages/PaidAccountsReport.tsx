@@ -216,56 +216,70 @@ const PaidAccountsReport = () => {
   const handleSearch = async () => {
     setLoading(true);
     try {
-      // Fetch paid accounts with suppliers, employees, stores, installments and items with products
-      // Apply server-side filters to avoid hitting Supabase's default 1000 row limit
-      let accountsQuery = supabase
-        .from("accounts_payable")
-        .select(`
-          *,
-          suppliers(id, name),
-          employees(id, name),
-          stores(id, name),
-          accounts_payable_installments(*),
-          accounts_payable_items(
-            id,
-            product_id,
-            quantity,
-            unit_price,
-            total_price,
-            products(id, name, subgroup_id, account_groups:subgroup_id(id, name, parent_id))
-          )
-        `)
-        .in('status', ['paid', 'partial'])
-        .range(0, 4999);
+      // Helper: fetch all rows with automatic pagination (batches of 1000)
+      const fetchAllPaginated = async (buildQuery: () => any) => {
+        const PAGE_SIZE = 1000;
+        let allRows: any[] = [];
+        let from = 0;
+        let hasMore = true;
 
-      // Apply server-side store filter if selected
-      if (filters.store_id && filters.store_id !== "all") {
-        accountsQuery = accountsQuery.eq('store_id', filters.store_id);
-      }
+        while (hasMore) {
+          const { data, error } = await buildQuery().range(from, from + PAGE_SIZE - 1);
+          if (error) throw error;
+          if (data) {
+            allRows = allRows.concat(data);
+          }
+          hasMore = (data?.length ?? 0) === PAGE_SIZE;
+          from += PAGE_SIZE;
+        }
+        return allRows;
+      };
 
-      // Apply server-side supplier filter if selected
-      if (filters.supplier_id && filters.supplier_id !== "all") {
-        accountsQuery = accountsQuery.eq('supplier_id', filters.supplier_id);
-      }
+      // Fetch paid accounts with automatic pagination
+      const buildAccountsQuery = () => {
+        let q = supabase
+          .from("accounts_payable")
+          .select(`
+            *,
+            suppliers(id, name),
+            employees(id, name),
+            stores(id, name),
+            accounts_payable_installments(*),
+            accounts_payable_items(
+              id,
+              product_id,
+              quantity,
+              unit_price,
+              total_price,
+              products(id, name, subgroup_id, account_groups:subgroup_id(id, name, parent_id))
+            )
+          `)
+          .in('status', ['paid', 'partial']);
 
-      // Apply server-side employee filter if selected
-      if (filters.employee_id && filters.employee_id !== "all") {
-        accountsQuery = accountsQuery.eq('employee_id', filters.employee_id);
-      }
+        if (filters.store_id && filters.store_id !== "all") {
+          q = q.eq('store_id', filters.store_id);
+        }
+        if (filters.supplier_id && filters.supplier_id !== "all") {
+          q = q.eq('supplier_id', filters.supplier_id);
+        }
+        if (filters.employee_id && filters.employee_id !== "all") {
+          q = q.eq('employee_id', filters.employee_id);
+        }
+        return q;
+      };
 
-      const { data: allAccounts, error } = await accountsQuery as { data: any[] | null; error: any };
+      const allAccounts = await fetchAllPaginated(buildAccountsQuery);
 
-      if (error) throw error;
-
-      // Fetch payments data with interest/discount products
-      const { data: paymentsData } = await supabase
-        .from("accounts_payable_payments")
-        .select(`
-          *,
-          interest_product:interest_product_id(id, name, subgroup_id, account_groups:subgroup_id(id, name)),
-          discount_product:discount_product_id(id, name, subgroup_id, account_groups:subgroup_id(id, name))
-        `)
-        .range(0, 4999);
+      // Fetch payments data with automatic pagination
+      const paymentsData = await fetchAllPaginated(() =>
+        supabase
+          .from("accounts_payable_payments")
+          .select(`
+            *,
+            interest_product:interest_product_id(id, name, subgroup_id, account_groups:subgroup_id(id, name)),
+            discount_product:discount_product_id(id, name, subgroup_id, account_groups:subgroup_id(id, name))
+          `)
+      );
 
       // Create a map of payments by installment_id
       const paymentsByInstallmentId: { [key: string]: any } = {};
