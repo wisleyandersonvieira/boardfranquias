@@ -692,31 +692,38 @@ const PaidAccountsReport = () => {
         // Proportion: how much of the total was paid in this installment
         const proportion = totalItemsValue > 0 ? paidAmount / totalItemsValue : 1;
 
+        // Group items by subgroup within this account, summing their proportional values
+        const itemsBySubgroup: { [key: string]: { subgroupId: string; subgroupName: string; totalAmount: number } } = {};
         account.accounts_payable_items.forEach((item: any) => {
           const subgroupId = item.products?.subgroup_id || 'sem-subgrupo';
           const subgroupName = item.products?.account_groups?.name || 'Sem Subgrupo';
-          
+          const proportionalAmount = (item.total_price || 0) * proportion;
+
+          if (!itemsBySubgroup[subgroupId]) {
+            itemsBySubgroup[subgroupId] = { subgroupId, subgroupName, totalAmount: 0 };
+          }
+          itemsBySubgroup[subgroupId].totalAmount += proportionalAmount;
+        });
+
+        // Add one row per subgroup for this account
+        Object.values(itemsBySubgroup).forEach(({ subgroupId, subgroupName, totalAmount }) => {
           if (!accountsBySubgroup[subgroupId]) {
             accountsBySubgroup[subgroupId] = {
               subgroupName,
               items: []
             };
           }
-          
-          // For installment payments, use proportional value instead of full item price
-          const proportionalAmount = (item.total_price || 0) * proportion;
 
           accountsBySubgroup[subgroupId].items.push({
             description: account.description,
             supplierName: getSupplierOrEmployeeName(account),
             storeName: account.stores?.name || "N/A",
             paymentDate: account.payment_date,
-            amount: proportionalAmount,
+            amount: totalAmount,
             installmentNumber: account.installment_number,
             totalInstallments: account.total_installments,
             accountId: account.id,
             installmentId: account.installment_id,
-            productName: item.products?.name || "Produto"
           });
         });
       }
