@@ -1841,7 +1841,11 @@ export const DREView: React.FC<DREViewProps> = ({
         return total + value;
       } else if (item.item_type === 'initial_stock' || item.item_type === 'final_stock') {
         // Estoques: aplicar operation_type da estrutura
+        // Estoque final é sempre subtraído (negativo), estoque inicial é sempre somado (positivo)
         value = calculateStockTotal(item.id, data);
+        if (item.item_type === 'final_stock') {
+          return total - value;
+        }
         return total + (item.operation_type === 'credit' ? value : -value);
       }
       return total;
@@ -1860,8 +1864,11 @@ export const DREView: React.FC<DREViewProps> = ({
         const value = data.values[item.id] || 0;
         return total + value;
       } else if (item.item_type === 'initial_stock' || item.item_type === 'final_stock') {
-        // Estoques: aplicar operation_type da estrutura
+        // Estoques: estoque final é sempre subtraído
         const value = data.values[item.id] || 0;
+        if (item.item_type === 'final_stock') {
+          return total - value;
+        }
         return total + (item.operation_type === 'credit' ? value : -value);
       }
       return total;
@@ -2002,6 +2009,10 @@ export const DREView: React.FC<DREViewProps> = ({
               value = calculateSumLineTotal(item.id, data);
             } else if (item.item_type === 'initial_stock' || item.item_type === 'final_stock') {
               value = calculateStockTotal(item.id, data);
+              // Estoque final é sempre exibido como negativo
+              if (item.item_type === 'final_stock' && value !== 0) {
+                value = -Math.abs(value);
+              }
             }
 
             // Aplicar sinal negativo conforme operation_type
@@ -2266,7 +2277,8 @@ export const DREView: React.FC<DREViewProps> = ({
                               {item.item_type === 'subgroup' && formatCurrency(data.values[item.id] || 0)}
                               {item.item_type === 'group' && formatCurrency(calculateGroupTotal(item.id, data))}
                               {item.item_type === 'sum_line' && formatCurrency(calculateSumLineTotal(item.id, data))}
-                              {(item.item_type === 'initial_stock' || item.item_type === 'final_stock') && formatCurrency(calculateStockTotal(item.id, data))}
+                              {item.item_type === 'initial_stock' && formatCurrency(calculateStockTotal(item.id, data))}
+                              {item.item_type === 'final_stock' && formatCurrency(-(calculateStockTotal(item.id, data)))}
                             </TableCell>))}
                      </TableRow>)}
                  </TableBody>
