@@ -418,11 +418,17 @@ export const DREView: React.FC<DREViewProps> = ({
         const accountPayableIdsFromDirectPayment = paidAccounts?.map(acc => acc.id) || [];
         const accountPayableIds = [...new Set([...accountPayableIdsFromInstallments, ...accountPayableIdsFromDirectPayment])];
         if (accountPayableIds.length > 0) {
-          // Buscar as contas a pagar com seus itens, valor total e parcelas (quitadas ou parcialmente pagas)
-          const {
-            data,
-            error
-          } = await supabase.from('accounts_payable').select(`
+          // Buscar as contas a pagar em lotes para evitar Bad Request (URL muito longa)
+          const BATCH_SIZE = 50;
+          const allApData: any[] = [];
+          let apBatchError: any = null;
+          
+          for (let i = 0; i < accountPayableIds.length; i += BATCH_SIZE) {
+            const batchIds = accountPayableIds.slice(i, i + BATCH_SIZE);
+            const {
+              data: batchData,
+              error: batchError
+            } = await supabase.from('accounts_payable').select(`
               id,
               store_id,
               total_amount,
@@ -450,9 +456,17 @@ export const DREView: React.FC<DREViewProps> = ({
                 payment_date
               ),
               stores (name)
-            `).in('id', accountPayableIds).in('store_id', selectedStores).in('status', ['paid', 'partial']);
-          accountsPayableData = data;
-          apError = error;
+            `).in('id', batchIds).in('store_id', selectedStores).in('status', ['paid', 'partial']);
+            
+            if (batchError) {
+              apBatchError = batchError;
+              break;
+            }
+            if (batchData) allApData.push(...batchData);
+          }
+          
+          accountsPayableData = allApData;
+          apError = apBatchError;
         } else {
           accountsPayableData = [];
           apError = null;
@@ -593,10 +607,17 @@ export const DREView: React.FC<DREViewProps> = ({
         const accountReceivableIds = [...new Set([...accountReceivableIdsFromInstallments, ...accountReceivableIdsFromDirectPayment])];
 
         if (accountReceivableIds.length > 0) {
-          const {
-            data,
-            error
-          } = await supabase.from('accounts_receivable').select(`
+          // Buscar contas a receber em lotes para evitar Bad Request (URL muito longa)
+          const BATCH_SIZE = 50;
+          const allArData: any[] = [];
+          let arBatchError: any = null;
+          
+          for (let i = 0; i < accountReceivableIds.length; i += BATCH_SIZE) {
+            const batchIds = accountReceivableIds.slice(i, i + BATCH_SIZE);
+            const {
+              data: batchData,
+              error: batchError
+            } = await supabase.from('accounts_receivable').select(`
               id,
               store_id,
               total_amount,
@@ -624,9 +645,17 @@ export const DREView: React.FC<DREViewProps> = ({
                 payment_date
               ),
               stores (name)
-            `).in('id', accountReceivableIds).in('store_id', selectedStores).in('status', ['paid', 'partial']);
-          accountsReceivableData = data || [];
-          arError = error;
+            `).in('id', batchIds).in('store_id', selectedStores).in('status', ['paid', 'partial']);
+            
+            if (batchError) {
+              arBatchError = batchError;
+              break;
+            }
+            if (batchData) allArData.push(...batchData);
+          }
+          
+          accountsReceivableData = allArData;
+          arError = arBatchError;
         } else {
           accountsReceivableData = [];
           arError = null;
