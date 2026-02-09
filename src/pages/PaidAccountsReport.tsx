@@ -683,8 +683,15 @@ const PaidAccountsReport = () => {
     const accountsBySubgroup: { [key: string]: { subgroupName: string; items: any[] } } = {};
     
     accounts.forEach(account => {
-      // Process normal product items (original values, no interest/discount)
+      // Process normal product items - calculate proportional amount for installments
       if (account.accounts_payable_items && account.accounts_payable_items.length > 0) {
+        // Calculate the total of all items to determine proportion
+        const totalItemsValue = account.accounts_payable_items.reduce((sum: number, it: any) => sum + (it.total_price || 0), 0);
+        // The paid amount for this installment (excludes interest/discount)
+        const paidAmount = account.paid_amount ?? account.amount ?? 0;
+        // Proportion: how much of the total was paid in this installment
+        const proportion = totalItemsValue > 0 ? paidAmount / totalItemsValue : 1;
+
         account.accounts_payable_items.forEach((item: any) => {
           const subgroupId = item.products?.subgroup_id || 'sem-subgrupo';
           const subgroupName = item.products?.account_groups?.name || 'Sem Subgrupo';
@@ -696,13 +703,15 @@ const PaidAccountsReport = () => {
             };
           }
           
-          // Add item with its original value (total_price from the item, not the installment amount)
+          // For installment payments, use proportional value instead of full item price
+          const proportionalAmount = (item.total_price || 0) * proportion;
+
           accountsBySubgroup[subgroupId].items.push({
             description: account.description,
             supplierName: getSupplierOrEmployeeName(account),
             storeName: account.stores?.name || "N/A",
             paymentDate: account.payment_date,
-            amount: item.total_price || 0,
+            amount: proportionalAmount,
             installmentNumber: account.installment_number,
             totalInstallments: account.total_installments,
             accountId: account.id,
