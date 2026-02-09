@@ -875,6 +875,122 @@ const PaidAccountsReport = () => {
     doc.save("contas-pagas-por-subgrupo.pdf");
   };
 
+  const exportToPDFPorFornecedor = () => {
+    const doc = new jsPDF();
+    
+    // Header
+    doc.setFontSize(18);
+    doc.setFont("helvetica", "bold");
+    doc.text("RELATÓRIO DE CONTAS PAGAS POR FORNECEDOR", 105, 20, { align: "center" });
+    
+    const filterInfo = getFilterInfo();
+    
+    if (filterInfo.length > 0) {
+      doc.setFontSize(10);
+      doc.text(`Filtros aplicados: ${filterInfo.join(" | ")}`, 20, 30);
+    }
+    
+    // Group accounts by supplier
+    const accountsBySupplier: { [key: string]: { supplierName: string; items: any[] } } = {};
+    
+    accounts.forEach(account => {
+      const supplierId = account.supplier_id || account.employee_id || 'sem-fornecedor';
+      const supplierName = getSupplierOrEmployeeName(account);
+      
+      if (!accountsBySupplier[supplierId]) {
+        accountsBySupplier[supplierId] = {
+          supplierName,
+          items: []
+        };
+      }
+      
+      accountsBySupplier[supplierId].items.push({
+        description: account.description,
+        storeName: account.stores?.name || "N/A",
+        dueDate: account.due_date,
+        paymentDate: account.payment_date,
+        amount: account.paid_amount ?? account.amount ?? 0,
+        installmentNumber: account.installment_number,
+        totalInstallments: account.total_installments,
+      });
+    });
+    
+    // Sort suppliers alphabetically
+    const sortedSuppliers = Object.values(accountsBySupplier).sort((a, b) => 
+      a.supplierName.localeCompare(b.supplierName)
+    );
+    
+    // Build table data
+    const tableData: any[] = [];
+    let grandTotal = 0;
+    let totalItems = 0;
+    
+    sortedSuppliers.forEach(group => {
+      // Supplier header row
+      tableData.push([
+        { content: group.supplierName, colSpan: 6, styles: { fontStyle: "bold", fillColor: [220, 220, 220], fontSize: 10 } }
+      ]);
+      
+      // Items for this supplier
+      let supplierTotal = 0;
+      group.items.forEach(item => {
+        tableData.push([
+          item.description,
+          item.storeName,
+          item.dueDate ? new Date(item.dueDate + 'T00:00:00').toLocaleDateString("pt-BR") : "N/A",
+          item.paymentDate ? new Date(item.paymentDate + 'T00:00:00').toLocaleDateString("pt-BR") : "N/A",
+          item.amount?.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) || "N/A",
+          item.totalInstallments > 1 ? `${item.installmentNumber}/${item.totalInstallments}` : "À vista"
+        ]);
+        supplierTotal += item.amount || 0;
+        totalItems++;
+      });
+      
+      // Supplier subtotal
+      tableData.push([
+        { content: `Subtotal ${group.supplierName}`, colSpan: 4, styles: { fontStyle: "bold", halign: "right", fillColor: [240, 240, 240] } },
+        { content: supplierTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), styles: { fontStyle: "bold", fillColor: [240, 240, 240] } },
+        { content: `${group.items.length} item(s)`, styles: { fontStyle: "bold", fillColor: [240, 240, 240] } }
+      ]);
+      
+      grandTotal += supplierTotal;
+    });
+    
+    // Grand total row
+    tableData.push([
+      { content: "TOTAL GERAL", colSpan: 4, styles: { fontStyle: "bold", halign: "right", fillColor: [34, 197, 94], textColor: 255 } },
+      { content: grandTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), styles: { fontStyle: "bold", fillColor: [34, 197, 94], textColor: 255 } },
+      { content: `${totalItems} item(s)`, styles: { fontStyle: "bold", fillColor: [34, 197, 94], textColor: 255 } }
+    ]);
+
+    autoTable(doc, {
+      head: [["Título", "Loja", "Vencimento", "Pagamento", "Valor", "Parcelas"]],
+      body: tableData,
+      startY: filterInfo.length > 0 ? 37 : 27,
+      styles: {
+        fontSize: 9,
+        cellPadding: 3,
+      },
+      headStyles: {
+        fillColor: [34, 197, 94],
+        textColor: 255,
+        fontStyle: "bold"
+      },
+      margin: { left: 20, right: 20 }
+    });
+
+    // Footer
+    const pageCount = (doc as any).internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.text(`Gerado em: ${new Date().toLocaleString("pt-BR")}`, 20, doc.internal.pageSize.height - 10);
+      doc.text(`Página ${i} de ${pageCount}`, doc.internal.pageSize.width - 40, doc.internal.pageSize.height - 10);
+    }
+
+    doc.save("contas-pagas-por-fornecedor.pdf");
+  };
+
   const exportToExcel = () => {
     const excelData = accounts.map(account => ({
       Título: account.description,
@@ -1190,6 +1306,9 @@ const PaidAccountsReport = () => {
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={exportToPDFPorSubgrupo}>
                         Relatório por Subgrupo
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={exportToPDFPorFornecedor}>
+                        Relatório por Fornecedor
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
