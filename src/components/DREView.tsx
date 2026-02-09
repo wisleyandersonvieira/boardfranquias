@@ -901,9 +901,10 @@ export const DREView: React.FC<DREViewProps> = ({
               };
             }
 
-            // Proporção desta parcela em relação ao total de parcelas
-            // Cada parcela representa 1/N do valor base dos itens normais
-            const installmentProportion = 1 / totalInstallments;
+            // Proporção desta parcela em relação ao valor base da conta
+            // Usar o valor real da parcela paga, não divisão igual
+            const installmentAmount = parseFloat(installment.amount) || 0;
+            const installmentProportion = baseAccountAmount > 0 ? installmentAmount / baseAccountAmount : 1 / totalInstallments;
 
             // Processar itens normais proporcionalmente
             normalItems.forEach((item: any) => {
@@ -1318,9 +1319,10 @@ export const DREView: React.FC<DREViewProps> = ({
                 };
               }
 
-              // Proporção desta parcela em relação ao total de parcelas
-              // Cada parcela representa 1/N do valor base dos itens normais
-              const installmentProportion = 1 / totalInstallments;
+              // Proporção desta parcela em relação ao valor base da conta
+              // Usar o valor real da parcela recebida, não divisão igual
+              const installmentAmount = parseFloat(installment.amount) || 0;
+              const installmentProportion = baseAccountAmount > 0 ? installmentAmount / baseAccountAmount : 1 / totalInstallments;
 
               // Processar itens normais proporcionalmente
               normalItems.forEach((item: any) => {
