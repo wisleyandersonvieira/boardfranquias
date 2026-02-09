@@ -217,7 +217,8 @@ const PaidAccountsReport = () => {
     setLoading(true);
     try {
       // Fetch paid accounts with suppliers, employees, stores, installments and items with products
-      const { data: allAccounts, error } = await supabase
+      // Apply server-side filters to avoid hitting Supabase's default 1000 row limit
+      let accountsQuery = supabase
         .from("accounts_payable")
         .select(`
           *,
@@ -233,7 +234,26 @@ const PaidAccountsReport = () => {
             total_price,
             products(id, name, subgroup_id, account_groups:subgroup_id(id, name, parent_id))
           )
-        `) as { data: any[] | null; error: any };
+        `)
+        .in('status', ['paid', 'partial'])
+        .range(0, 4999);
+
+      // Apply server-side store filter if selected
+      if (filters.store_id && filters.store_id !== "all") {
+        accountsQuery = accountsQuery.eq('store_id', filters.store_id);
+      }
+
+      // Apply server-side supplier filter if selected
+      if (filters.supplier_id && filters.supplier_id !== "all") {
+        accountsQuery = accountsQuery.eq('supplier_id', filters.supplier_id);
+      }
+
+      // Apply server-side employee filter if selected
+      if (filters.employee_id && filters.employee_id !== "all") {
+        accountsQuery = accountsQuery.eq('employee_id', filters.employee_id);
+      }
+
+      const { data: allAccounts, error } = await accountsQuery as { data: any[] | null; error: any };
 
       if (error) throw error;
 
@@ -244,7 +264,8 @@ const PaidAccountsReport = () => {
           *,
           interest_product:interest_product_id(id, name, subgroup_id, account_groups:subgroup_id(id, name)),
           discount_product:discount_product_id(id, name, subgroup_id, account_groups:subgroup_id(id, name))
-        `);
+        `)
+        .range(0, 4999);
 
       // Create a map of payments by installment_id
       const paymentsByInstallmentId: { [key: string]: any } = {};
@@ -268,11 +289,9 @@ const PaidAccountsReport = () => {
         }
       }
 
-      // Filter for paid or partial accounts and expand installments
+      // Expand installments into individual rows
       let accountsData: any[] = [];
       (allAccounts || []).forEach((account: any) => {
-        // Include both 'paid' and 'partial' status - we want to show paid installments
-        if (account.status !== 'paid' && account.status !== 'partial') return;
 
         // If filtering by account, check if this account was paid with the selected account
         if (filters.account_id && filters.account_id !== "all") {
@@ -364,13 +383,7 @@ const PaidAccountsReport = () => {
         });
       }
 
-      if (filters.supplier_id && filters.supplier_id !== "all") {
-        accountsData = accountsData.filter((account: any) => account.supplier_id === filters.supplier_id);
-      }
-
-      if (filters.store_id && filters.store_id !== "all") {
-        accountsData = accountsData.filter((account: any) => account.store_id === filters.store_id);
-      }
+      // supplier, store, and employee filters are now applied server-side
 
       // Filter by product - show accounts that have at least one item with the selected product
       if (filters.product_id && filters.product_id !== "all") {
@@ -401,10 +414,7 @@ const PaidAccountsReport = () => {
         });
       }
 
-      // Filter by employee
-      if (filters.employee_id && filters.employee_id !== "all") {
-        accountsData = accountsData.filter((account: any) => account.employee_id === filters.employee_id);
-      }
+      // employee filter is now applied server-side
 
       setAccounts(accountsData);
       toast({
