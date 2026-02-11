@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Eye, Download, ArrowLeft, FileSpreadsheet, ChevronDown } from "lucide-react";
+import { Eye, Download, ArrowLeft, FileSpreadsheet, ChevronDown, Layers } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,6 +18,7 @@ import * as XLSX from 'xlsx';
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { useUserMatrix } from "@/hooks/useUserMatrix";
 interface Store {
   id: string;
@@ -60,6 +61,7 @@ export const DREView: React.FC<DREViewProps> = ({
   const [selectedStructure, setSelectedStructure] = useState("");
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
   const [loading, setLoading] = useState(false);
+  const [groupStores, setGroupStores] = useState(false);
   const [userBrandId, setUserBrandId] = useState<string | null>(null);
   const { matrixId } = useUserMatrix();
   const {
@@ -1928,11 +1930,15 @@ export const DREView: React.FC<DREViewProps> = ({
         const monthName = `${getMonthName(parseInt(month))} ${year}`;
         periodData.forEach(data => {
           headerRow1.push(monthName);
-          headerRow2.push(data.store_name);
+          if (!groupStores) {
+            headerRow2.push(data.store_name);
+          }
         });
       });
       exportData.push(headerRow1);
-      exportData.push(headerRow2);
+      if (!groupStores) {
+        exportData.push(headerRow2);
+      }
 
       // Dados das linhas
       structureItems.forEach(item => {
@@ -1987,7 +1993,7 @@ export const DREView: React.FC<DREViewProps> = ({
       doc.text(`Ano: ${selectedYear}`, 20, 30);
 
       // Preparar dados para a tabela com metadados de estilo
-      const tableHeaders: string[][] = [['Descrição'], ['']];
+      const tableHeaders: string[][] = groupStores ? [['Descrição']] : [['Descrição'], ['']];
       const tableData: {
         content: string;
         styles?: any;
@@ -1997,13 +2003,15 @@ export const DREView: React.FC<DREViewProps> = ({
         isNegative: boolean[];
       }[] = [];
 
-      // Cabeçalhos das colunas (duas linhas: período e loja)
+      // Cabeçalhos das colunas
       Object.entries(groupedData).forEach(([periodKey, periodData]) => {
         const [year, month] = periodKey.split('-');
         const monthName = `${getMonthName(parseInt(month))} ${year}`;
         periodData.forEach(data => {
           tableHeaders[0].push(monthName);
-          tableHeaders[1].push(data.store_name);
+          if (!groupStores) {
+            tableHeaders[1].push(data.store_name);
+          }
         });
       });
 
@@ -2128,25 +2136,43 @@ export const DREView: React.FC<DREViewProps> = ({
     }
   };
 
-  // Agrupar dados por mês, mantendo separação por loja
+  // Agrupar dados por mês, mantendo separação por loja (ou agrupando lojas)
   const groupedDataUnsorted = dreData.reduce((acc, data) => {
     const key = `${data.year}-${data.month}`;
     if (!acc[key]) {
       acc[key] = [];
     }
-    // Verificar se já existe uma entrada para esta loja neste período
-    const existingStoreIndex = acc[key].findIndex(item => item.store_id === data.store_id);
-    if (existingStoreIndex >= 0) {
-      // Somar os valores se já existe entrada para esta loja
-      Object.keys(data.values).forEach(structureItemId => {
-        if (!acc[key][existingStoreIndex].values[structureItemId]) {
-          acc[key][existingStoreIndex].values[structureItemId] = 0;
-        }
-        acc[key][existingStoreIndex].values[structureItemId] += data.values[structureItemId];
-      });
+
+    if (groupStores) {
+      // Modo agrupado: todas as lojas somadas em uma única entrada por período
+      if (acc[key].length === 0) {
+        acc[key].push({
+          ...data,
+          store_id: 'grouped',
+          store_name: 'Todas as Lojas',
+          values: { ...data.values }
+        });
+      } else {
+        Object.keys(data.values).forEach(structureItemId => {
+          if (!acc[key][0].values[structureItemId]) {
+            acc[key][0].values[structureItemId] = 0;
+          }
+          acc[key][0].values[structureItemId] += data.values[structureItemId];
+        });
+      }
     } else {
-      // Adicionar nova entrada se não existe para esta loja
-      acc[key].push(data);
+      // Modo normal: separação por loja
+      const existingStoreIndex = acc[key].findIndex(item => item.store_id === data.store_id);
+      if (existingStoreIndex >= 0) {
+        Object.keys(data.values).forEach(structureItemId => {
+          if (!acc[key][existingStoreIndex].values[structureItemId]) {
+            acc[key][existingStoreIndex].values[structureItemId] = 0;
+          }
+          acc[key][existingStoreIndex].values[structureItemId] += data.values[structureItemId];
+        });
+      } else {
+        acc[key].push(data);
+      }
     }
     return acc;
   }, {} as Record<string, DREData[]>);
@@ -2235,15 +2261,28 @@ export const DREView: React.FC<DREViewProps> = ({
             </div>
           </div>
 
-          <div className="flex justify-between mt-6">
+          <div className="flex items-center justify-between mt-6">
             <Button variant="outline" onClick={() => window.history.back()}>
               <ArrowLeft className="h-4 w-4 mr-2" />
               Voltar
             </Button>
-            <Button onClick={loadDREData} disabled={loading}>
-              <Eye className="h-4 w-4 mr-2" />
-              {loading ? "Carregando..." : "Visualizar DRE"}
-            </Button>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="group-stores"
+                  checked={groupStores}
+                  onCheckedChange={setGroupStores}
+                />
+                <Label htmlFor="group-stores" className="flex items-center gap-1 cursor-pointer text-sm">
+                  <Layers className="h-4 w-4" />
+                  Agrupar Lojas
+                </Label>
+              </div>
+              <Button onClick={loadDREData} disabled={loading}>
+                <Eye className="h-4 w-4 mr-2" />
+                {loading ? "Carregando..." : "Visualizar DRE"}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -2289,12 +2328,12 @@ export const DREView: React.FC<DREViewProps> = ({
                         </TableHead>;
                 })}
                   </TableRow>
-                  <TableRow>
+                  {!groupStores && <TableRow>
                     <TableHead></TableHead>
                     {Object.entries(groupedData).map(([periodKey, periodData]) => periodData.map((data, index) => <TableHead key={`${periodKey}-${index}`} className="text-center">
                           {data.store_name}
                         </TableHead>))}
-                  </TableRow>
+                  </TableRow>}
                 </TableHeader>
                  <TableBody>
                    {structureItems.map(item => <TableRow key={item.id} className={`h-8 ${item.item_type === 'group' ? 'font-bold' : item.item_type === 'sum_line' ? 'bg-muted/70 font-bold' : ''}`}>
