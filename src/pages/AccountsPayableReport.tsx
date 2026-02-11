@@ -26,18 +26,21 @@ const AccountsPayableReport = () => {
     supplier_id: "all",
     store_id: "all",
     product_id: "all",
+    group_id: "all",
   });
 
   const [accounts, setAccounts] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [stores, setStores] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
+  const [groups, setGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     fetchSuppliers();
     fetchStores();
     fetchProducts();
+    fetchGroups();
   }, []);
 
   const fetchSuppliers = async () => {
@@ -87,6 +90,15 @@ const AccountsPayableReport = () => {
     setProducts(data || []);
   };
 
+  const fetchGroups = async () => {
+    const { data } = await supabase
+      .from("account_groups")
+      .select("id, name")
+      .is("parent_id", null)
+      .order("name");
+    setGroups(data || []);
+  };
+
   const handleSearch = async () => {
     setLoading(true);
     try {
@@ -111,7 +123,7 @@ const AccountsPayableReport = () => {
             quantity,
             unit_price,
             total_price,
-            products(id, name, subgroup_id, account_groups:subgroup_id(id, name))
+            products(id, name, subgroup_id, account_groups:subgroup_id(id, name, parent_id))
           )
         `) as { data: any[] | null; error: any };
 
@@ -223,6 +235,17 @@ const AccountsPayableReport = () => {
         accountsData = accountsData.filter((account: any) => account.store_id === filters.store_id);
       }
 
+      // Filter by group (parent group of product's subgroup)
+      if (filters.group_id && filters.group_id !== "all") {
+        accountsData = accountsData.filter((account: any) => {
+          if (!account.accounts_payable_items || account.accounts_payable_items.length === 0) return false;
+          return account.accounts_payable_items.some((item: any) => {
+            const subgroup = item.products?.account_groups;
+            return subgroup?.parent_id === filters.group_id;
+          });
+        });
+      }
+
       setAccounts(accountsData);
       toast({
         title: "Pesquisa realizada",
@@ -251,6 +274,7 @@ const AccountsPayableReport = () => {
       supplier_id: "all",
       store_id: "all",
       product_id: "all",
+      group_id: "all",
     });
     setAccounts([]);
   };
@@ -269,6 +293,10 @@ const AccountsPayableReport = () => {
     if (filters.store_id !== "all") {
       const store = stores.find(s => s.id === filters.store_id);
       if (store) filterInfo.push(`Loja: ${store.name}`);
+    }
+    if (filters.group_id !== "all") {
+      const group = groups.find(g => g.id === filters.group_id);
+      if (group) filterInfo.push(`Grupo: ${group.name}`);
     }
     return filterInfo;
   };
@@ -690,51 +718,34 @@ const AccountsPayableReport = () => {
       doc.text(`Filtros aplicados: ${filterInfo.join(" | ")}`, 20, 38);
     }
 
-    // Group accounts by subgroup
-    const accountsBySubgroup: { [key: string]: { subgroupName: string; items: any[] } } = {};
+    // Group and aggregate by subgroup - one line per subgroup with summed amount
+    const subgroupTotals: { [key: string]: { subgroupName: string; totalAmount: number } } = {};
     
     accounts.forEach((account: any) => {
-      // Calculate the installment proportion for parcelado accounts
-      // For installment accounts: proportion = installment_amount / total_title_amount
-      // Interest and discounts are applied fully to each installment
-      
-      let installmentProportion = 1; // Default: full amount (à vista)
+      let installmentProportion = 1;
       let interestAmount = 0;
       let discountAmount = 0;
       
       if (account.total_installments > 1) {
-        // This is a parcelado account - calculate proportion
-        // We need to get the original total amount (sum of all installments or total_amount)
         const originalTotalAmount = account.total_amount || account.amount * account.total_installments;
-        
         if (originalTotalAmount > 0) {
-          // Get the installment base amount (without interest/discount adjustments from payments)
           const installmentBaseAmount = originalTotalAmount / account.total_installments;
           installmentProportion = installmentBaseAmount / originalTotalAmount;
         }
-        
-        // Check for interest/discount from payments on this specific installment
         const payments = account.accounts_payable_payments || [];
-        if (payments.length > 0) {
-          payments.forEach((payment: any) => {
-            interestAmount += payment.interest_amount || 0;
-            discountAmount += payment.discount_amount || 0;
-          });
-        }
+        payments.forEach((payment: any) => {
+          interestAmount += payment.interest_amount || 0;
+          discountAmount += payment.discount_amount || 0;
+        });
       } else {
-        // À vista - check for interest/discount
         const payments = account.accounts_payable_payments || [];
-        if (payments.length > 0) {
-          payments.forEach((payment: any) => {
-            interestAmount += payment.interest_amount || 0;
-            discountAmount += payment.discount_amount || 0;
-          });
-        }
+        payments.forEach((payment: any) => {
+          interestAmount += payment.interest_amount || 0;
+          discountAmount += payment.discount_amount || 0;
+        });
       }
       
-      // Process items
       if (account.accounts_payable_items && account.accounts_payable_items.length > 0) {
-        // Calculate total of all items to distribute interest/discount proportionally
         const totalItemsValue = account.accounts_payable_items.reduce(
           (sum: number, item: any) => sum + (item.total_price || 0), 0
         );
@@ -743,94 +754,50 @@ const AccountsPayableReport = () => {
           const subgroupId = item.products?.subgroup_id || 'sem-subgrupo';
           const subgroupName = item.products?.account_groups?.name || 'Sem Subgrupo';
           
-          if (!accountsBySubgroup[subgroupId]) {
-            accountsBySubgroup[subgroupId] = {
-              subgroupName,
-              items: []
-            };
-          }
-          
-          // Calculate proportional item amount for this installment
           let itemAmount = (item.total_price || 0) * installmentProportion;
-          
-          // Distribute interest/discount proportionally to items based on their value
           if (totalItemsValue > 0 && (interestAmount > 0 || discountAmount > 0)) {
             const itemProportion = (item.total_price || 0) / totalItemsValue;
             itemAmount += (interestAmount * itemProportion) - (discountAmount * itemProportion);
           }
           
-          accountsBySubgroup[subgroupId].items.push({
-            description: account.description,
-            supplierName: account.employees?.name || account.suppliers?.name || "N/A",
-            storeName: account.stores?.name || "N/A",
-            dueDate: account.due_date,
-            amount: itemAmount,
-            productName: item.products?.name || "Produto",
-            installmentInfo: account.total_installments > 1 ? `${account.installment_number}/${account.total_installments}` : null
-          });
+          if (!subgroupTotals[subgroupId]) {
+            subgroupTotals[subgroupId] = { subgroupName, totalAmount: 0 };
+          }
+          subgroupTotals[subgroupId].totalAmount += itemAmount;
         });
       } else {
-        // No items - add to "Sem Subgrupo"
-        if (!accountsBySubgroup['sem-subgrupo']) {
-          accountsBySubgroup['sem-subgrupo'] = {
-            subgroupName: 'Sem Subgrupo',
-            items: []
-          };
+        if (!subgroupTotals['sem-subgrupo']) {
+          subgroupTotals['sem-subgrupo'] = { subgroupName: 'Sem Subgrupo', totalAmount: 0 };
         }
-        
-        // For accounts without items, use the already adjusted amount
-        accountsBySubgroup['sem-subgrupo'].items.push({
-          description: account.description,
-          supplierName: account.employees?.name || account.suppliers?.name || "N/A",
-          storeName: account.stores?.name || "N/A",
-          dueDate: account.due_date,
-          amount: account.amount || 0,
-          productName: null,
-          installmentInfo: account.total_installments > 1 ? `${account.installment_number}/${account.total_installments}` : null
-        });
+        subgroupTotals['sem-subgrupo'].totalAmount += account.amount || 0;
       }
     });
 
-    // Build table data
+    // Build table data - one line per subgroup
     const tableData: any[] = [];
     let grandTotal = 0;
     
-    Object.values(accountsBySubgroup).forEach(group => {
-      // Subgroup header row
+    // Sort subgroups by name
+    const sortedSubgroups = Object.values(subgroupTotals).sort((a, b) => 
+      a.subgroupName.localeCompare(b.subgroupName)
+    );
+    
+    sortedSubgroups.forEach(group => {
       tableData.push([
-        { content: group.subgroupName, colSpan: 5, styles: { fontStyle: "bold", fillColor: [220, 220, 220], fontSize: 10 } }
+        group.subgroupName,
+        group.totalAmount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
       ]);
-      
-      // Items for this subgroup
-      let subgroupTotal = 0;
-      group.items.forEach(item => {
-        tableData.push([
-          item.description,
-          item.supplierName,
-          item.storeName,
-          item.dueDate ? new Date(item.dueDate + 'T00:00:00').toLocaleDateString("pt-BR") : "N/A",
-          item.amount?.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) || "N/A"
-        ]);
-        subgroupTotal += item.amount || 0;
-      });
-      
-      // Subgroup subtotal
-      tableData.push([
-        { content: `Subtotal ${group.subgroupName}`, colSpan: 4, styles: { fontStyle: "bold", halign: "right", fillColor: [240, 240, 240] } },
-        { content: subgroupTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), styles: { fontStyle: "bold", fillColor: [240, 240, 240] } }
-      ]);
-      
-      grandTotal += subgroupTotal;
+      grandTotal += group.totalAmount;
     });
     
     // Grand total row
     tableData.push([
-      { content: "TOTAL GERAL", colSpan: 4, styles: { fontStyle: "bold", halign: "right", fillColor: [41, 128, 185], textColor: 255 } },
+      { content: "TOTAL GERAL", styles: { fontStyle: "bold", halign: "right", fillColor: [41, 128, 185], textColor: 255 } },
       { content: grandTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), styles: { fontStyle: "bold", fillColor: [41, 128, 185], textColor: 255 } }
     ]);
 
     autoTable(doc, {
-      head: [["Descrição", "Fornecedor", "Loja", "Vencimento", "Valor"]],
+      head: [["Subgrupo", "Valor"]],
       body: tableData,
       startY: filterInfo.length > 0 ? 45 : 35,
       styles: {
@@ -985,6 +952,22 @@ const AccountsPayableReport = () => {
                     {stores.map((store) => (
                       <SelectItem key={store.id} value={store.id}>
                         {store.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Grupo</Label>
+                <Select value={filters.group_id} onValueChange={(value) => setFilters(prev => ({...prev, group_id: value}))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecionar grupo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    {groups.map((group) => (
+                      <SelectItem key={group.id} value={group.id}>
+                        {group.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
