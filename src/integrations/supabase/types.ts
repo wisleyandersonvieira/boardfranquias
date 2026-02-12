@@ -3029,6 +3029,7 @@ export type Database = {
           cnpj_cpf: string | null
           contact_person: string | null
           created_at: string
+          created_by: string | null
           email: string | null
           id: string
           is_active: boolean
@@ -3039,6 +3040,7 @@ export type Database = {
           store_id: string | null
           trade_name: string | null
           updated_at: string
+          updated_by: string | null
         }
         Insert: {
           address?: string | null
@@ -3046,6 +3048,7 @@ export type Database = {
           cnpj_cpf?: string | null
           contact_person?: string | null
           created_at?: string
+          created_by?: string | null
           email?: string | null
           id?: string
           is_active?: boolean
@@ -3056,6 +3059,7 @@ export type Database = {
           store_id?: string | null
           trade_name?: string | null
           updated_at?: string
+          updated_by?: string | null
         }
         Update: {
           address?: string | null
@@ -3063,6 +3067,7 @@ export type Database = {
           cnpj_cpf?: string | null
           contact_person?: string | null
           created_at?: string
+          created_by?: string | null
           email?: string | null
           id?: string
           is_active?: boolean
@@ -3073,6 +3078,7 @@ export type Database = {
           store_id?: string | null
           trade_name?: string | null
           updated_at?: string
+          updated_by?: string | null
         }
         Relationships: [
           {
