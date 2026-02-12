@@ -300,6 +300,7 @@ const AppSidebar = ({
         { id: "func-funcionarios", label: "Funcionários", action: "openEmployees" },
         { id: "func-movimentacoes", label: "Movimentações", action: "openEmployeeMovements" },
         { id: "func-obrigacoes", label: "Obrigações", action: "openObligations" },
+        { id: "func-rel-funcionarios", label: "📊 Relatório de Funcionários", route: "/reports/employees" },
       ],
     },
     {
