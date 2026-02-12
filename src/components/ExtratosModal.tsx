@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { addPdfHeaderWithLogo, renderPdfHeader } from "@/utils/pdfHeader";
 import * as XLSX from "xlsx";
 import { Progress } from "@/components/ui/progress";
 
@@ -708,24 +709,20 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
     }
   }, [selectedStore, selectedAccount, startDate, endDate, accounts, toast]);
 
-  const exportToPDF = () => {
+  const exportToPDF = async () => {
     const doc = new jsPDF();
     const accountName = accounts.find(acc => acc.id === selectedAccount)?.name || '';
     const periodText = startDate && endDate 
       ? `${format(startDate, "dd/MM/yyyy")} a ${format(endDate, "dd/MM/yyyy")}` 
       : '';
 
-    doc.setFontSize(18);
-    doc.setFont("helvetica", "bold");
-    doc.text("EXTRATO DE CONTA", 105, 20, { align: "center" });
+    const title = "Extrato de Conta";
+    const startY = await addPdfHeaderWithLogo(doc, title);
     
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "normal");
-    doc.text(accountName, 105, 28, { align: "center" });
-    doc.text(`Período: ${periodText}`, 105, 35, { align: "center" });
-    
-    doc.setFontSize(10);
-    doc.text(`Saldo Anterior: ${formatCurrency(saldoAnterior)}`, 20, 45);
+    doc.setFontSize(9);
+    doc.text(`Conta: ${accountName} | Período: ${periodText}`, 14, startY);
+    doc.text(`Saldo Anterior: ${formatCurrency(saldoAnterior)}`, 14, startY + 5);
+    const tableStartY = startY + 10;
 
     const tableData = extratoItems.map(item => [
       format(item.date, 'dd/MM/yyyy'),
@@ -751,7 +748,7 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
     autoTable(doc, {
       head: [["Data", "Descrição", "Número", "Parcela", "Entrada", "Saída", "Saldo"]],
       body: tableData,
-      startY: 52,
+      startY: tableStartY,
       styles: { fontSize: 8, cellPadding: 2 },
       headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: "bold" },
       columnStyles: {
@@ -764,7 +761,8 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
         6: { cellWidth: 25, halign: 'right' }
       },
       alternateRowStyles: { fillColor: [245, 245, 245] },
-      margin: { left: 10, right: 10 }
+      margin: { left: 10, right: 10, top: startY },
+      didDrawPage: (data: any) => { if (data.pageNumber > 1) renderPdfHeader(doc, title); }
     });
 
     const pageCount = (doc as any).internal.getNumberOfPages();
