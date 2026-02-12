@@ -107,6 +107,10 @@ const DashboardLayout = ({ children, user, pendingTasks }: DashboardLayoutProps)
         onOpenGrupos={() => setGrupoModalOpen(true)}
         onOpenSubgrupos={() => setSubgrupoModalOpen(true)}
         onOpenContas={() => setContasModalOpen(true)}
+        onOpenCurrentAccounts={() => setCurrentAccountsModalOpen(true)}
+        onOpenCashAccounts={() => setCashAccountsModalOpen(true)}
+        onOpenCardAccounts={() => setCardAccountsModalOpen(true)}
+        onOpenDelivery={() => setDeliveryModalOpen(true)}
         onOpenParameters={() => setParametersModalOpen(true)}
         onOpenJobFunctions={() => setJobFunctionsOpen(true)}
         onOpenEmployees={() => setEmployeesOpen(true)}

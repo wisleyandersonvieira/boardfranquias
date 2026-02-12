@@ -73,6 +73,10 @@ interface AppSidebarProps {
   onOpenGrupos: () => void;
   onOpenSubgrupos: () => void;
   onOpenContas: () => void;
+  onOpenCurrentAccounts: () => void;
+  onOpenCashAccounts: () => void;
+  onOpenCardAccounts: () => void;
+  onOpenDelivery: () => void;
   onOpenParameters: () => void;
   onOpenJobFunctions: () => void;
   onOpenEmployees: () => void;
@@ -97,6 +101,10 @@ const AppSidebar = ({
   onOpenGrupos,
   onOpenSubgrupos,
   onOpenContas,
+  onOpenCurrentAccounts,
+  onOpenCashAccounts,
+  onOpenCardAccounts,
+  onOpenDelivery,
   onOpenParameters,
   onOpenJobFunctions,
   onOpenEmployees,
@@ -248,7 +256,12 @@ const AppSidebar = ({
       title: "Cadastros",
       icon: ClipboardList,
       subMenus: [
-        { id: "contas", label: "Contas", action: "openContas" },
+        { id: "contas", label: "Contas", children: [
+          { id: "contas-correntes", label: "Contas Correntes", action: "openCurrentAccounts" },
+          { id: "contas-caixa", label: "Contas Caixa", action: "openCashAccounts" },
+          { id: "contas-cartao", label: "Contas Cartão", action: "openCardAccounts" },
+          { id: "contas-delivery", label: "Delivery", action: "openDelivery" },
+        ]},
         { id: "credores", label: "Credores", action: "openCreditors" },
         { id: "fornecedores", label: "Fornecedores", action: "openSuppliers" },
         { id: "grupos", label: "Grupos", action: "openGrupos" },
@@ -446,6 +459,18 @@ const AppSidebar = ({
           break;
         case "openContas":
           onOpenContas();
+          break;
+        case "openCurrentAccounts":
+          onOpenCurrentAccounts();
+          break;
+        case "openCashAccounts":
+          onOpenCashAccounts();
+          break;
+        case "openCardAccounts":
+          onOpenCardAccounts();
+          break;
+        case "openDelivery":
+          onOpenDelivery();
           break;
         case "openParameters":
           onOpenParameters();
