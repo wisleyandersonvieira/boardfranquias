@@ -31,6 +31,7 @@ interface Transfer {
   created_by: string;
   created_at: string;
   updated_at: string;
+  updated_by?: string;
   source_account_name?: string;
   destination_account_name?: string;
 }

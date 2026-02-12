@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Separator } from "@/components/ui/separator";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -51,6 +52,10 @@ interface Transfer {
   destination_account_type: 'current' | 'cash' | 'card' | 'delivery';
   amount: number;
   description: string | null;
+  created_by?: string;
+  created_at?: string;
+  updated_at?: string;
+  updated_by?: string;
 }
 
 interface Store {
@@ -83,6 +88,8 @@ export function TransferFormModal({
   accounts 
 }: TransferFormModalProps) {
   const [loading, setLoading] = useState(false);
+  const [createdByName, setCreatedByName] = useState<string | null>(null);
+  const [updatedByName, setUpdatedByName] = useState<string | null>(null);
   const { toast } = useToast();
 
   const form = useForm<FormData>({
@@ -110,6 +117,24 @@ export function TransferFormModal({
         amount: transfer.amount.toString() as any,
         description: transfer.description || "",
       });
+
+      // Fetch log names when in readonly mode
+      if (readonly) {
+        const fetchNames = async () => {
+          if (transfer.created_by) {
+            const { data } = await supabase.rpc("get_profile_name", { p_user_id: transfer.created_by });
+            setCreatedByName(data || 'Usuário não identificado');
+          }
+          if (transfer.updated_by && transfer.updated_at && transfer.created_at &&
+              new Date(transfer.updated_at).getTime() !== new Date(transfer.created_at).getTime()) {
+            const { data } = await supabase.rpc("get_profile_name", { p_user_id: transfer.updated_by });
+            setUpdatedByName(data || 'Usuário não identificado');
+          } else {
+            setUpdatedByName(null);
+          }
+        };
+        fetchNames();
+      }
     } else if (!transfer && open) {
       form.reset({
         transfer_date: new Date(),
@@ -120,8 +145,10 @@ export function TransferFormModal({
         amount: "" as any,
         description: "",
       });
+      setCreatedByName(null);
+      setUpdatedByName(null);
     }
-  }, [transfer, open, form]);
+  }, [transfer, open, form, readonly]);
 
   const onSubmit = async (data: FormData) => {
     if (readonly) return;
@@ -206,10 +233,10 @@ export function TransferFormModal({
     let error;
 
     if (transfer) {
-      // Atualizar
+      // Atualizar - include updated_by
       const result = await supabase
         .from('transfers')
-        .update(transferData)
+        .update({ ...transferData, updated_by: userId })
         .eq('id', transfer.id);
       error = result.error;
     } else {
@@ -457,6 +484,37 @@ export function TransferFormModal({
                 </FormItem>
               )}
             />
+
+            {readonly && (createdByName || updatedByName) && (
+              <div className="space-y-3 pt-2">
+                <Separator />
+                <h4 className="text-sm font-semibold text-muted-foreground">Log de Atividades</h4>
+                <div className="space-y-2 text-sm">
+                  {createdByName && transfer?.created_at && (
+                    <div className="flex justify-between items-center p-2 bg-muted rounded-lg">
+                      <div>
+                        <span className="font-medium">Cadastrado por:</span>{" "}
+                        <span>{createdByName}</span>
+                      </div>
+                      <span className="text-muted-foreground text-xs">
+                        {new Date(transfer.created_at).toLocaleString('pt-BR')}
+                      </span>
+                    </div>
+                  )}
+                  {updatedByName && transfer?.updated_at && (
+                    <div className="flex justify-between items-center p-2 bg-muted rounded-lg">
+                      <div>
+                        <span className="font-medium">Última alteração por:</span>{" "}
+                        <span>{updatedByName}</span>
+                      </div>
+                      <span className="text-muted-foreground text-xs">
+                        {new Date(transfer.updated_at).toLocaleString('pt-BR')}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {!readonly && (
               <div className="flex gap-2 justify-end pt-4">
