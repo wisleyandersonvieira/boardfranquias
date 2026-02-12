@@ -40,6 +40,7 @@ import AIAssistant from "./pages/AIAssistant";
 import AccountingExportReport from "./pages/AccountingExportReport";
 import BankReconciliation from "./pages/BankReconciliation";
 import EmployeeReport from "./pages/EmployeeReport";
+import PurchasesReport from "./pages/PurchasesReport";
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -90,6 +91,7 @@ function App() {
               <Route path="/ai-assistant" element={<AIAssistant />} />
               <Route path="/bank-reconciliation" element={<BankReconciliation />} />
               <Route path="/reports/employees" element={<EmployeeReport />} />
+              <Route path="/reports/purchases" element={<PurchasesReport />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
             <Toaster />

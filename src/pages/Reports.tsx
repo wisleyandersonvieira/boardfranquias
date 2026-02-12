@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, FileText, DollarSign, TrendingUpDown, LineChart, Wallet, FileArchive } from "lucide-react";
+import { ArrowLeft, FileText, DollarSign, TrendingUpDown, LineChart, Wallet, FileArchive, ShoppingCart } from "lucide-react";
 const Reports = () => {
   const navigate = useNavigate();
   const reportModules = [{
@@ -60,6 +60,13 @@ const Reports = () => {
     icon: FileArchive,
     color: "bg-indigo-500",
     onClick: () => navigate("/reports/accounting-export")
+  }, {
+    id: "purchases",
+    title: "Compras",
+    description: "Relatório geral de compras (pagas, pendentes e parciais)",
+    icon: ShoppingCart,
+    color: "bg-amber-500",
+    onClick: () => navigate("/reports/purchases")
   }];
   return <div className="min-h-screen bg-background">
       {/* Header */}
