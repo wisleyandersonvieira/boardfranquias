@@ -2138,7 +2138,7 @@ export const DREView: React.FC<DREViewProps> = ({
 
   const exportToPDFPercent = () => {
     try {
-      const doc = new jsPDF('landscape');
+      const doc = new jsPDF('portrait');
 
       const regimeLabel = isCashRegime ? 'Regime de Caixa' : 'Competência';
       doc.setFontSize(16);
@@ -2218,14 +2218,30 @@ export const DREView: React.FC<DREViewProps> = ({
         rowStyles.push({ itemType: item.item_type });
       });
 
+      // Build dynamic column styles: description compact, R$ cols compact, % cols narrow
+      const dynColumnStyles: Record<number, any> = {
+        0: { cellWidth: 'auto', halign: 'left' }
+      };
+      const totalCols = tableBody[0]?.length || 1;
+      for (let i = 1; i < totalCols; i++) {
+        if (i % 2 === 0) {
+          // % column (even index: 2,4,6...)
+          dynColumnStyles[i] = { cellWidth: 14, halign: 'right' };
+        } else {
+          // R$ column
+          dynColumnStyles[i] = { cellWidth: 'auto', halign: 'right' };
+        }
+      }
+
       autoTable(doc, {
         head: tableHeaders,
         body: tableBody,
         startY: 34,
         styles: {
           fontSize: 7,
-          cellPadding: 1.5,
+          cellPadding: 1,
           lineWidth: 0.1,
+          overflow: 'linebreak',
         },
         headStyles: {
           fillColor: [41, 128, 185],
@@ -2233,15 +2249,11 @@ export const DREView: React.FC<DREViewProps> = ({
           fontStyle: 'bold',
           halign: 'center',
           fontSize: 7,
+          cellPadding: 1,
         },
-        columnStyles: {
-          0: {
-            cellWidth: 'auto',
-            minCellWidth: 45,
-            halign: 'left'
-          }
-        },
-        margin: { top: 34, left: 10, right: 10 },
+        columnStyles: dynColumnStyles,
+        tableWidth: 'auto',
+        margin: { top: 34, left: 8, right: 8 },
         didParseCell: function (data: any) {
           if (data.section === 'body') {
             const rowIndex = data.row.index;
