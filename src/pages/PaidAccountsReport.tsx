@@ -9,7 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { ArrowLeft, Download, Filter, FileDown, ChevronDown, Check, ChevronsUpDown } from "lucide-react";
+import { ArrowLeft, Download, Filter, FileDown, ChevronDown, Check, ChevronsUpDown, Eye, EyeOff } from "lucide-react";
+import { useUserMatrix } from "@/hooks/useUserMatrix";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -18,7 +19,7 @@ import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 
 const PaidAccountsReport = () => {
-  const navigate = useNavigate();
+  const { matrixId } = useUserMatrix();
   
   // Function to convert date input to local timezone format - prevents timezone issues
   const formatDateForDatabase = (dateString: string): string => {
@@ -41,6 +42,8 @@ const PaidAccountsReport = () => {
     return dateString;
   };
 
+  const navigate = useNavigate();
+
   const [filters, setFilters] = useState({
     payment_start: "",
     payment_end: "",
@@ -53,6 +56,7 @@ const PaidAccountsReport = () => {
     product_id: "all",
     account_id: "all",
     group_id: "all",
+    subgroup_id: "all",
     employee_id: "all",
   });
 
@@ -61,17 +65,35 @@ const PaidAccountsReport = () => {
   const [stores, setStores] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [groups, setGroups] = useState<any[]>([]);
+  const [subgroups, setSubgroups] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [availableAccounts, setAvailableAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
 
   useEffect(() => {
     fetchSuppliers();
     fetchStores();
     fetchProducts();
-    fetchGroups();
     fetchEmployees();
   }, []);
+
+  // Fetch groups filtered by brand when matrixId is available
+  useEffect(() => {
+    if (matrixId) {
+      fetchGroups();
+    }
+  }, [matrixId]);
+
+  // Fetch subgroups when group changes
+  useEffect(() => {
+    if (filters.group_id && filters.group_id !== "all") {
+      fetchSubgroups(filters.group_id);
+    } else {
+      setSubgroups([]);
+      setFilters(prev => ({ ...prev, subgroup_id: "all" }));
+    }
+  }, [filters.group_id]);
 
   // Fetch available accounts when store is selected
   useEffect(() => {
@@ -131,12 +153,56 @@ const PaidAccountsReport = () => {
   };
 
   const fetchGroups = async () => {
-    const { data } = await supabase
-      .from("account_groups")
-      .select("id, name, code")
-      .is("parent_id", null)
-      .order("code");
-    setGroups(data || []);
+    try {
+      // Get the brand_id linked to the user's matrix
+      const { data: matrixData } = await supabase
+        .from('matrices')
+        .select('brand_id')
+        .eq('id', matrixId)
+        .single();
+
+      if (!matrixData?.brand_id) {
+        setGroups([]);
+        return;
+      }
+
+      const { data } = await supabase
+        .from("account_groups")
+        .select("id, name")
+        .is("parent_id", null)
+        .eq("brand_id", matrixData.brand_id)
+        .order("name");
+      setGroups(data || []);
+    } catch (error) {
+      console.error('Error fetching groups:', error);
+      setGroups([]);
+    }
+  };
+
+  const fetchSubgroups = async (groupId: string) => {
+    try {
+      const { data: matrixData } = await supabase
+        .from('matrices')
+        .select('brand_id')
+        .eq('id', matrixId)
+        .single();
+
+      if (!matrixData?.brand_id) {
+        setSubgroups([]);
+        return;
+      }
+
+      const { data } = await supabase
+        .from("account_groups")
+        .select("id, name")
+        .eq("parent_id", groupId)
+        .eq("brand_id", matrixData.brand_id)
+        .order("name");
+      setSubgroups(data || []);
+    } catch (error) {
+      console.error('Error fetching subgroups:', error);
+      setSubgroups([]);
+    }
   };
 
   const fetchEmployees = async () => {
@@ -428,9 +494,22 @@ const PaidAccountsReport = () => {
         });
       }
 
+      // Filter by subgroup
+      if (filters.subgroup_id && filters.subgroup_id !== "all") {
+        accountsData = accountsData.filter((account: any) => {
+          if (!account.accounts_payable_items || account.accounts_payable_items.length === 0) {
+            return false;
+          }
+          return account.accounts_payable_items.some((item: any) => {
+            return item.products?.subgroup_id === filters.subgroup_id;
+          });
+        });
+      }
+
       // employee filter is now applied server-side
 
       setAccounts(accountsData);
+      setShowFilters(false);
       toast({
         title: "Pesquisa realizada",
         description: `${accountsData.length} conta(s) encontrada(s)`,
@@ -460,10 +539,12 @@ const PaidAccountsReport = () => {
       product_id: "all",
       account_id: "all",
       group_id: "all",
+      subgroup_id: "all",
       employee_id: "all",
     });
     setAvailableAccounts([]);
     setAccounts([]);
+    setShowFilters(true);
   };
 
   const getFilterInfo = () => {
@@ -488,6 +569,10 @@ const PaidAccountsReport = () => {
     if (filters.group_id !== "all") {
       const group = groups.find(g => g.id === filters.group_id);
       if (group) filterInfo.push(`Grupo: ${group.name}`);
+    }
+    if (filters.subgroup_id !== "all") {
+      const subgroup = subgroups.find(s => s.id === filters.subgroup_id);
+      if (subgroup) filterInfo.push(`Subgrupo: ${subgroup.name}`);
     }
     if (filters.employee_id !== "all") {
       const employee = employees.find(e => e.id === filters.employee_id);
@@ -1029,14 +1114,27 @@ const PaidAccountsReport = () => {
         {/* Filters */}
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Filter className="h-5 w-5" />
-              Filtros
-            </CardTitle>
-            <CardDescription>
-              Configure os filtros para o relatório
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Filter className="h-5 w-5" />
+                  Filtros
+                </CardTitle>
+                <CardDescription>
+                  Configure os filtros para o relatório
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowFilters(!showFilters)}
+              >
+                {showFilters ? <EyeOff className="h-4 w-4 mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
+                {showFilters ? "Ocultar" : "Exibir"}
+              </Button>
+            </div>
           </CardHeader>
+          {showFilters && (
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
@@ -1239,7 +1337,7 @@ const PaidAccountsReport = () => {
               </div>
               <div>
                 <Label>Grupo</Label>
-                <Select value={filters.group_id} onValueChange={(value) => setFilters(prev => ({...prev, group_id: value}))}>
+                <Select value={filters.group_id} onValueChange={(value) => setFilters(prev => ({...prev, group_id: value, subgroup_id: "all"}))}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecionar grupo" />
                   </SelectTrigger>
@@ -1247,7 +1345,27 @@ const PaidAccountsReport = () => {
                     <SelectItem value="all">Todos</SelectItem>
                     {groups.map((group) => (
                       <SelectItem key={group.id} value={group.id}>
-                        {group.code} - {group.name}
+                        {group.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Subgrupo</Label>
+                <Select 
+                  value={filters.subgroup_id} 
+                  onValueChange={(value) => setFilters(prev => ({...prev, subgroup_id: value}))}
+                  disabled={filters.group_id === "all"}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={filters.group_id === "all" ? "Selecione um grupo primeiro" : "Selecionar subgrupo"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    {subgroups.map((subgroup) => (
+                      <SelectItem key={subgroup.id} value={subgroup.id}>
+                        {subgroup.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1280,6 +1398,7 @@ const PaidAccountsReport = () => {
               </Button>
             </div>
           </CardContent>
+          )}
         </Card>
 
         {/* Results */}
