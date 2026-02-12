@@ -1120,17 +1120,14 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
       
       if (accountError) throw accountError;
       
-      // Get creator profile name
+      // Get creator profile name using SECURITY DEFINER function to bypass RLS
       if (accountData?.created_by) {
-        const { data: creatorProfile } = await supabase
-          .from("profiles")
-          .select("name")
-          .eq("id", accountData.created_by)
-          .single();
+        const { data: creatorName } = await supabase
+          .rpc("get_profile_name", { p_user_id: accountData.created_by });
         
         logs.push({
           type: 'creation',
-          user_name: creatorProfile?.name || 'Usuário não identificado',
+          user_name: creatorName || 'Usuário não identificado',
           timestamp: accountData.created_at,
         });
       } else if (accountData?.created_at) {
@@ -1144,15 +1141,12 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
       // Check if there was an update (updated_at different from created_at)
       if (accountData?.updated_at && accountData?.created_at && 
           new Date(accountData.updated_at).getTime() !== new Date(accountData.created_at).getTime()) {
-        // Get the modifier profile name
+        // Get the modifier profile name using SECURITY DEFINER function
         let modifierName = 'Usuário não identificado';
         if (accountData?.updated_by) {
-          const { data: modifierProfile } = await supabase
-            .from("profiles")
-            .select("name")
-            .eq("id", accountData.updated_by)
-            .single();
-          modifierName = modifierProfile?.name || 'Usuário não identificado';
+          const { data: name } = await supabase
+            .rpc("get_profile_name", { p_user_id: accountData.updated_by });
+          modifierName = name || 'Usuário não identificado';
         }
         
         logs.push({
@@ -1182,13 +1176,13 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
         // Get unique creator IDs
         const creatorIds = [...new Set(paymentsData.map(p => p.created_by).filter(Boolean))];
         
-        // Fetch all profiles at once
-        const { data: profiles } = await supabase
-          .from("profiles")
-          .select("id, name")
-          .in("id", creatorIds);
-        
-        const profileMap = new Map(profiles?.map(p => [p.id, p.name]) || []);
+        // Fetch all profile names using SECURITY DEFINER function to bypass RLS
+        const profileMap = new Map<string, string>();
+        for (const creatorId of creatorIds) {
+          const { data: name } = await supabase
+            .rpc("get_profile_name", { p_user_id: creatorId });
+          if (name) profileMap.set(creatorId, name);
+        }
         
         // Get installment info
         const installmentIds = [...new Set(paymentsData.map(p => p.installment_id).filter(Boolean))];

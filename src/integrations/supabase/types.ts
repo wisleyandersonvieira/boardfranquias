@@ -3700,6 +3700,7 @@ export type Database = {
         Args: { p_matrix_id: string }
         Returns: number
       }
+      get_profile_name: { Args: { p_user_id: string }; Returns: string }
       get_store_members: {
         Args: { store_ids: string[] }
         Returns: {
