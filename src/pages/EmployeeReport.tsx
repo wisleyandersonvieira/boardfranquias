@@ -99,19 +99,7 @@ const EmployeeReport = () => {
     try {
       let query = supabase
         .from('employees')
-        .select(`
-          name,
-          is_registered,
-          is_active,
-          cpf,
-          base_salary,
-          registration_date,
-          dismissal_date,
-          store_id,
-          job_function_id,
-          job_functions:job_function_id(name),
-          stores:store_id(name)
-        `)
+        .select('name, is_registered, is_active, cpf, base_salary, registration_date, dismissal_date, store_id, job_function_id')
         .order('name');
 
       if (selectedStore !== 'all') {
@@ -133,13 +121,25 @@ const EmployeeReport = () => {
       const { data, error } = await query;
       if (error) throw error;
 
+      // Fetch stores and job_functions separately for name lookup
+      const storeIds = [...new Set((data || []).map((e: any) => e.store_id).filter(Boolean))];
+      const jobIds = [...new Set((data || []).map((e: any) => e.job_function_id).filter(Boolean))];
+
+      const [storesRes, jobsRes] = await Promise.all([
+        storeIds.length > 0 ? supabase.from('stores').select('id, name').in('id', storeIds) : { data: [] },
+        jobIds.length > 0 ? supabase.from('job_functions').select('id, name').in('id', jobIds) : { data: [] },
+      ]);
+
+      const storeMap = Object.fromEntries((storesRes.data || []).map((s: any) => [s.id, s.name]));
+      const jobMap = Object.fromEntries((jobsRes.data || []).map((j: any) => [j.id, j.name]));
+
       const rows: EmployeeRow[] = (data || []).map((emp: any) => ({
         name: emp.name,
         is_registered: emp.is_registered,
         is_active: emp.is_active,
-        store_name: emp.stores?.name || '',
+        store_name: storeMap[emp.store_id] || '',
         cpf: emp.cpf || '',
-        job_function_name: emp.job_functions?.name || '',
+        job_function_name: jobMap[emp.job_function_id] || '',
         base_salary: emp.base_salary || 0,
         registration_date: emp.registration_date,
         dismissal_date: emp.dismissal_date,
