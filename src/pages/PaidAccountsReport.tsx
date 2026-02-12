@@ -280,6 +280,20 @@ const PaidAccountsReport = () => {
   };
 
   const handleSearch = async () => {
+    // Validate: at least one complete date range is required
+    const hasPaymentRange = filters.payment_start && filters.payment_end;
+    const hasCompetenciaRange = filters.competencia_start && filters.competencia_end;
+    const hasCreatedRange = filters.created_start && filters.created_end;
+
+    if (!hasPaymentRange && !hasCompetenciaRange && !hasCreatedRange) {
+      toast({
+        title: "Filtro obrigatório",
+        description: "Preencha pelo menos um período de datas (Pagamento, Competência ou Cadastro) com início e fim.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
     try {
       // Helper: fetch all rows with automatic pagination (batches of 1000)
