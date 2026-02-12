@@ -478,23 +478,7 @@ const PaidAccountsReport = () => {
         });
       }
 
-      // Filter by group - show accounts that have at least one product with the selected group
-      if (filters.group_id && filters.group_id !== "all") {
-        accountsData = accountsData.filter((account: any) => {
-          if (!account.accounts_payable_items || account.accounts_payable_items.length === 0) {
-            return false;
-          }
-          // Check if any product in this account belongs to a subgroup of the selected group
-          return account.accounts_payable_items.some((item: any) => {
-            const subgroup = item.products?.account_groups;
-            if (!subgroup) return false;
-            // The subgroup's parent_id should match the selected group_id
-            return subgroup.parent_id === filters.group_id;
-          });
-        });
-      }
-
-      // Filter by subgroup
+      // Filter by subgroup (more specific) takes priority over group filter
       if (filters.subgroup_id && filters.subgroup_id !== "all") {
         accountsData = accountsData.filter((account: any) => {
           if (!account.accounts_payable_items || account.accounts_payable_items.length === 0) {
@@ -502,6 +486,18 @@ const PaidAccountsReport = () => {
           }
           return account.accounts_payable_items.some((item: any) => {
             return item.products?.subgroup_id === filters.subgroup_id;
+          });
+        });
+      } else if (filters.group_id && filters.group_id !== "all") {
+        // Filter by group only when no subgroup is selected
+        accountsData = accountsData.filter((account: any) => {
+          if (!account.accounts_payable_items || account.accounts_payable_items.length === 0) {
+            return false;
+          }
+          return account.accounts_payable_items.some((item: any) => {
+            const subgroup = item.products?.account_groups;
+            if (!subgroup) return false;
+            return subgroup.parent_id === filters.group_id;
           });
         });
       }
