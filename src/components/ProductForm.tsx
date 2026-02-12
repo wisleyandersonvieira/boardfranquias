@@ -281,6 +281,8 @@ export const ProductForm = ({ onUnitsModalOpen, editingProduct, onSaveSuccess }:
         return;
       }
 
+      const userId = (await supabase.auth.getUser()).data.user?.id;
+
       const productData: any = {
         code: nextCode,
         name: formData.name.trim(),
@@ -295,9 +297,12 @@ export const ProductForm = ({ onUnitsModalOpen, editingProduct, onSaveSuccess }:
         is_active: true
       };
       
-      // Adicionar matrix_id apenas para novos produtos
-      if (!editingProduct && matrixId) {
-        productData.matrix_id = matrixId;
+      // Adicionar matrix_id e created_by apenas para novos produtos
+      if (!editingProduct) {
+        if (matrixId) productData.matrix_id = matrixId;
+        if (userId) productData.created_by = userId;
+      } else {
+        if (userId) productData.updated_by = userId;
       }
 
       let error;

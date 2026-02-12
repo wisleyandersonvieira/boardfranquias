@@ -117,6 +117,7 @@ export const ProductList = ({ canEdit = true, canDelete = true }: ProductListPro
         .select(`
           id, code, name, description, is_active, is_blocked, barcode, cost_price,
           group_id, subgroup_id, unit_id, product_type, function_type,
+          created_by, created_at, updated_by, updated_at,
           group:account_groups!group_id(name),
           subgroup:account_groups!subgroup_id(name),
           unit:units_of_measure!unit_id(name, symbol),
