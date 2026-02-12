@@ -41,6 +41,7 @@ interface SubMenuItem {
   route?: string;
   action?: string;
   storeId?: string;
+  children?: SubMenuItem[];
 }
 
 interface MenuItem {
@@ -109,6 +110,7 @@ const AppSidebar = ({
   const navigate = useNavigate();
   const [activeModule, setActiveModule] = useState<string | null>(null);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [expandedSubMenus, setExpandedSubMenus] = useState<string[]>([]);
   const [stores, setStores] = useState<StoreData[]>([]);
   const [loadingStores, setLoadingStores] = useState(false);
   const { canAccess: canAccessCadastros, loading: loadingCadastros } = useCadastrosPermissions();
@@ -300,7 +302,9 @@ const AppSidebar = ({
         { id: "func-funcionarios", label: "Funcionários", action: "openEmployees" },
         { id: "func-movimentacoes", label: "Movimentações", action: "openEmployeeMovements" },
         { id: "func-obrigacoes", label: "Obrigações", action: "openObligations" },
-        { id: "func-rel-funcionarios", label: "📊 Relatório de Funcionários", route: "/reports/employees" },
+        { id: "func-relatorios", label: "Relatórios", children: [
+          { id: "func-rel-funcionarios", label: "Relatório de Funcionários", route: "/reports/employees" },
+        ]},
       ],
     },
     {
@@ -570,17 +574,45 @@ const AppSidebar = ({
                 </div>
               ) : (
                 getSubMenusForItem(activeItem).map((subMenu) => (
-                  <button
-                    key={subMenu.id}
-                    onClick={() => handleSubMenuClick(subMenu)}
-                    className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-muted transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      {(activeItem.id === "caixa" || activeItem.id === "estoque") && <Store className="h-4 w-4 text-muted-foreground" />}
-                      <span className="text-sm">{subMenu.label}</span>
-                    </div>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                  </button>
+                  <div key={subMenu.id}>
+                    <button
+                      onClick={() => {
+                        if (subMenu.children) {
+                          setExpandedSubMenus(prev => 
+                            prev.includes(subMenu.id) 
+                              ? prev.filter(id => id !== subMenu.id)
+                              : [...prev, subMenu.id]
+                          );
+                        } else {
+                          handleSubMenuClick(subMenu);
+                        }
+                      }}
+                      className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-muted transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        {(activeItem.id === "caixa" || activeItem.id === "estoque") && <Store className="h-4 w-4 text-muted-foreground" />}
+                        <span className="text-sm">{subMenu.label}</span>
+                      </div>
+                      <ChevronRight className={cn(
+                        "h-4 w-4 text-muted-foreground transition-transform",
+                        subMenu.children && expandedSubMenus.includes(subMenu.id) && "rotate-90"
+                      )} />
+                    </button>
+                    {subMenu.children && expandedSubMenus.includes(subMenu.id) && (
+                      <div className="bg-muted/30">
+                        {subMenu.children.map((child) => (
+                          <button
+                            key={child.id}
+                            onClick={() => handleSubMenuClick(child)}
+                            className="w-full pl-8 pr-4 py-2.5 flex items-center justify-between text-left hover:bg-muted transition-colors"
+                          >
+                            <span className="text-sm text-muted-foreground">{child.label}</span>
+                            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 ))
               )}
             </nav>
