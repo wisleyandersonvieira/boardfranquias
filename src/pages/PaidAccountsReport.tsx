@@ -16,6 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { addPdfHeaderWithLogo } from "@/utils/pdfHeader";
 import * as XLSX from "xlsx";
 
 const PaidAccountsReport = () => {
@@ -598,23 +599,18 @@ const PaidAccountsReport = () => {
     return account.suppliers?.name || "N/A";
   };
 
-  const exportToPDFResumido = () => {
+  const exportToPDFResumido = async () => {
     const doc = new jsPDF();
     
-    // Header
-    doc.setFontSize(18);
-    doc.setFont("helvetica", "bold");
-    doc.text("RELATÓRIO DE CONTAS PAGAS", 105, 20, { align: "center" });
-    
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "normal");
-    doc.text("Contas já quitadas - Resumido", 105, 28, { align: "center" });
+    const startY = await addPdfHeaderWithLogo(doc, "Contas Pagas - Resumido");
     
     const filterInfo = getFilterInfo();
+    let currentY = startY;
     
     if (filterInfo.length > 0) {
-      doc.setFontSize(10);
-      doc.text(`Filtros aplicados: ${filterInfo.join(" | ")}`, 20, 38);
+      doc.setFontSize(9);
+      doc.text(`Filtros: ${filterInfo.join(" | ")}`, 14, currentY);
+      currentY += 6;
     }
 
     // Table data
@@ -641,7 +637,7 @@ const PaidAccountsReport = () => {
     autoTable(doc, {
       head: [["Título", "Fornecedor", "Loja", "Vencimento", "Pagamento", "Valor", "Parcelas"]],
       body: tableData,
-      startY: filterInfo.length > 0 ? 45 : 35,
+      startY: currentY,
       styles: {
         fontSize: 9,
         cellPadding: 3,
@@ -654,7 +650,7 @@ const PaidAccountsReport = () => {
       alternateRowStyles: {
         fillColor: [245, 245, 245]
       },
-      margin: { left: 20, right: 20 }
+      margin: { top: startY, left: 20, right: 20 }
     });
 
     // Footer
@@ -669,19 +665,18 @@ const PaidAccountsReport = () => {
     doc.save("contas-pagas-resumido.pdf");
   };
 
-  const exportToPDFDetalhado = () => {
+  const exportToPDFDetalhado = async () => {
     const doc = new jsPDF();
     
-    // Header
-    doc.setFontSize(18);
-    doc.setFont("helvetica", "bold");
-    doc.text("RELATÓRIO DE CONTAS PAGAS", 105, 20, { align: "center" });
+    const startY = await addPdfHeaderWithLogo(doc, "Contas Pagas - Detalhado");
     
     const filterInfo = getFilterInfo();
+    let currentY = startY;
     
     if (filterInfo.length > 0) {
-      doc.setFontSize(10);
-      doc.text(`Filtros aplicados: ${filterInfo.join(" | ")}`, 20, 30);
+      doc.setFontSize(9);
+      doc.text(`Filtros: ${filterInfo.join(" | ")}`, 14, currentY);
+      currentY += 6;
     }
     
     // Build table data with product details
@@ -734,7 +729,7 @@ const PaidAccountsReport = () => {
     autoTable(doc, {
       head: [["Título", "Fornecedor", "Loja", "Vencimento", "Pagamento", "Valor", "Parcelas"]],
       body: tableData,
-      startY: filterInfo.length > 0 ? 37 : 27,
+      startY: currentY,
       styles: {
         fontSize: 9,
         cellPadding: 3,
@@ -744,7 +739,7 @@ const PaidAccountsReport = () => {
         textColor: 255,
         fontStyle: "bold"
       },
-      margin: { left: 20, right: 20 }
+      margin: { top: startY, left: 20, right: 20 }
     });
 
     // Footer
@@ -759,19 +754,18 @@ const PaidAccountsReport = () => {
     doc.save("contas-pagas-detalhado.pdf");
   };
 
-  const exportToPDFPorSubgrupo = () => {
+  const exportToPDFPorSubgrupo = async () => {
     const doc = new jsPDF();
     
-    // Header
-    doc.setFontSize(18);
-    doc.setFont("helvetica", "bold");
-    doc.text("RELATÓRIO DE CONTAS PAGAS POR SUBGRUPO", 105, 20, { align: "center" });
+    const startY = await addPdfHeaderWithLogo(doc, "Contas Pagas - Por Subgrupo");
     
     const filterInfo = getFilterInfo();
+    let currentY = startY;
     
     if (filterInfo.length > 0) {
-      doc.setFontSize(10);
-      doc.text(`Filtros aplicados: ${filterInfo.join(" | ")}`, 20, 30);
+      doc.setFontSize(9);
+      doc.text(`Filtros: ${filterInfo.join(" | ")}`, 14, currentY);
+      currentY += 6;
     }
     
     // Group accounts by subgroup - using product items for grouping
@@ -945,7 +939,7 @@ const PaidAccountsReport = () => {
     autoTable(doc, {
       head: [["Título", "Fornecedor", "Loja", "Pagamento", "Valor", "Parcelas"]],
       body: tableData,
-      startY: filterInfo.length > 0 ? 37 : 27,
+      startY: currentY,
       styles: {
         fontSize: 9,
         cellPadding: 3,
@@ -955,7 +949,7 @@ const PaidAccountsReport = () => {
         textColor: 255,
         fontStyle: "bold"
       },
-      margin: { left: 20, right: 20 }
+      margin: { top: startY, left: 20, right: 20 }
     });
 
     // Footer
@@ -970,19 +964,18 @@ const PaidAccountsReport = () => {
     doc.save("contas-pagas-por-subgrupo.pdf");
   };
 
-  const exportToPDFPorFornecedor = () => {
+  const exportToPDFPorFornecedor = async () => {
     const doc = new jsPDF();
     
-    // Header
-    doc.setFontSize(18);
-    doc.setFont("helvetica", "bold");
-    doc.text("RELATÓRIO DE CONTAS PAGAS POR FORNECEDOR", 105, 20, { align: "center" });
+    const startY = await addPdfHeaderWithLogo(doc, "Contas Pagas - Por Fornecedor");
     
     const filterInfo = getFilterInfo();
+    let currentY = startY;
     
     if (filterInfo.length > 0) {
-      doc.setFontSize(10);
-      doc.text(`Filtros aplicados: ${filterInfo.join(" | ")}`, 20, 30);
+      doc.setFontSize(9);
+      doc.text(`Filtros: ${filterInfo.join(" | ")}`, 14, currentY);
+      currentY += 6;
     }
     
     // Group accounts by supplier
@@ -1061,7 +1054,7 @@ const PaidAccountsReport = () => {
     autoTable(doc, {
       head: [["Título", "Loja", "Vencimento", "Pagamento", "Valor", "Parcelas"]],
       body: tableData,
-      startY: filterInfo.length > 0 ? 37 : 27,
+      startY: currentY,
       styles: {
         fontSize: 9,
         cellPadding: 3,
@@ -1071,7 +1064,7 @@ const PaidAccountsReport = () => {
         textColor: 255,
         fontStyle: "bold"
       },
-      margin: { left: 20, right: 20 }
+      margin: { top: startY, left: 20, right: 20 }
     });
 
     // Footer
