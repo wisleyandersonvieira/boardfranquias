@@ -73,7 +73,7 @@ export const addPdfHeaderWithLogo = async (pdf: jsPDF, title: string): Promise<n
 
   // Right text logo (~3.3:1 aspect ratio)
   const rightLogoH = 10;
-  const rightLogoW = 33;
+  const rightLogoW = 26.4;
   if (textLogoBase64Cache) {
     try {
       pdf.addImage(
