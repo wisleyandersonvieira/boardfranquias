@@ -8,9 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Edit, Trash2, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { Edit, Trash2, Search, ChevronLeft, ChevronRight, Eye } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useUserMatrix } from "@/hooks/useUserMatrix";
+import { SupplierViewModal } from "./SupplierViewModal";
 
 interface Supplier {
   id: string;
@@ -27,6 +28,8 @@ interface Supplier {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
 }
 
 interface SuppliersModalProps {
@@ -41,6 +44,7 @@ export const SuppliersModal = ({ open, onOpenChange, canEdit = true, canDelete =
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+  const [viewingSupplier, setViewingSupplier] = useState<Supplier | null>(null);
   const [activeTab, setActiveTab] = useState(canEdit ? "register" : "list");
   const [currentPage, setCurrentPage] = useState(1);
   const { toast } = useToast();
@@ -158,7 +162,10 @@ export const SuppliersModal = ({ open, onOpenChange, canEdit = true, canDelete =
       if (editingSupplier) {
         const { error } = await supabase
           .from("suppliers")
-          .update(formData)
+          .update({
+            ...formData,
+            updated_by: (await supabase.auth.getUser()).data.user?.id,
+          } as any)
           .eq("id", editingSupplier.id);
 
         if (error) throw error;
@@ -176,9 +183,10 @@ export const SuppliersModal = ({ open, onOpenChange, canEdit = true, canDelete =
           return;
         }
 
+        const userId = (await supabase.auth.getUser()).data.user?.id;
         const { error } = await supabase
           .from("suppliers")
-          .insert([{ ...formData, matrix_id: matrixId }]);
+          .insert([{ ...formData, matrix_id: matrixId, created_by: userId } as any]);
 
         if (error) throw error;
         toast({
@@ -299,6 +307,7 @@ export const SuppliersModal = ({ open, onOpenChange, canEdit = true, canDelete =
   }, [searchTerm]);
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader className="flex-shrink-0">
@@ -491,9 +500,7 @@ export const SuppliersModal = ({ open, onOpenChange, canEdit = true, canDelete =
                         <TableHead>Telefone</TableHead>
                         <TableHead>Cidade</TableHead>
                         <TableHead>Última Compra</TableHead>
-                        {(canEdit || canDelete) && (
-                          <TableHead className="text-right">Ações</TableHead>
-                        )}
+                        <TableHead className="text-right">Ações</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -529,9 +536,15 @@ export const SuppliersModal = ({ open, onOpenChange, canEdit = true, canDelete =
                                 Não disponível
                               </span>
                             </TableCell>
-                            {(canEdit || canDelete) && (
                               <TableCell className="text-right">
                                 <div className="flex justify-end space-x-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setViewingSupplier(supplier)}
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
                                   {canEdit && (
                                     <Button
                                       variant="outline"
@@ -552,7 +565,6 @@ export const SuppliersModal = ({ open, onOpenChange, canEdit = true, canDelete =
                                   )}
                                 </div>
                               </TableCell>
-                            )}
                           </TableRow>
                         ))
                       )}
@@ -596,5 +608,12 @@ export const SuppliersModal = ({ open, onOpenChange, canEdit = true, canDelete =
         </ScrollArea>
       </DialogContent>
     </Dialog>
+
+      <SupplierViewModal
+        open={!!viewingSupplier}
+        onOpenChange={(open) => !open && setViewingSupplier(null)}
+        supplier={viewingSupplier}
+      />
+    </>
   );
 };
