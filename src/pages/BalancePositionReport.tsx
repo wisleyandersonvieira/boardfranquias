@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { addPdfHeaderWithLogo, renderPdfHeader } from "@/utils/pdfHeader";
 import * as XLSX from "xlsx";
 
 interface Store {
@@ -663,14 +664,14 @@ const BalancePositionReport = () => {
     }
   };
 
-  const exportToPDF = () => {
+  const exportToPDF = async () => {
     const doc = new jsPDF();
     
-    doc.setFontSize(16);
-    doc.text("Posição de Saldos", 14, 20);
+    const title = "Posição de Saldos";
+    const startY = await addPdfHeaderWithLogo(doc, title);
     
-    doc.setFontSize(10);
-    doc.text(`Data: ${selectedDate ? format(selectedDate, "dd/MM/yyyy", { locale: ptBR }) : ''}`, 14, 28);
+    doc.setFontSize(9);
+    doc.text(`Data: ${selectedDate ? format(selectedDate, "dd/MM/yyyy", { locale: ptBR }) : ''}`, 14, startY);
 
     const tableData = balanceResults.map(item => [
       item.storeName,
@@ -685,9 +686,11 @@ const BalancePositionReport = () => {
     autoTable(doc, {
       head: [['Loja', 'Conta', 'Tipo', 'Saldo']],
       body: tableData,
-      startY: 35,
+      startY: startY + 5,
       styles: { fontSize: 9 },
-      headStyles: { fillColor: [41, 128, 185] },
+      headStyles: { fillColor: [59, 130, 246] },
+      margin: { top: startY },
+      didDrawPage: (data: any) => { if (data.pageNumber > 1) renderPdfHeader(doc, title); }
     });
 
     doc.save(`posicao-saldos-${format(selectedDate!, 'yyyy-MM-dd')}.pdf`);
