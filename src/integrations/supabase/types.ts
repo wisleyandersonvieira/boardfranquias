@@ -2550,6 +2550,7 @@ export type Database = {
           code: string | null
           cost_price: number | null
           created_at: string
+          created_by: string | null
           description: string | null
           function_type: string | null
           group_id: string | null
@@ -2563,6 +2564,7 @@ export type Database = {
           unit_id: string | null
           unit_price: number | null
           updated_at: string
+          updated_by: string | null
         }
         Insert: {
           barcode?: string | null
@@ -2570,6 +2572,7 @@ export type Database = {
           code?: string | null
           cost_price?: number | null
           created_at?: string
+          created_by?: string | null
           description?: string | null
           function_type?: string | null
           group_id?: string | null
@@ -2583,6 +2586,7 @@ export type Database = {
           unit_id?: string | null
           unit_price?: number | null
           updated_at?: string
+          updated_by?: string | null
         }
         Update: {
           barcode?: string | null
@@ -2590,6 +2594,7 @@ export type Database = {
           code?: string | null
           cost_price?: number | null
           created_at?: string
+          created_by?: string | null
           description?: string | null
           function_type?: string | null
           group_id?: string | null
@@ -2603,6 +2608,7 @@ export type Database = {
           unit_id?: string | null
           unit_price?: number | null
           updated_at?: string
+          updated_by?: string | null
         }
         Relationships: [
           {

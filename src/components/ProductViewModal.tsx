@@ -21,6 +21,10 @@ interface Product {
   barcode?: string;
   product_type?: string;
   function_type?: string;
+  created_by?: string;
+  created_at?: string;
+  updated_by?: string;
+  updated_at?: string;
   group?: { name: string };
   subgroup?: { name: string };
   unit?: { name: string; symbol: string };
@@ -43,12 +47,35 @@ interface ProductViewModalProps {
 export const ProductViewModal = ({ open, onOpenChange, product }: ProductViewModalProps) => {
   const [supplierCodes, setSupplierCodes] = useState<SupplierCode[]>([]);
   const [loading, setLoading] = useState(false);
+  const [createdByName, setCreatedByName] = useState<string | null>(null);
+  const [updatedByName, setUpdatedByName] = useState<string | null>(null);
 
   useEffect(() => {
     if (open && product) {
       fetchSupplierCodes();
+      fetchLogNames();
+    } else {
+      setCreatedByName(null);
+      setUpdatedByName(null);
     }
   }, [open, product]);
+
+  const fetchLogNames = async () => {
+    if (!product) return;
+    
+    if (product.created_by) {
+      const { data } = await supabase.rpc("get_profile_name", { p_user_id: product.created_by });
+      setCreatedByName(data || 'Usuário não identificado');
+    }
+    
+    if (product.updated_by && product.updated_at && product.created_at &&
+        new Date(product.updated_at).getTime() !== new Date(product.created_at).getTime()) {
+      const { data } = await supabase.rpc("get_profile_name", { p_user_id: product.updated_by });
+      setUpdatedByName(data || 'Usuário não identificado');
+    } else {
+      setUpdatedByName(null);
+    }
+  };
 
   const fetchSupplierCodes = async () => {
     if (!product) return;
@@ -213,6 +240,39 @@ export const ProductViewModal = ({ open, onOpenChange, product }: ProductViewMod
                     ))}
                   </TableBody>
                 </Table>
+              </div>
+            </>
+          )}
+          {/* Log de Atividades */}
+          {(createdByName || updatedByName) && (
+            <>
+              <Separator />
+              <div className="space-y-3">
+                <h3 className="font-semibold text-sm text-muted-foreground">Log de Atividades</h3>
+                <div className="space-y-2 text-sm">
+                  {createdByName && product.created_at && (
+                    <div className="flex justify-between items-center p-2 bg-muted rounded-lg">
+                      <div>
+                        <span className="font-medium">Cadastrado por:</span>{" "}
+                        <span>{createdByName}</span>
+                      </div>
+                      <span className="text-muted-foreground text-xs">
+                        {new Date(product.created_at).toLocaleString('pt-BR')}
+                      </span>
+                    </div>
+                  )}
+                  {updatedByName && product.updated_at && (
+                    <div className="flex justify-between items-center p-2 bg-muted rounded-lg">
+                      <div>
+                        <span className="font-medium">Última alteração por:</span>{" "}
+                        <span>{updatedByName}</span>
+                      </div>
+                      <span className="text-muted-foreground text-xs">
+                        {new Date(product.updated_at).toLocaleString('pt-BR')}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
             </>
           )}

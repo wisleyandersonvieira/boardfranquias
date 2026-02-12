@@ -182,6 +182,8 @@ export const ProductEditModal = ({ open, onOpenChange, product, onSaveSuccess }:
 
     setLoading(true);
     try {
+      const userId = (await supabase.auth.getUser()).data.user?.id;
+
       const { error } = await supabase
         .from("products")
         .update({
@@ -194,6 +196,7 @@ export const ProductEditModal = ({ open, onOpenChange, product, onSaveSuccess }:
           cost_price: formData.cost_price ? parseFloat(formData.cost_price.replace(",", ".")) : null,
           product_type: formData.product_type,
           function_type: formData.function_type,
+          updated_by: userId || null,
         })
         .eq("id", product.id);
 
