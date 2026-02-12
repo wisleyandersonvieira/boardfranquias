@@ -16,7 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { addPdfHeaderWithLogo } from "@/utils/pdfHeader";
+import { addPdfHeaderWithLogo, renderPdfHeader } from "@/utils/pdfHeader";
 import * as XLSX from "xlsx";
 
 const PaidAccountsReport = () => {
@@ -650,7 +650,8 @@ const PaidAccountsReport = () => {
       alternateRowStyles: {
         fillColor: [245, 245, 245]
       },
-      margin: { top: startY, left: 20, right: 20 }
+      margin: { top: startY, left: 20, right: 20 },
+      didDrawPage: (data: any) => { if (data.pageNumber > 1) renderPdfHeader(doc, "Contas Pagas - Resumido"); }
     });
 
     // Footer
@@ -739,7 +740,8 @@ const PaidAccountsReport = () => {
         textColor: 255,
         fontStyle: "bold"
       },
-      margin: { top: startY, left: 20, right: 20 }
+      margin: { top: startY, left: 20, right: 20 },
+      didDrawPage: (data: any) => { if (data.pageNumber > 1) renderPdfHeader(doc, "Contas Pagas - Detalhado"); }
     });
 
     // Footer
@@ -949,7 +951,8 @@ const PaidAccountsReport = () => {
         textColor: 255,
         fontStyle: "bold"
       },
-      margin: { top: startY, left: 20, right: 20 }
+      margin: { top: startY, left: 20, right: 20 },
+      didDrawPage: (data: any) => { if (data.pageNumber > 1) renderPdfHeader(doc, "Contas Pagas - Por Subgrupo"); }
     });
 
     // Footer
@@ -1064,7 +1067,8 @@ const PaidAccountsReport = () => {
         textColor: 255,
         fontStyle: "bold"
       },
-      margin: { top: startY, left: 20, right: 20 }
+      margin: { top: startY, left: 20, right: 20 },
+      didDrawPage: (data: any) => { if (data.pageNumber > 1) renderPdfHeader(doc, "Contas Pagas - Por Fornecedor"); }
     });
 
     // Footer

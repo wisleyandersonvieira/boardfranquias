@@ -12,7 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { addPdfHeaderWithLogo } from "@/utils/pdfHeader";
+import { addPdfHeaderWithLogo, renderPdfHeader } from "@/utils/pdfHeader";
 import * as XLSX from "xlsx";
 
 const AccountsPayableReport = () => {
@@ -352,7 +352,8 @@ const AccountsPayableReport = () => {
       alternateRowStyles: {
         fillColor: [245, 245, 245]
       },
-      margin: { top: startY, left: 20, right: 20 }
+      margin: { top: startY, left: 20, right: 20 },
+      didDrawPage: (data: any) => { if (data.pageNumber > 1) renderPdfHeader(doc, "Contas a Pagar - Resumido"); }
     });
 
     // Footer
@@ -468,7 +469,8 @@ const AccountsPayableReport = () => {
         textColor: 255,
         fontStyle: "bold"
       },
-      margin: { top: startY, left: 10, right: 10 }
+      margin: { top: startY, left: 10, right: 10 },
+      didDrawPage: (data: any) => { if (data.pageNumber > 1) renderPdfHeader(doc, "Contas a Pagar - Resumido por Mês"); }
     });
 
     // Footer
@@ -582,7 +584,8 @@ const AccountsPayableReport = () => {
         textColor: 255,
         fontStyle: "bold"
       },
-      margin: { top: startY, left: 10, right: 10 }
+      margin: { top: startY, left: 10, right: 10 },
+      didDrawPage: (data: any) => { if (data.pageNumber > 1) renderPdfHeader(doc, "Contas a Pagar - Resumido por Dia"); }
     });
 
     // Footer
@@ -669,7 +672,8 @@ const AccountsPayableReport = () => {
         textColor: 255,
         fontStyle: "bold"
       },
-      margin: { top: startY, left: 20, right: 20 }
+      margin: { top: startY, left: 20, right: 20 },
+      didDrawPage: (data: any) => { if (data.pageNumber > 1) renderPdfHeader(doc, "Contas a Pagar - Detalhado"); }
     });
 
     // Footer
@@ -821,7 +825,8 @@ const AccountsPayableReport = () => {
         textColor: 255,
         fontStyle: "bold"
       },
-      margin: { top: startY, left: 20, right: 20 }
+      margin: { top: startY, left: 20, right: 20 },
+      didDrawPage: (data: any) => { if (data.pageNumber > 1) renderPdfHeader(doc, "Contas a Pagar - Por Subgrupo"); }
     });
 
     // Footer
