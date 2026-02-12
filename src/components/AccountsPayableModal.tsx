@@ -1338,10 +1338,59 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
     }
   };
 
+  const checkReconciliation = async (referenceId: string, referenceType: string): Promise<boolean> => {
+    // Find financial transactions for this reference
+    const { data: transactions } = await supabase
+      .from("financial_transactions")
+      .select("id")
+      .eq("reference_id", referenceId)
+      .eq("reference_type", referenceType);
+
+    if (!transactions || transactions.length === 0) return false;
+
+    const transactionIds = transactions.map(t => t.id);
+
+    // Check if any of these transactions are reconciled
+    const { data: reconciliations } = await supabase
+      .from("bank_reconciliations")
+      .select("id")
+      .eq("internal_table", "financial_transactions")
+      .in("internal_id", transactionIds)
+      .limit(1);
+
+    return (reconciliations && reconciliations.length > 0);
+  };
+
   const performReversePayment = async (accountId: string, installmentIds?: string[]) => {
     setLoading(true);
     try {
       if (installmentIds && installmentIds.length > 0) {
+        // Check reconciliation for each installment
+        for (const installmentId of installmentIds) {
+          const isReconciled = await checkReconciliation(installmentId, "accounts_payable_installments");
+          if (!isReconciled) {
+            // Also check with account_payable reference (CashPaymentModal uses this)
+            const isReconciledAccount = await checkReconciliation(accountId, "accounts_payable");
+            if (isReconciledAccount) {
+              toast({
+                title: "Pagamento Conciliado",
+                description: "Pagamento conciliado, para estornar é necessário excluir a conciliação.",
+                variant: "destructive",
+              });
+              setLoading(false);
+              return;
+            }
+          } else {
+            toast({
+              title: "Pagamento Conciliado",
+              description: "Pagamento conciliado, para estornar é necessário excluir a conciliação.",
+              variant: "destructive",
+            });
+            setLoading(false);
+            return;
+          }
+        }
+
         // Reverse specific installments
         for (const installmentId of installmentIds) {
           // Buscar a data de pagamento da parcela antes de estornar
@@ -1428,6 +1477,18 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
           description: `${installmentIds.length} parcela(s) estornada(s) com sucesso`,
         });
       } else {
+        // Check reconciliation for direct payment
+        const isReconciled = await checkReconciliation(accountId, "accounts_payable");
+        if (isReconciled) {
+          toast({
+            title: "Pagamento Conciliado",
+            description: "Pagamento conciliado, para estornar é necessário excluir a conciliação.",
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
+
         // Original reverse logic for accounts without installments
         // Buscar a data de pagamento da conta antes de estornar
         const { data: accountData, error: fetchAccountError } = await supabase
