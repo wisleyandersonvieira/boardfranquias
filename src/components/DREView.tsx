@@ -2214,8 +2214,20 @@ export const DREView: React.FC<DREViewProps> = ({
           });
         });
 
-        tableBody.push(row);
-        rowStyles.push({ itemType: item.item_type });
+        // Skip rows where all numeric values are zero
+        const hasNonZeroValue = row.slice(1).some((cell, idx) => {
+          if (idx % 2 === 0) {
+            // R$ column - check if value is not zero
+            const numVal = parseFloat(cell.replace(/[^\d,-]/g, '').replace(',', '.'));
+            return !isNaN(numVal) && numVal !== 0;
+          }
+          return false;
+        });
+
+        if (hasNonZeroValue) {
+          tableBody.push(row);
+          rowStyles.push({ itemType: item.item_type });
+        }
       });
 
       // Build dynamic column styles: description compact, R$ cols compact, % cols narrow
