@@ -1,96 +1,91 @@
 import jsPDF from "jspdf";
 
-// Cache the logo base64 to avoid re-fetching
 let logoBase64Cache: string | null = null;
+let textLogoBase64Cache: string | null = null;
 
-const loadLogoBase64 = async (): Promise<string | null> => {
-  if (logoBase64Cache) return logoBase64Cache;
-
+const loadImage = async (importFn: () => Promise<any>): Promise<string | null> => {
   try {
-    // Dynamically import the logo asset to get the bundled URL
-    const logoModule = await import("@/assets/board-sistemas-text-logo.png");
-    const logoUrl = logoModule.default;
-
-    const response = await fetch(logoUrl);
+    const mod = await importFn();
+    const response = await fetch(mod.default);
     const blob = await response.blob();
-
     return new Promise((resolve) => {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        logoBase64Cache = reader.result as string;
-        resolve(logoBase64Cache);
-      };
+      reader.onloadend = () => resolve(reader.result as string);
       reader.onerror = () => resolve(null);
       reader.readAsDataURL(blob);
     });
-  } catch (error) {
-    console.error("Error loading logo for PDF:", error);
+  } catch {
     return null;
   }
 };
 
-/**
- * Adds a standard header to a jsPDF document with the report title centered
- * and the Board Sistemas logo on the right, followed by a horizontal line.
- *
- * @param pdf - The jsPDF instance
- * @param title - The report title
- * @returns The Y position after the header (to start content below)
- */
-export const addPdfHeader = async (pdf: jsPDF): Promise<void> => {
-  // no-op load, just ensures cache is warm
-  await loadLogoBase64();
+const warmCache = async () => {
+  if (!logoBase64Cache) {
+    logoBase64Cache = await loadImage(() => import("@/assets/board-sistemas-logo.png"));
+  }
+  if (!textLogoBase64Cache) {
+    textLogoBase64Cache = await loadImage(() => import("@/assets/board-sistemas-text-logo.png"));
+  }
 };
 
 /**
- * Renders the PDF header synchronously (call after warming the cache with addPdfHeader).
+ * Adds a standard PDF header:
+ * - Left: board-sistemas-logo.png (square icon)
+ * - Center: report title
+ * - Right: board-sistemas-text-logo.png
+ * - Blue separator line below
+ *
  * Returns the Y coordinate where content should start.
  */
-export const renderPdfHeader = (pdf: jsPDF, title: string): number => {
+export const addPdfHeaderWithLogo = async (pdf: jsPDF, title: string): Promise<number> => {
+  await warmCache();
+
   const pageWidth = pdf.internal.pageSize.getWidth();
-  const logoHeight = 12;
-  const logoWidth = 40; // aspect ratio ~3.3:1
-  const marginRight = 14;
-  const headerY = 10;
+  const margin = 14;
+  const headerY = 8;
 
-  // Draw report title centered
-  pdf.setFontSize(14);
-  pdf.setFont("helvetica", "bold");
-  pdf.text(title, pageWidth / 2, headerY + logoHeight / 2 + 2, { align: "center" });
-
-  // Draw logo on the right
+  // Left logo (square ~1:1 aspect ratio) 
+  const leftLogoSize = 14;
   if (logoBase64Cache) {
     try {
-      pdf.addImage(
-        logoBase64Cache,
-        "PNG",
-        pageWidth - logoWidth - marginRight,
-        headerY,
-        logoWidth,
-        logoHeight
-      );
+      pdf.addImage(logoBase64Cache, "PNG", margin, headerY, leftLogoSize, leftLogoSize);
     } catch (e) {
-      console.error("Error adding logo to PDF:", e);
+      console.error("Error adding left logo:", e);
     }
   }
 
-  // Draw separator line
-  const lineY = headerY + logoHeight + 4;
-  pdf.setDrawColor(59, 130, 246); // blue-500
+  // Right text logo (~3.3:1 aspect ratio)
+  const rightLogoH = 10;
+  const rightLogoW = 33;
+  if (textLogoBase64Cache) {
+    try {
+      pdf.addImage(
+        textLogoBase64Cache,
+        "PNG",
+        pageWidth - rightLogoW - margin,
+        headerY + (leftLogoSize - rightLogoH) / 2,
+        rightLogoW,
+        rightLogoH
+      );
+    } catch (e) {
+      console.error("Error adding right logo:", e);
+    }
+  }
+
+  // Title centered
+  pdf.setFontSize(13);
+  pdf.setFont("helvetica", "bold");
+  pdf.text(title, pageWidth / 2, headerY + leftLogoSize / 2 + 1.5, { align: "center" });
+
+  // Separator line
+  const lineY = headerY + leftLogoSize + 3;
+  pdf.setDrawColor(59, 130, 246);
   pdf.setLineWidth(0.5);
-  pdf.line(14, lineY, pageWidth - 14, lineY);
+  pdf.line(margin, lineY, pageWidth - margin, lineY);
 
   // Reset font
   pdf.setFontSize(10);
   pdf.setFont("helvetica", "normal");
 
-  return lineY + 8;
-};
-
-/**
- * Convenience: warms logo cache + renders header. Use in async export functions.
- */
-export const addPdfHeaderWithLogo = async (pdf: jsPDF, title: string): Promise<number> => {
-  await loadLogoBase64();
-  return renderPdfHeader(pdf, title);
+  return lineY + 6;
 };
