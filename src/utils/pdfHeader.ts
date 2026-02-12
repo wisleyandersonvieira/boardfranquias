@@ -3,7 +3,7 @@ import jsPDF from "jspdf";
 let logoBase64Cache: string | null = null;
 let textLogoBase64Cache: string | null = null;
 
-const loadImage = async (importFn: () => Promise<any>): Promise<string | null> => {
+const loadImageFromImport = async (importFn: () => Promise<any>): Promise<string | null> => {
   try {
     const mod = await importFn();
     const response = await fetch(mod.default);
@@ -19,12 +19,29 @@ const loadImage = async (importFn: () => Promise<any>): Promise<string | null> =
   }
 };
 
+const loadImageFromUrl = async (url: string): Promise<string | null> => {
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+};
+
+const TEXT_LOGO_URL = "https://odmqiojfqmqauzedaosa.supabase.co/storage/v1/object/public/logo/Logo_texto.png";
+
 const warmCache = async () => {
   if (!logoBase64Cache) {
-    logoBase64Cache = await loadImage(() => import("@/assets/board-sistemas-logo.png"));
+    logoBase64Cache = await loadImageFromImport(() => import("@/assets/board-sistemas-logo.png"));
   }
   if (!textLogoBase64Cache) {
-    textLogoBase64Cache = await loadImage(() => import("@/assets/board-sistemas-text-logo.png"));
+    textLogoBase64Cache = await loadImageFromUrl(TEXT_LOGO_URL);
   }
 };
 
