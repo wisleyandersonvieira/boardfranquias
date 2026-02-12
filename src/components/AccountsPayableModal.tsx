@@ -3808,7 +3808,7 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
                         <PopoverContent className="w-[300px] p-0">
                           <Command>
                             <CommandInput placeholder="Buscar fornecedor..." />
-                            <CommandList>
+                            <CommandList className="max-h-[200px] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-muted [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:rounded-full">
                               <CommandEmpty>Nenhum fornecedor encontrado.</CommandEmpty>
                               <CommandGroup>
                                 <CommandItem
