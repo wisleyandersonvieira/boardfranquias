@@ -2136,6 +2136,148 @@ export const DREView: React.FC<DREViewProps> = ({
     }
   };
 
+  const exportToPDFPercent = () => {
+    try {
+      const doc = new jsPDF('landscape');
+
+      const regimeLabel = isCashRegime ? 'Regime de Caixa' : 'Competência';
+      doc.setFontSize(16);
+      doc.text(`DRE - ${regimeLabel}`, 20, 20);
+      doc.setFontSize(10);
+      doc.text(`Ano: ${selectedYear}`, 20, 28);
+
+      // First group item is the base for % calculation
+      const firstGroupItem = structureItems.find(item => item.item_type === 'group');
+
+      const periodEntries = Object.entries(groupedData);
+
+      // Build headers
+      const headRow1: string[] = ['Descrição'];
+      const headRow2: string[] = [''];
+
+      periodEntries.forEach(([periodKey, periodData]) => {
+        const [year, month] = periodKey.split('-');
+        const monthName = `${getMonthName(parseInt(month))} ${year}`;
+        periodData.forEach(data => {
+          if (groupStores) {
+            headRow1.push(monthName, '');
+            headRow2.push('R$', '%');
+          } else {
+            headRow1.push(monthName, '');
+            headRow2.push(data.store_name, '%');
+          }
+        });
+      });
+
+      const tableHeaders = [headRow1, headRow2];
+
+      // Build body
+      const tableBody: string[][] = [];
+      const rowStyles: { itemType: string }[] = [];
+
+      structureItems.forEach(item => {
+        const row: string[] = [];
+        let displayName = item.item_type === 'sum_line' && item.description ? item.description : item.name;
+        const isSubItem = item.item_type === 'subgroup' || item.item_type === 'initial_stock' || item.item_type === 'final_stock';
+        if (isSubItem) {
+          displayName = '    ' + displayName;
+        }
+        row.push(displayName);
+
+        periodEntries.forEach(([_, periodData]) => {
+          periodData.forEach(data => {
+            let value = 0;
+            if (item.item_type === 'subgroup') {
+              value = data.values[item.id] || 0;
+            } else if (item.item_type === 'group') {
+              value = calculateGroupTotal(item.id, data);
+            } else if (item.item_type === 'sum_line') {
+              value = calculateSumLineTotal(item.id, data);
+            } else if (item.item_type === 'initial_stock' || item.item_type === 'final_stock') {
+              value = calculateStockTotal(item.id, data);
+              if (item.item_type === 'initial_stock' && value !== 0) {
+                value = -Math.abs(value);
+              }
+            }
+
+            let baseValue = 0;
+            if (firstGroupItem) {
+              baseValue = calculateGroupTotal(firstGroupItem.id, data);
+            }
+
+            const pct = baseValue !== 0 ? (Math.abs(value) / Math.abs(baseValue)) * 100 : 0;
+
+            row.push(
+              formatCurrency(value),
+              pct !== 0 ? pct.toFixed(1) + '%' : '0,0%'
+            );
+          });
+        });
+
+        tableBody.push(row);
+        rowStyles.push({ itemType: item.item_type });
+      });
+
+      autoTable(doc, {
+        head: tableHeaders,
+        body: tableBody,
+        startY: 34,
+        styles: {
+          fontSize: 7,
+          cellPadding: 1.5,
+          lineWidth: 0.1,
+        },
+        headStyles: {
+          fillColor: [41, 128, 185],
+          textColor: 255,
+          fontStyle: 'bold',
+          halign: 'center',
+          fontSize: 7,
+        },
+        columnStyles: {
+          0: {
+            cellWidth: 'auto',
+            minCellWidth: 45,
+            halign: 'left'
+          }
+        },
+        margin: { top: 34, left: 10, right: 10 },
+        didParseCell: function (data: any) {
+          if (data.section === 'body') {
+            const rowIndex = data.row.index;
+            const colIndex = data.column.index;
+            const meta = rowStyles[rowIndex];
+            if (meta) {
+              if (meta.itemType === 'group' || meta.itemType === 'sum_line') {
+                data.cell.styles.fontStyle = 'bold';
+              }
+              if (meta.itemType === 'sum_line') {
+                data.cell.styles.fillColor = [240, 240, 240];
+              }
+              if (colIndex > 0) {
+                data.cell.styles.halign = 'right';
+              }
+            }
+          }
+        }
+      });
+
+      const fileName = `DRE_Percentual_${selectedYear}_${new Date().toISOString().split('T')[0]}.pdf`;
+      doc.save(fileName);
+      toast({
+        title: "Exportação concluída",
+        description: "PDF com percentuais baixado com sucesso",
+        variant: "default"
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro na exportação",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  };
+
   // Agrupar dados por mês, mantendo separação por loja (ou agrupando lojas)
   const groupedDataUnsorted = dreData.reduce((acc, data) => {
     const key = `${data.year}-${data.month}`;
@@ -2299,10 +2441,14 @@ export const DREView: React.FC<DREViewProps> = ({
                     <ChevronDown className="h-4 w-4 ml-2" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="bg-background">
+              <DropdownMenuContent align="end" className="bg-background">
                   <DropdownMenuItem onClick={exportToPDF}>
                     <Download className="h-4 w-4 mr-2" />
                     PDF
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={exportToPDFPercent}>
+                    <Download className="h-4 w-4 mr-2" />
+                    PDF %
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={exportToExcel}>
                     <FileSpreadsheet className="h-4 w-4 mr-2" />
