@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { addPdfHeaderWithLogo, renderPdfHeader } from "@/utils/pdfHeader";
 import * as XLSX from 'xlsx';
 
 interface Store {
@@ -815,15 +816,16 @@ const IncomeExpenseReport = () => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   };
 
-  const exportToPDF = () => {
+  const exportToPDF = async () => {
     const doc = new jsPDF('l', 'mm', 'a4');
     
-    doc.setFontSize(16);
-    doc.text('Relatório de Entradas e Saídas', 14, 15);
+    const title = "Entradas e Saídas";
+    const startY = await addPdfHeaderWithLogo(doc, title);
     
-    doc.setFontSize(10);
-    doc.text(`Regime: ${regime === 'competencia' ? 'Competência' : 'Pagamento'}`, 14, 22);
-    doc.text(`Período: ${startDate} a ${endDate}`, 14, 27);
+    doc.setFontSize(9);
+    doc.text(`Regime: ${regime === 'competencia' ? 'Competência' : 'Pagamento'} | Período: ${new Date(startDate + 'T00:00:00').toLocaleDateString('pt-BR')} a ${new Date(endDate + 'T00:00:00').toLocaleDateString('pt-BR')}`, 14, startY);
+    
+    const tableStartY = startY + 5;
     
     const tableData: any[] = [];
     
@@ -848,9 +850,11 @@ const IncomeExpenseReport = () => {
     autoTable(doc, {
       head: [['Grupo / Subgrupo', ...columns.map(c => c.label)]],
       body: tableData,
-      startY: 32,
+      startY: tableStartY,
       styles: { fontSize: 8 },
-      headStyles: { fillColor: [59, 130, 246] }
+      headStyles: { fillColor: [59, 130, 246] },
+      margin: { top: startY },
+      didDrawPage: (data: any) => { if (data.pageNumber > 1) renderPdfHeader(doc, title); }
     });
 
     doc.save('relatorio-entradas-saidas.pdf');
