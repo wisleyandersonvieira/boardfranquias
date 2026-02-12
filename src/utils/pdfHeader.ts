@@ -46,17 +46,17 @@ const warmCache = async () => {
 };
 
 /**
- * Adds a standard PDF header:
- * - Left: board-sistemas-logo.png (square icon)
- * - Center: report title
- * - Right: board-sistemas-text-logo.png
- * - Blue separator line below
- *
+ * Warms the logo cache. Call once before generating the PDF.
+ */
+export const warmPdfLogoCache = async () => {
+  await warmCache();
+};
+
+/**
+ * Renders the PDF header synchronously (call after warming cache).
  * Returns the Y coordinate where content should start.
  */
-export const addPdfHeaderWithLogo = async (pdf: jsPDF, title: string): Promise<number> => {
-  await warmCache();
-
+export const renderPdfHeader = (pdf: jsPDF, title: string): number => {
   const pageWidth = pdf.internal.pageSize.getWidth();
   const margin = 14;
   const headerY = 8;
@@ -105,4 +105,13 @@ export const addPdfHeaderWithLogo = async (pdf: jsPDF, title: string): Promise<n
   pdf.setFont("helvetica", "normal");
 
   return lineY + 6;
+};
+
+/**
+ * Convenience: warms logo cache + renders header on first page.
+ * Returns the Y coordinate where content should start.
+ */
+export const addPdfHeaderWithLogo = async (pdf: jsPDF, title: string): Promise<number> => {
+  await warmCache();
+  return renderPdfHeader(pdf, title);
 };

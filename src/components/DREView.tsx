@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { addPdfHeaderWithLogo } from "@/utils/pdfHeader";
+import { addPdfHeaderWithLogo, renderPdfHeader } from "@/utils/pdfHeader";
 import * as XLSX from 'xlsx';
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -2094,6 +2094,11 @@ export const DREView: React.FC<DREViewProps> = ({
         margin: {
           top: startY
         },
+        didDrawPage: function (data: any) {
+          if (data.pageNumber > 1) {
+            renderPdfHeader(doc, `DRE - ${regimeLabel} - Ano: ${selectedYear}`);
+          }
+        },
         didParseCell: function (data: any) {
           // Aplicar estilos personalizados nas células
           if (data.section === 'body') {
@@ -2263,6 +2268,11 @@ export const DREView: React.FC<DREViewProps> = ({
         columnStyles: dynColumnStyles,
         tableWidth: 'auto',
         margin: { top: startY, left: 8, right: 8 },
+        didDrawPage: function (data: any) {
+          if (data.pageNumber > 1) {
+            renderPdfHeader(doc, `DRE % - ${regimeLabel} - Ano: ${selectedYear}`);
+          }
+        },
         didParseCell: function (data: any) {
           if (data.section === 'body') {
             const rowIndex = data.row.index;
