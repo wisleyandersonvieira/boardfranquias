@@ -705,111 +705,139 @@ const AccountsPayableReport = () => {
     // Header
     doc.setFontSize(18);
     doc.setFont("helvetica", "bold");
-    doc.text("RELATÓRIO DE CONTAS A PAGAR", 105, 20, { align: "center" });
-    
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "normal");
-    doc.text("Agrupado por Subgrupo", 105, 28, { align: "center" });
+    doc.text("RELATÓRIO DE CONTAS A PAGAR POR SUBGRUPO", 105, 20, { align: "center" });
     
     const filterInfo = getFilterInfo();
     
     if (filterInfo.length > 0) {
       doc.setFontSize(10);
-      doc.text(`Filtros aplicados: ${filterInfo.join(" | ")}`, 20, 38);
+      doc.text(`Filtros aplicados: ${filterInfo.join(" | ")}`, 20, 30);
     }
-
-    // Group and aggregate by subgroup - one line per subgroup with summed amount
-    const subgroupTotals: { [key: string]: { subgroupName: string; totalAmount: number } } = {};
+    
+    // Group accounts by subgroup, listing detail rows under each subgroup header
+    const accountsBySubgroup: { [key: string]: { subgroupName: string; items: any[] } } = {};
     
     accounts.forEach((account: any) => {
-      let installmentProportion = 1;
-      let interestAmount = 0;
-      let discountAmount = 0;
-      
-      if (account.total_installments > 1) {
-        const originalTotalAmount = account.total_amount || account.amount * account.total_installments;
-        if (originalTotalAmount > 0) {
-          const installmentBaseAmount = originalTotalAmount / account.total_installments;
-          installmentProportion = installmentBaseAmount / originalTotalAmount;
-        }
-        const payments = account.accounts_payable_payments || [];
-        payments.forEach((payment: any) => {
-          interestAmount += payment.interest_amount || 0;
-          discountAmount += payment.discount_amount || 0;
-        });
-      } else {
-        const payments = account.accounts_payable_payments || [];
-        payments.forEach((payment: any) => {
-          interestAmount += payment.interest_amount || 0;
-          discountAmount += payment.discount_amount || 0;
-        });
-      }
-      
       if (account.accounts_payable_items && account.accounts_payable_items.length > 0) {
         const totalItemsValue = account.accounts_payable_items.reduce(
-          (sum: number, item: any) => sum + (item.total_price || 0), 0
+          (sum: number, it: any) => sum + (it.total_price || 0), 0
         );
-        
+
+        // Group items by subgroup within this account, summing their proportional values
+        const itemsBySubgroup: { [key: string]: { subgroupId: string; subgroupName: string; totalAmount: number } } = {};
         account.accounts_payable_items.forEach((item: any) => {
           const subgroupId = item.products?.subgroup_id || 'sem-subgrupo';
           const subgroupName = item.products?.account_groups?.name || 'Sem Subgrupo';
-          
-          let itemAmount = (item.total_price || 0) * installmentProportion;
-          if (totalItemsValue > 0 && (interestAmount > 0 || discountAmount > 0)) {
-            const itemProportion = (item.total_price || 0) / totalItemsValue;
-            itemAmount += (interestAmount * itemProportion) - (discountAmount * itemProportion);
+
+          let itemAmount = item.total_price || 0;
+          // For installments, calculate proportion
+          if (account.total_installments > 1) {
+            const originalTotalAmount = account.total_amount || account.amount * account.total_installments;
+            if (originalTotalAmount > 0) {
+              const installmentProportion = (account.amount || 0) / originalTotalAmount;
+              itemAmount = (item.total_price || 0) * installmentProportion;
+            }
           }
-          
-          if (!subgroupTotals[subgroupId]) {
-            subgroupTotals[subgroupId] = { subgroupName, totalAmount: 0 };
+
+          if (!itemsBySubgroup[subgroupId]) {
+            itemsBySubgroup[subgroupId] = { subgroupId, subgroupName, totalAmount: 0 };
           }
-          subgroupTotals[subgroupId].totalAmount += itemAmount;
+          itemsBySubgroup[subgroupId].totalAmount += itemAmount;
+        });
+
+        // Add one row per subgroup for this account
+        Object.values(itemsBySubgroup).forEach(({ subgroupId, subgroupName, totalAmount }) => {
+          if (!accountsBySubgroup[subgroupId]) {
+            accountsBySubgroup[subgroupId] = { subgroupName, items: [] };
+          }
+          accountsBySubgroup[subgroupId].items.push({
+            description: account.description,
+            supplierName: account.employees?.name || account.suppliers?.name || "N/A",
+            storeName: account.stores?.name || "N/A",
+            dueDate: account.due_date,
+            amount: totalAmount,
+            installmentNumber: account.installment_number,
+            totalInstallments: account.total_installments,
+          });
         });
       } else {
-        if (!subgroupTotals['sem-subgrupo']) {
-          subgroupTotals['sem-subgrupo'] = { subgroupName: 'Sem Subgrupo', totalAmount: 0 };
+        // No items - put in "Sem Subgrupo"
+        if (!accountsBySubgroup['sem-subgrupo']) {
+          accountsBySubgroup['sem-subgrupo'] = { subgroupName: 'Sem Subgrupo', items: [] };
         }
-        subgroupTotals['sem-subgrupo'].totalAmount += account.amount || 0;
+        accountsBySubgroup['sem-subgrupo'].items.push({
+          description: account.description,
+          supplierName: account.employees?.name || account.suppliers?.name || "N/A",
+          storeName: account.stores?.name || "N/A",
+          dueDate: account.due_date,
+          amount: account.amount || 0,
+          installmentNumber: account.installment_number,
+          totalInstallments: account.total_installments,
+        });
       }
     });
 
-    // Build table data - one line per subgroup
+    // Build table data
     const tableData: any[] = [];
     let grandTotal = 0;
-    
+    let totalItems = 0;
+
     // Sort subgroups by name
-    const sortedSubgroups = Object.values(subgroupTotals).sort((a, b) => 
+    const sortedSubgroups = Object.values(accountsBySubgroup).sort((a, b) =>
       a.subgroupName.localeCompare(b.subgroupName)
     );
-    
+
     sortedSubgroups.forEach(group => {
+      // Subgroup header row
       tableData.push([
-        group.subgroupName,
-        group.totalAmount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+        { content: group.subgroupName, colSpan: 6, styles: { fontStyle: "bold", fillColor: [220, 220, 220], fontSize: 10 } }
       ]);
-      grandTotal += group.totalAmount;
+
+      let subgroupTotal = 0;
+      group.items.forEach(item => {
+        tableData.push([
+          item.description,
+          item.supplierName,
+          item.storeName,
+          item.dueDate ? new Date(item.dueDate + 'T00:00:00').toLocaleDateString("pt-BR") : "N/A",
+          item.amount?.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) || "N/A",
+          item.totalInstallments > 1 ? `${item.installmentNumber}/${item.totalInstallments}` : "À vista"
+        ]);
+        subgroupTotal += item.amount || 0;
+        totalItems++;
+      });
+
+      // Subgroup subtotal
+      tableData.push([
+        { content: `Subtotal ${group.subgroupName}`, colSpan: 4, styles: { fontStyle: "bold", halign: "right", fillColor: [240, 240, 240] } },
+        { content: subgroupTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), styles: { fontStyle: "bold", fillColor: [240, 240, 240] } },
+        { content: `${group.items.length} item(s)`, styles: { fontStyle: "bold", fillColor: [240, 240, 240] } }
+      ]);
+
+      grandTotal += subgroupTotal;
     });
-    
+
     // Grand total row
     tableData.push([
-      { content: "TOTAL GERAL", styles: { fontStyle: "bold", halign: "right", fillColor: [41, 128, 185], textColor: 255 } },
-      { content: grandTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), styles: { fontStyle: "bold", fillColor: [41, 128, 185], textColor: 255 } }
+      { content: "TOTAL GERAL", colSpan: 4, styles: { fontStyle: "bold", halign: "right", fillColor: [41, 128, 185], textColor: 255 } },
+      { content: grandTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), styles: { fontStyle: "bold", fillColor: [41, 128, 185], textColor: 255 } },
+      { content: `${totalItems} item(s)`, styles: { fontStyle: "bold", fillColor: [41, 128, 185], textColor: 255 } }
     ]);
 
     autoTable(doc, {
-      head: [["Subgrupo", "Valor"]],
+      head: [["Título", "Fornecedor", "Loja", "Vencimento", "Valor", "Parcelas"]],
       body: tableData,
-      startY: filterInfo.length > 0 ? 45 : 35,
+      startY: filterInfo.length > 0 ? 37 : 27,
       styles: {
-        fontSize: 8,
-        cellPadding: 2,
+        fontSize: 9,
+        cellPadding: 3,
       },
       headStyles: {
         fillColor: [41, 128, 185],
         textColor: 255,
         fontStyle: "bold"
       },
-      margin: { left: 10, right: 10 }
+      margin: { left: 20, right: 20 }
     });
 
     // Footer
@@ -817,8 +845,8 @@ const AccountsPayableReport = () => {
     for (let i = 1; i <= pageCount; i++) {
       doc.setPage(i);
       doc.setFontSize(8);
-      doc.text(`Gerado em: ${new Date().toLocaleString("pt-BR")}`, 10, doc.internal.pageSize.height - 10);
-      doc.text(`Página ${i} de ${pageCount}`, doc.internal.pageSize.width - 30, doc.internal.pageSize.height - 10);
+      doc.text(`Gerado em: ${new Date().toLocaleString("pt-BR")}`, 20, doc.internal.pageSize.height - 10);
+      doc.text(`Página ${i} de ${pageCount}`, doc.internal.pageSize.width - 40, doc.internal.pageSize.height - 10);
     }
 
     doc.save("contas-a-pagar-por-subgrupo.pdf");
