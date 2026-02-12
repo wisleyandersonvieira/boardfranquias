@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { addPdfHeaderWithLogo } from "@/utils/pdfHeader";
 import * as XLSX from 'xlsx';
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -1982,15 +1983,13 @@ export const DREView: React.FC<DREViewProps> = ({
       });
     }
   };
-  const exportToPDF = () => {
+  const exportToPDF = async () => {
     try {
       const doc = new jsPDF('landscape');
 
-      // Título
-      doc.setFontSize(16);
-      doc.text('Demonstrativo de Resultados do Exercício', 20, 20);
-      doc.setFontSize(12);
-      doc.text(`Ano: ${selectedYear}`, 20, 30);
+      // Cabeçalho padrão com logo
+      const regimeLabel = isCashRegime ? 'Regime de Caixa' : 'Competência';
+      const startY = await addPdfHeaderWithLogo(doc, `DRE - ${regimeLabel} - Ano: ${selectedYear}`);
 
       // Preparar dados para a tabela com metadados de estilo
       const tableHeaders: string[][] = groupStores ? [['Descrição']] : [['Descrição'], ['']];
@@ -2074,7 +2073,7 @@ export const DREView: React.FC<DREViewProps> = ({
       autoTable(doc, {
         head: tableHeaders,
         body: tableData.map(row => row.map(cell => cell.content)),
-        startY: 40,
+        startY: startY,
         styles: {
           fontSize: 8,
           cellPadding: 3
@@ -2093,7 +2092,7 @@ export const DREView: React.FC<DREViewProps> = ({
           }
         },
         margin: {
-          top: 40
+          top: startY
         },
         didParseCell: function (data: any) {
           // Aplicar estilos personalizados nas células
@@ -2136,15 +2135,13 @@ export const DREView: React.FC<DREViewProps> = ({
     }
   };
 
-  const exportToPDFPercent = () => {
+  const exportToPDFPercent = async () => {
     try {
       const doc = new jsPDF('portrait');
 
+      // Cabeçalho padrão com logo
       const regimeLabel = isCashRegime ? 'Regime de Caixa' : 'Competência';
-      doc.setFontSize(16);
-      doc.text(`DRE - ${regimeLabel}`, 20, 20);
-      doc.setFontSize(10);
-      doc.text(`Ano: ${selectedYear}`, 20, 28);
+      const startY = await addPdfHeaderWithLogo(doc, `DRE % - ${regimeLabel} - Ano: ${selectedYear}`);
 
       // First group item is the base for % calculation
       const firstGroupItem = structureItems.find(item => item.item_type === 'group');
@@ -2248,7 +2245,7 @@ export const DREView: React.FC<DREViewProps> = ({
       autoTable(doc, {
         head: tableHeaders,
         body: tableBody,
-        startY: 34,
+        startY: startY,
         styles: {
           fontSize: 7,
           cellPadding: 1,
@@ -2265,7 +2262,7 @@ export const DREView: React.FC<DREViewProps> = ({
         },
         columnStyles: dynColumnStyles,
         tableWidth: 'auto',
-        margin: { top: 34, left: 8, right: 8 },
+        margin: { top: startY, left: 8, right: 8 },
         didParseCell: function (data: any) {
           if (data.section === 'body') {
             const rowIndex = data.row.index;
