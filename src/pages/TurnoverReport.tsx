@@ -7,10 +7,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, FileText, Download, X } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ArrowLeft, FileText, Download, X, FileDown, FileSpreadsheet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import { addPdfHeaderWithLogo, renderPdfHeader } from "@/utils/pdfHeader";
+import * as XLSX from "xlsx";
 
 import { supabase } from "@/integrations/supabase/client";
 
@@ -391,6 +396,166 @@ const TurnoverReport = () => {
 
   const totals = calculateTotals();
 
+  const storeName = stores.find(s => s.id === selectedStore)?.name || '';
+  const periodLabel = startDate && endDate 
+    ? `${new Date(startDate + 'T00:00:00').toLocaleDateString('pt-BR')} a ${new Date(endDate + 'T00:00:00').toLocaleDateString('pt-BR')}`
+    : startDate ? `A partir de ${new Date(startDate + 'T00:00:00').toLocaleDateString('pt-BR')}`
+    : endDate ? `Até ${new Date(endDate + 'T00:00:00').toLocaleDateString('pt-BR')}`
+    : 'Todos';
+
+  const pdfColumns = ['Data', 'Dinheiro', 'Cartão', 'Contas', 'Delivery', 'Ctas Recebidas', 'Total'];
+
+  const exportPDFDetalhado = async () => {
+    const doc = new jsPDF('l', 'mm', 'a4');
+    const title = "Faturamento - Detalhado";
+    const startY = await addPdfHeaderWithLogo(doc, title);
+
+    doc.setFontSize(9);
+    doc.text(`Loja: ${storeName} | Período: ${periodLabel}`, 14, startY);
+
+    const tableData = reportData.map(row => [
+      format(parseISO(row.date), "dd/MM/yyyy"),
+      formatCurrency(row.dinheiro),
+      formatCurrency(row.cartao),
+      formatCurrency(row.contas),
+      formatCurrency(row.delivery),
+      formatCurrency(row.contasRecebidas),
+      formatCurrency(row.total),
+    ]);
+    tableData.push([
+      { content: 'TOTAL', styles: { fontStyle: 'bold' } } as any,
+      ...['dinheiro','cartao','contas','delivery','contasRecebidas','total'].map(k => 
+        ({ content: formatCurrency(totals[k as keyof typeof totals]), styles: { fontStyle: 'bold' } }) as any
+      )
+    ]);
+
+    autoTable(doc, {
+      head: [pdfColumns],
+      body: tableData,
+      startY: startY + 5,
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [59, 130, 246] },
+      columnStyles: { 1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'},5:{halign:'right'},6:{halign:'right'} },
+      margin: { top: startY },
+      didDrawPage: (data: any) => { if (data.pageNumber > 1) renderPdfHeader(doc, title); }
+    });
+
+    doc.save('faturamento-detalhado.pdf');
+  };
+
+  const exportPDFResumidoDia = async () => {
+    const doc = new jsPDF();
+    const title = "Faturamento - Resumo/Dia";
+    const startY = await addPdfHeaderWithLogo(doc, title);
+
+    doc.setFontSize(9);
+    doc.text(`Loja: ${storeName} | Período: ${periodLabel}`, 14, startY);
+
+    const tableData = reportData.map(row => [
+      format(parseISO(row.date), "dd/MM/yyyy"),
+      formatCurrency(row.total),
+    ]);
+    tableData.push([
+      { content: 'TOTAL', styles: { fontStyle: 'bold' } } as any,
+      { content: formatCurrency(totals.total), styles: { fontStyle: 'bold' } } as any,
+    ]);
+
+    autoTable(doc, {
+      head: [['Data', 'Total']],
+      body: tableData,
+      startY: startY + 5,
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [59, 130, 246] },
+      columnStyles: { 1: { halign: 'right' } },
+      margin: { top: startY },
+      didDrawPage: (data: any) => { if (data.pageNumber > 1) renderPdfHeader(doc, title); }
+    });
+
+    doc.save('faturamento-resumo-dia.pdf');
+  };
+
+  const exportPDFResumidoMes = async () => {
+    const doc = new jsPDF();
+    const title = "Faturamento - Resumo/Mês";
+    const startY = await addPdfHeaderWithLogo(doc, title);
+
+    doc.setFontSize(9);
+    doc.text(`Loja: ${storeName} | Período: ${periodLabel}`, 14, startY);
+
+    // Agrupar por mês
+    const monthMap = new Map<string, { dinheiro: number; cartao: number; contas: number; delivery: number; contasRecebidas: number; total: number }>();
+    reportData.forEach(row => {
+      const monthKey = row.date.substring(0, 7); // yyyy-MM
+      const existing = monthMap.get(monthKey) || { dinheiro: 0, cartao: 0, contas: 0, delivery: 0, contasRecebidas: 0, total: 0 };
+      existing.dinheiro += row.dinheiro;
+      existing.cartao += row.cartao;
+      existing.contas += row.contas;
+      existing.delivery += row.delivery;
+      existing.contasRecebidas += row.contasRecebidas;
+      existing.total += row.total;
+      monthMap.set(monthKey, existing);
+    });
+
+    const months = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    const tableData = Array.from(monthMap.entries()).map(([key, val]) => {
+      const [y, m] = key.split('-');
+      return [
+        `${months[parseInt(m) - 1]}/${y}`,
+        formatCurrency(val.dinheiro),
+        formatCurrency(val.cartao),
+        formatCurrency(val.contas),
+        formatCurrency(val.delivery),
+        formatCurrency(val.contasRecebidas),
+        formatCurrency(val.total),
+      ];
+    });
+    tableData.push([
+      { content: 'TOTAL', styles: { fontStyle: 'bold' } } as any,
+      ...['dinheiro','cartao','contas','delivery','contasRecebidas','total'].map(k => 
+        ({ content: formatCurrency(totals[k as keyof typeof totals]), styles: { fontStyle: 'bold' } }) as any
+      )
+    ]);
+
+    autoTable(doc, {
+      head: [['Mês', 'Dinheiro', 'Cartão', 'Contas', 'Delivery', 'Ctas Recebidas', 'Total']],
+      body: tableData,
+      startY: startY + 5,
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [59, 130, 246] },
+      columnStyles: { 1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'},5:{halign:'right'},6:{halign:'right'} },
+      margin: { top: startY },
+      didDrawPage: (data: any) => { if (data.pageNumber > 1) renderPdfHeader(doc, title); }
+    });
+
+    doc.save('faturamento-resumo-mes.pdf');
+  };
+
+  const exportToExcel = () => {
+    const data = reportData.map(row => ({
+      'Data': format(parseISO(row.date), "dd/MM/yyyy"),
+      'Dinheiro': row.dinheiro,
+      'Cartão': row.cartao,
+      'Contas': row.contas,
+      'Delivery': row.delivery,
+      'Contas Recebidas': row.contasRecebidas,
+      'Total': row.total,
+    }));
+    data.push({
+      'Data': 'TOTAL',
+      'Dinheiro': totals.dinheiro,
+      'Cartão': totals.cartao,
+      'Contas': totals.contas,
+      'Delivery': totals.delivery,
+      'Contas Recebidas': totals.contasRecebidas,
+      'Total': totals.total,
+    });
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Faturamento");
+    XLSX.writeFile(wb, 'faturamento.xlsx');
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -516,10 +681,33 @@ const TurnoverReport = () => {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Relatório de Faturamento</CardTitle>
-                <Button variant="outline" size="sm">
-                  <Download className="h-4 w-4 mr-2" />
-                  Exportar
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <Download className="h-4 w-4 mr-2" />
+                      Exportar
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={exportPDFDetalhado}>
+                      <FileDown className="h-4 w-4 mr-2" />
+                      PDF Detalhado
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={exportPDFResumidoDia}>
+                      <FileDown className="h-4 w-4 mr-2" />
+                      PDF Resumido/Dia
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={exportPDFResumidoMes}>
+                      <FileDown className="h-4 w-4 mr-2" />
+                      PDF Resumido/Mês
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={exportToExcel}>
+                      <FileSpreadsheet className="h-4 w-4 mr-2" />
+                      Excel
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </CardHeader>
             <CardContent>
