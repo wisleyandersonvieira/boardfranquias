@@ -103,32 +103,57 @@ const AccountsPayableReport = () => {
   const handleSearch = async () => {
     setLoading(true);
     try {
-      // Fetch accounts with suppliers, employees, stores, installments and items with products
-      const { data: allAccounts, error } = await supabase
-        .from("accounts_payable")
-        .select(`
-          *,
-          suppliers(id, name),
-          employees(id, name),
-          stores(id, name),
-          accounts_payable_installments(*),
-          accounts_payable_payments(
-            id,
-            installment_id,
-            interest_amount,
-            discount_amount
-          ),
-          accounts_payable_items(
-            id,
-            product_id,
-            quantity,
-            unit_price,
-            total_price,
-            products(id, name, subgroup_id, account_groups:subgroup_id(id, name, parent_id))
-          )
-        `) as { data: any[] | null; error: any };
+      // Helper: fetch all rows with automatic pagination (batches of 1000)
+      const fetchAllPaginated = async (buildQuery: () => any) => {
+        const PAGE_SIZE = 1000;
+        let allRows: any[] = [];
+        let from = 0;
+        let keepFetching = true;
 
-      if (error) throw error;
+        while (keepFetching) {
+          const { data, error } = await buildQuery().range(from, from + PAGE_SIZE - 1);
+          if (error) throw error;
+          if (data && data.length > 0) {
+            allRows = allRows.concat(data);
+            if (data.length < PAGE_SIZE) {
+              keepFetching = false;
+            } else {
+              from += PAGE_SIZE;
+            }
+          } else {
+            keepFetching = false;
+          }
+        }
+        return allRows;
+      };
+
+      const buildAccountsQuery = () =>
+        supabase
+          .from("accounts_payable")
+          .select(`
+            *,
+            suppliers(id, name),
+            employees(id, name),
+            stores(id, name),
+            accounts_payable_installments(*),
+            accounts_payable_payments(
+              id,
+              installment_id,
+              interest_amount,
+              discount_amount
+            ),
+            accounts_payable_items(
+              id,
+              product_id,
+              quantity,
+              unit_price,
+              total_price,
+              products(id, name, subgroup_id, account_groups:subgroup_id(id, name, parent_id))
+            )
+          `)
+          .neq('status', 'paid');
+
+      const allAccounts = await fetchAllPaginated(buildAccountsQuery);
 
       // Filter for unpaid accounts only and expand installments
       let accountsData: any[] = [];
