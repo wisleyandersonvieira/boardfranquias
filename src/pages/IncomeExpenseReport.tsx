@@ -208,6 +208,26 @@ const IncomeExpenseReport = () => {
     setHasSearched(true);
 
     try {
+      // Helper: fetch all rows with automatic pagination (batches of 1000)
+      const fetchAllPaginated = async (buildQuery: () => any) => {
+        const PAGE_SIZE = 1000;
+        let allRows: any[] = [];
+        let from = 0;
+        let keepFetching = true;
+        while (keepFetching) {
+          const { data, error } = await buildQuery().range(from, from + PAGE_SIZE - 1);
+          if (error) throw error;
+          if (data && data.length > 0) {
+            allRows = allRows.concat(data);
+            if (data.length < PAGE_SIZE) keepFetching = false;
+            else from += PAGE_SIZE;
+          } else {
+            keepFetching = false;
+          }
+        }
+        return allRows;
+      };
+
       const generatedColumns = generateColumns();
       setColumns(generatedColumns);
 
@@ -289,12 +309,14 @@ const IncomeExpenseReport = () => {
       const storeFilter = selectedStores.length > 0 ? selectedStores : stores.map(s => s.id);
 
       // Fetch cash control data (revenues)
-      const { data: cashControlData } = await supabase
-        .from('cash_control')
-        .select('store_id, date, faturamento_dinheiro, faturamento_cartao, faturamento_conta, faturamento_delivery')
-        .in('store_id', storeFilter)
-        .gte('date', startDate)
-        .lte('date', endDate);
+      const cashControlData = await fetchAllPaginated(() =>
+        supabase
+          .from('cash_control')
+          .select('store_id, date, faturamento_dinheiro, faturamento_cartao, faturamento_conta, faturamento_delivery')
+          .in('store_id', storeFilter)
+          .gte('date', startDate)
+          .lte('date', endDate)
+      );
 
       // Process cash control data
       cashControlData?.forEach(cc => {
@@ -323,19 +345,21 @@ const IncomeExpenseReport = () => {
       // Fetch accounts payable/receivable based on regime
       if (regime === 'competencia') {
         // Accounts payable by competence - NORMAL ITEMS ONLY (exclude interest/discount)
-        const { data: apData } = await supabase
-          .from('accounts_payable')
-          .select(`
-            id, store_id, data_competencia,
-            accounts_payable_items (
-              product_id,
-              total_price,
-              products (subgroup_id)
-            )
-          `)
-          .in('store_id', storeFilter)
-          .gte('data_competencia', startDate)
-          .lte('data_competencia', endDate);
+        const apData = await fetchAllPaginated(() =>
+          supabase
+            .from('accounts_payable')
+            .select(`
+              id, store_id, data_competencia,
+              accounts_payable_items (
+                product_id,
+                total_price,
+                products (subgroup_id)
+              )
+            `)
+            .in('store_id', storeFilter)
+            .gte('data_competencia', startDate)
+            .lte('data_competencia', endDate)
+        );
 
         apData?.forEach(ap => {
           if (!ap.data_competencia) return;
@@ -360,19 +384,21 @@ const IncomeExpenseReport = () => {
         });
 
         // Accounts receivable by competence - NORMAL ITEMS ONLY (exclude interest/discount)
-        const { data: arData } = await supabase
-          .from('accounts_receivable')
-          .select(`
-            id, store_id, data_competencia,
-            accounts_receivable_items (
-              product_id,
-              total_price,
-              products (subgroup_id)
-            )
-          `)
-          .in('store_id', storeFilter)
-          .gte('data_competencia', startDate)
-          .lte('data_competencia', endDate);
+        const arData = await fetchAllPaginated(() =>
+          supabase
+            .from('accounts_receivable')
+            .select(`
+              id, store_id, data_competencia,
+              accounts_receivable_items (
+                product_id,
+                total_price,
+                products (subgroup_id)
+              )
+            `)
+            .in('store_id', storeFilter)
+            .gte('data_competencia', startDate)
+            .lte('data_competencia', endDate)
+        );
 
         arData?.forEach(ar => {
           if (!ar.data_competencia) return;
@@ -398,16 +424,18 @@ const IncomeExpenseReport = () => {
 
         // For competence regime: Interest and Discount must use PAYMENT DATE (not competence date)
         // Fetch AP payments for interest/discount
-        const { data: apPaymentsCompetencia } = await supabase
-          .from('accounts_payable_payments')
-          .select(`
-            payment_date, interest_amount, discount_amount,
-            accounts_payable_installments!inner (
-              accounts_payable!inner (store_id)
-            )
-          `)
-          .gte('payment_date', startDate)
-          .lte('payment_date', endDate);
+        const apPaymentsCompetencia = await fetchAllPaginated(() =>
+          supabase
+            .from('accounts_payable_payments')
+            .select(`
+              payment_date, interest_amount, discount_amount,
+              accounts_payable_installments!inner (
+                accounts_payable!inner (store_id)
+              )
+            `)
+            .gte('payment_date', startDate)
+            .lte('payment_date', endDate)
+        );
 
         apPaymentsCompetencia?.forEach((payment: any) => {
           const storeId = payment.accounts_payable_installments?.accounts_payable?.store_id;
@@ -440,16 +468,18 @@ const IncomeExpenseReport = () => {
         });
 
         // Fetch AR payments for interest/discount
-        const { data: arPaymentsCompetencia } = await supabase
-          .from('accounts_receivable_payments')
-          .select(`
-            payment_date, interest_amount, discount_amount,
-            accounts_receivable_installments!inner (
-              accounts_receivable!inner (store_id)
-            )
-          `)
-          .gte('payment_date', startDate)
-          .lte('payment_date', endDate);
+        const arPaymentsCompetencia = await fetchAllPaginated(() =>
+          supabase
+            .from('accounts_receivable_payments')
+            .select(`
+              payment_date, interest_amount, discount_amount,
+              accounts_receivable_installments!inner (
+                accounts_receivable!inner (store_id)
+              )
+            `)
+            .gte('payment_date', startDate)
+            .lte('payment_date', endDate)
+        );
 
         arPaymentsCompetencia?.forEach((payment: any) => {
           const storeId = payment.accounts_receivable_installments?.accounts_receivable?.store_id;
@@ -484,22 +514,24 @@ const IncomeExpenseReport = () => {
         // Payment regime - use payment dates from installments with proportional item values
         
         // Fetch AP installments with payments - need to get total installments count
-        const { data: apInstallments } = await supabase
-          .from('accounts_payable_installments')
-          .select(`
-            id, payment_date, amount, account_payable_id,
-            accounts_payable!inner (
-              id, store_id,
-              accounts_payable_items (
-                product_id,
-                total_price,
-                products (id, subgroup_id)
+        const apInstallments = await fetchAllPaginated(() =>
+          supabase
+            .from('accounts_payable_installments')
+            .select(`
+              id, payment_date, amount, account_payable_id,
+              accounts_payable!inner (
+                id, store_id,
+                accounts_payable_items (
+                  product_id,
+                  total_price,
+                  products (id, subgroup_id)
+                )
               )
-            )
-          `)
-          .not('payment_date', 'is', null)
-          .gte('payment_date', startDate)
-          .lte('payment_date', endDate);
+            `)
+            .not('payment_date', 'is', null)
+            .gte('payment_date', startDate)
+            .lte('payment_date', endDate)
+        );
 
         // Get total installments count per account_payable
         const apIds = [...new Set(apInstallments?.map(i => i.account_payable_id) || [])];
@@ -588,22 +620,24 @@ const IncomeExpenseReport = () => {
         });
 
         // Fetch AR installments with payments
-        const { data: arInstallments } = await supabase
-          .from('accounts_receivable_installments')
-          .select(`
-            id, payment_date, amount, account_receivable_id,
-            accounts_receivable!inner (
-              id, store_id,
-              accounts_receivable_items (
-                product_id,
-                total_price,
-                products (id, subgroup_id)
+        const arInstallments = await fetchAllPaginated(() =>
+          supabase
+            .from('accounts_receivable_installments')
+            .select(`
+              id, payment_date, amount, account_receivable_id,
+              accounts_receivable!inner (
+                id, store_id,
+                accounts_receivable_items (
+                  product_id,
+                  total_price,
+                  products (id, subgroup_id)
+                )
               )
-            )
-          `)
-          .not('payment_date', 'is', null)
-          .gte('payment_date', startDate)
-          .lte('payment_date', endDate);
+            `)
+            .not('payment_date', 'is', null)
+            .gte('payment_date', startDate)
+            .lte('payment_date', endDate)
+        );
 
         // Get total installments count per account_receivable
         const arIds = [...new Set(arInstallments?.map(i => i.account_receivable_id) || [])];
@@ -695,12 +729,14 @@ const IncomeExpenseReport = () => {
       // Process partner transactions (aportes and retiradas)
       // Use competence_date for competencia regime, payment_date for pagamento regime
       const partnerDateField = regime === 'competencia' ? 'competence_date' : 'payment_date';
-      const { data: partnerTransactions } = await supabase
-        .from('partner_transactions')
-        .select('store_id, payment_date, competence_date, amount, transaction_type')
-        .in('store_id', storeFilter)
-        .gte(partnerDateField, startDate)
-        .lte(partnerDateField, endDate);
+      const partnerTransactions = await fetchAllPaginated(() =>
+        supabase
+          .from('partner_transactions')
+          .select('store_id, payment_date, competence_date, amount, transaction_type')
+          .in('store_id', storeFilter)
+          .gte(partnerDateField, startDate)
+          .lte(partnerDateField, endDate)
+      );
 
       partnerTransactions?.forEach(transaction => {
         const dateToUse = regime === 'competencia' 

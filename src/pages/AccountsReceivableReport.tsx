@@ -90,18 +90,38 @@ const AccountsReceivableReport = () => {
   const handleSearch = async () => {
     setLoading(true);
     try {
-      // Fetch accounts with creditors, stores and installments - only pending or partial
-      const { data: allAccounts, error } = await supabase
-        .from("accounts_receivable")
-        .select(`
-          *,
-          creditors(id, name),
-          stores(id, name),
-          accounts_receivable_installments(*)
-        `)
-        .in('status', ['pending', 'partial']) as { data: any[] | null; error: any };
+      // Helper: fetch all rows with automatic pagination (batches of 1000)
+      const fetchAllPaginated = async (buildQuery: () => any) => {
+        const PAGE_SIZE = 1000;
+        let allRows: any[] = [];
+        let from = 0;
+        let keepFetching = true;
+        while (keepFetching) {
+          const { data, error } = await buildQuery().range(from, from + PAGE_SIZE - 1);
+          if (error) throw error;
+          if (data && data.length > 0) {
+            allRows = allRows.concat(data);
+            if (data.length < PAGE_SIZE) keepFetching = false;
+            else from += PAGE_SIZE;
+          } else {
+            keepFetching = false;
+          }
+        }
+        return allRows;
+      };
 
-      if (error) throw error;
+      // Fetch accounts with creditors, stores and installments - only pending or partial
+      const allAccounts = await fetchAllPaginated(() =>
+        supabase
+          .from("accounts_receivable")
+          .select(`
+            *,
+            creditors(id, name),
+            stores(id, name),
+            accounts_receivable_installments(*)
+          `)
+          .in('status', ['pending', 'partial'])
+      );
 
       // Expand installments - show only pending installments
       let accountsData: any[] = [];
