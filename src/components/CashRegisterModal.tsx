@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import { Textarea } from "@/components/ui/textarea";
 import { Upload, DollarSign, CreditCard, Building2, Truck, Trash2, Plus, Eye, Ban } from "lucide-react";
 import { validateCashControlPeriod } from "@/utils/periodValidation";
 
@@ -117,6 +118,7 @@ export const CashRegisterModal = ({ open, onOpenChange, date, storeId, mode = 'c
   const [deliveryAccounts, setDeliveryAccounts] = useState<DeliveryAccount[]>([]);
   const [cashAccounts, setCashAccounts] = useState<CashAccount[]>([]);
   const [attachments, setAttachments] = useState<File[]>([]);
+  const [notes, setNotes] = useState<string>('');
   const [existingAttachments, setExistingAttachments] = useState<string[]>([]);
   const [attachmentStatus, setAttachmentStatus] = useState<AttachmentStatus[]>([]);
   const [editHistory, setEditHistory] = useState<Array<{edited_at: string; edited_by: string; edited_by_name: string}>>([]);
@@ -147,6 +149,7 @@ export const CashRegisterModal = ({ open, onOpenChange, date, storeId, mode = 'c
     } else {
       // Limpar estados quando fechar o modal
       setAttachments([]);
+      setNotes('');
       setExistingAttachments([]);
       setAttachmentStatus([]);
       setEditHistory([]);
@@ -169,6 +172,7 @@ export const CashRegisterModal = ({ open, onOpenChange, date, storeId, mode = 'c
 
       if (data) {
         setCashControl(data as any);
+        setNotes(data.notes || '');
         form.reset({
           saldo_inicial: data.saldo_inicial || 0,
           contagem_dinheiro: data.contagem_dinheiro || 0,
@@ -233,6 +237,7 @@ export const CashRegisterModal = ({ open, onOpenChange, date, storeId, mode = 'c
         setExistingAttachments([]);
         setAttachmentStatus([]);
         setAttachments([]);
+        setNotes('');
         setEditHistory([]);
         setCreatedInfo(null);
         
@@ -690,6 +695,7 @@ export const CashRegisterModal = ({ open, onOpenChange, date, storeId, mode = 'c
             diferenca: diferenca,
             image_urls: finalUrls.length > 0 ? finalUrls : null,
             attachment_status: attachmentStatus.length > 0 ? JSON.parse(JSON.stringify(attachmentStatus)) : null,
+            notes: notes || null,
             edited_at: new Date().toISOString(),
             edited_by: userId,
             edited_by_name: userName,
@@ -718,6 +724,7 @@ export const CashRegisterModal = ({ open, onOpenChange, date, storeId, mode = 'c
             diferenca: diferenca,
             created_by: userId,
             created_by_name: userName,
+            notes: notes || null,
             edit_history: [],
           })
           .select()
@@ -1034,6 +1041,18 @@ export const CashRegisterModal = ({ open, onOpenChange, date, storeId, mode = 'c
                   <Label className="text-lg font-bold">
                     Diferença: R$ {diferenca.toFixed(2)}
                   </Label>
+                </div>
+
+                {/* Campo Observação */}
+                <div className="space-y-2">
+                  <Label>Observação</Label>
+                  <Textarea
+                    placeholder="Digite uma observação sobre o fechamento de caixa..."
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    disabled={isReadOnly}
+                    rows={3}
+                  />
                 </div>
 
                 {/* Campo de Anexos */}
