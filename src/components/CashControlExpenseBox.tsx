@@ -1108,7 +1108,7 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
           <div className="flex-1 overflow-auto border rounded">
             <Table>
               <TableHeader className="sticky top-0 bg-card z-10">
-                <TableRow>
+                <TableRow className="h-7">
                   <TableHead 
                     className="text-xs cursor-pointer hover:bg-muted/50 select-none"
                     onClick={() => handleSort('issue_date')}
@@ -1152,24 +1152,24 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
                       : "";
                   
                   return (
-                    <TableRow key={expense.id} className={rowClassName}>
-                      <TableCell className="text-xs">
+                    <TableRow key={expense.id} className={`${rowClassName} h-6`}>
+                      <TableCell className="text-xs py-0.5">
                         {format(new Date(expense.issue_date + 'T12:00:00'), "dd/MM/yyyy")}
                       </TableCell>
-                      <TableCell className="text-xs">
+                      <TableCell className="text-xs py-0.5">
                         {format(new Date(expense.created_at), "dd/MM/yyyy HH:mm")}
                       </TableCell>
-                      <TableCell className="text-xs">
+                      <TableCell className="text-xs py-0.5">
                         {expense.supplier}
                         {expense.is_disabled && " (inabilitado)"}
                       </TableCell>
-                      <TableCell className="text-xs">
+                      <TableCell className="text-xs py-0.5">
                         {expense.description}
                       </TableCell>
-                      <TableCell className="text-xs">
+                      <TableCell className="text-xs py-0.5">
                         {formatCurrency(expense.amount)}
                       </TableCell>
-                      <TableCell className="text-xs">
+                      <TableCell className="text-xs py-0.5">
                         <div className="flex gap-0.5">
                           <Button 
                             variant="ghost" 
