@@ -2670,14 +2670,21 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError || !user) throw new Error("Usuário não autenticado");
 
-      // Validar duplicidade: verificar se já existe título com mesmo número e tipo de documento para o fornecedor
-      if (!isEmployeeMode && supplierId && documentNumber && documentType) {
-        const { data: existingPayable, error: duplicateError } = await supabase
+      // Validar duplicidade: verificar se já existe título com mesmo número e tipo de documento para o fornecedor/funcionário
+      if (documentNumber && documentType) {
+        let duplicateQuery = supabase
           .from("accounts_payable")
           .select("id, issue_date, amount")
-          .eq("supplier_id", supplierId)
           .eq("document_number", documentNumber)
-          .eq("document_type", documentType)
+          .eq("document_type", documentType);
+
+        if (isEmployeeMode && employeeId) {
+          duplicateQuery = duplicateQuery.eq("employee_id", employeeId);
+        } else if (supplierId) {
+          duplicateQuery = duplicateQuery.eq("supplier_id", supplierId);
+        }
+
+        const { data: existingPayable, error: duplicateError } = await duplicateQuery
           .maybeSingle();
 
         if (duplicateError) {
@@ -3036,6 +3043,44 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
         });
       } else {
         // Create new account
+
+        // Validar duplicidade: verificar se já existe título com mesmo número e tipo de documento para o fornecedor/funcionário
+        if (documentNumber && documentType) {
+          let duplicateQuery = supabase
+            .from("accounts_payable")
+            .select("id, issue_date, amount")
+            .eq("document_number", documentNumber)
+            .eq("document_type", documentType);
+
+          if (isEmployeeMode && employeeId) {
+            duplicateQuery = duplicateQuery.eq("employee_id", employeeId);
+          } else if (supplierId) {
+            duplicateQuery = duplicateQuery.eq("supplier_id", supplierId);
+          }
+
+          const { data: existingPayable, error: duplicateError } = await duplicateQuery
+            .maybeSingle();
+
+          if (duplicateError) {
+            console.error("Erro ao verificar duplicidade:", duplicateError);
+          }
+
+          if (existingPayable) {
+            const formattedDate = existingPayable.issue_date 
+              ? new Date(existingPayable.issue_date + 'T00:00:00').toLocaleDateString('pt-BR')
+              : 'N/A';
+            const formattedValue = Number(existingPayable.amount).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+            
+            toast({
+              title: "Título duplicado",
+              description: `Já existe um título igual com data de emissão ${formattedDate} e valor ${formattedValue}`,
+              variant: "destructive",
+            });
+            setLoading(false);
+            return;
+          }
+        }
+
         const userStore = await supabase.from("profiles").select("store_id").eq("id", user.id).single();
 
         // Usar a loja do primeiro item se houver itens, senão usar a loja do usuário
