@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
+import { useUserMatrix } from "@/hooks/useUserMatrix";
 
 import { ProductSupplierCodes } from "./ProductSupplierCodes";
 
@@ -63,17 +64,18 @@ export const ProductEditModal = ({ open, onOpenChange, product, onSaveSuccess }:
     function_type: "debit" as "credit" | "debit"
   });
   const { toast } = useToast();
+  const { matrixId } = useUserMatrix();
+
+  const isCreateMode = !product;
 
   // Carregar dados iniciais quando o modal abre
   useEffect(() => {
-    if (open && product) {
+    if (open) {
       fetchInitialData();
     }
   }, [open, product]);
 
   const fetchInitialData = async () => {
-    if (!product) return;
-    
     try {
       // Fetch units
       const { data: unitsData } = await supabase
@@ -91,28 +93,45 @@ export const ProductEditModal = ({ open, onOpenChange, product, onSaveSuccess }:
         .order("name");
       setGroups(groupsData || []);
 
-      // Se tem grupo, buscar subgrupos
-      if (product.group_id) {
-        const { data: subgroupsData } = await supabase
-          .from("account_groups")
-          .select("id, name")
-          .eq("parent_id", product.group_id)
-          .order("name");
-        setSubgroups(subgroupsData || []);
-      }
+      if (product) {
+        // Se tem grupo, buscar subgrupos
+        if (product.group_id) {
+          const { data: subgroupsData } = await supabase
+            .from("account_groups")
+            .select("id, name")
+            .eq("parent_id", product.group_id)
+            .order("name");
+          setSubgroups(subgroupsData || []);
+        }
 
-      // Setar os dados do formulário diretamente
-      setFormData({
-        name: product.name || "",
-        description: product.description || "",
-        unit_id: product.unit_id || "",
-        group_id: product.group_id || "",
-        subgroup_id: product.subgroup_id || "",
-        barcode: product.barcode || "",
-        cost_price: product.cost_price?.toString() || "",
-        product_type: (product.product_type || "product") as "product" | "service",
-        function_type: (product.function_type || "debit") as "credit" | "debit"
-      });
+        // Setar os dados do formulário
+        setFormData({
+          name: product.name || "",
+          description: product.description || "",
+          unit_id: product.unit_id || "",
+          group_id: product.group_id || "",
+          subgroup_id: product.subgroup_id || "",
+          barcode: product.barcode || "",
+          cost_price: product.cost_price?.toString() || "",
+          product_type: (product.product_type || "product") as "product" | "service",
+          function_type: (product.function_type || "debit") as "credit" | "debit"
+        });
+      } else {
+        // Reset form for create mode
+        setFormData({
+          name: "",
+          description: "",
+          unit_id: "",
+          group_id: "",
+          subgroup_id: "",
+          barcode: "",
+          cost_price: "",
+          product_type: "product",
+          function_type: "debit"
+        });
+        setSubgroups([]);
+        setSupplierCodes([]);
+      }
     } catch (error) {
       console.error("Error fetching initial data:", error);
     }
@@ -143,8 +162,6 @@ export const ProductEditModal = ({ open, onOpenChange, product, onSaveSuccess }:
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!product) return;
-    
     if (!formData.name.trim()) {
       toast({
         variant: "destructive",
@@ -155,12 +172,16 @@ export const ProductEditModal = ({ open, onOpenChange, product, onSaveSuccess }:
     }
 
     // Validar nome duplicado
-    const { data: existingProduct, error: checkError } = await supabase
+    let duplicateQuery = supabase
       .from("products")
       .select("id")
-      .ilike("name", formData.name.trim())
-      .neq("id", product.id)
-      .maybeSingle();
+      .ilike("name", formData.name.trim());
+    
+    if (product) {
+      duplicateQuery = duplicateQuery.neq("id", product.id);
+    }
+
+    const { data: existingProduct, error: checkError } = await duplicateQuery.maybeSingle();
 
     if (checkError) {
       toast({
@@ -184,50 +205,86 @@ export const ProductEditModal = ({ open, onOpenChange, product, onSaveSuccess }:
     try {
       const userId = (await supabase.auth.getUser()).data.user?.id;
 
-      const { error } = await supabase
-        .from("products")
-        .update({
-          name: formData.name,
-          description: formData.description || null,
-          unit_id: formData.unit_id || null,
-          group_id: formData.group_id || null,
-          subgroup_id: formData.subgroup_id || null,
-          barcode: formData.barcode || null,
-          cost_price: formData.cost_price ? parseFloat(formData.cost_price.replace(",", ".")) : null,
-          product_type: formData.product_type,
-          function_type: formData.function_type,
-          updated_by: userId || null,
-        })
-        .eq("id", product.id);
+      if (isCreateMode) {
+        // Generate next code
+        const { data: maxCodeData } = await supabase
+          .from("products")
+          .select("code")
+          .order("code", { ascending: false })
+          .limit(1)
+          .single();
+        
+        const nextCode = maxCodeData 
+          ? String(parseInt(maxCodeData.code || "0") + 1).padStart(6, "0")
+          : "000001";
 
-      if (error) throw error;
+        const { error } = await supabase
+          .from("products")
+          .insert({
+            code: nextCode,
+            name: formData.name,
+            description: formData.description || null,
+            unit_id: formData.unit_id || null,
+            group_id: formData.group_id || null,
+            subgroup_id: formData.subgroup_id || null,
+            barcode: formData.barcode || null,
+            cost_price: formData.cost_price ? parseFloat(formData.cost_price.replace(",", ".")) : null,
+            product_type: formData.product_type,
+            function_type: formData.function_type,
+            created_by: userId || null,
+            matrix_id: matrixId,
+          } as any);
 
-      // Salvar códigos dos fornecedores
-      if (supplierCodes.length > 0) {
-        // Remover códigos existentes
-        await supabase
-          .from("product_supplier_codes")
-          .delete()
-          .eq("product_id", product.id);
+        if (error) throw error;
 
-        // Inserir novos códigos
-        const codesToInsert = supplierCodes
-          .filter(sc => sc.supplier_id && sc.supplier_code)
-          .map(sc => ({
-            product_id: product.id,
-            supplier_id: sc.supplier_id,
-            supplier_code: sc.supplier_code,
-          }));
+        toast({
+          title: "Sucesso",
+          description: "Produto cadastrado com sucesso!",
+        });
+      } else {
+        const { error } = await supabase
+          .from("products")
+          .update({
+            name: formData.name,
+            description: formData.description || null,
+            unit_id: formData.unit_id || null,
+            group_id: formData.group_id || null,
+            subgroup_id: formData.subgroup_id || null,
+            barcode: formData.barcode || null,
+            cost_price: formData.cost_price ? parseFloat(formData.cost_price.replace(",", ".")) : null,
+            product_type: formData.product_type,
+            function_type: formData.function_type,
+            updated_by: userId || null,
+          })
+          .eq("id", product!.id);
 
-        if (codesToInsert.length > 0) {
-          await supabase.from("product_supplier_codes").insert(codesToInsert);
+        if (error) throw error;
+
+        // Salvar códigos dos fornecedores
+        if (supplierCodes.length > 0) {
+          await supabase
+            .from("product_supplier_codes")
+            .delete()
+            .eq("product_id", product!.id);
+
+          const codesToInsert = supplierCodes
+            .filter(sc => sc.supplier_id && sc.supplier_code)
+            .map(sc => ({
+              product_id: product!.id,
+              supplier_id: sc.supplier_id,
+              supplier_code: sc.supplier_code,
+            }));
+
+          if (codesToInsert.length > 0) {
+            await supabase.from("product_supplier_codes").insert(codesToInsert);
+          }
         }
-      }
 
-      toast({
-        title: "Sucesso",
-        description: "Produto atualizado com sucesso!",
-      });
+        toast({
+          title: "Sucesso",
+          description: "Produto atualizado com sucesso!",
+        });
+      }
 
       onOpenChange(false);
       if (onSaveSuccess) {
@@ -237,22 +294,20 @@ export const ProductEditModal = ({ open, onOpenChange, product, onSaveSuccess }:
       toast({
         variant: "destructive",
         title: "Erro",
-        description: error.message || "Não foi possível atualizar o produto.",
+        description: error.message || "Não foi possível salvar o produto.",
       });
     } finally {
       setLoading(false);
     }
   };
 
-  if (!product) return null;
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl h-[85vh] flex flex-col">
         <DialogHeader className="shrink-0">
-          <DialogTitle>Editar Produto</DialogTitle>
+          <DialogTitle>{isCreateMode ? "Cadastrar Produto" : "Editar Produto"}</DialogTitle>
           <DialogDescription>
-            Edite os dados do produto. Código: {product.code}
+            {isCreateMode ? "Preencha os dados do novo produto." : `Edite os dados do produto. Código: ${product?.code}`}
           </DialogDescription>
         </DialogHeader>
 
@@ -260,16 +315,18 @@ export const ProductEditModal = ({ open, onOpenChange, product, onSaveSuccess }:
           <div className="flex-1 overflow-y-auto pr-2">
             <div className="space-y-6 pb-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {/* Código (readonly) */}
-                <div className="space-y-2">
-                  <Label htmlFor="code">Código</Label>
-                  <Input
-                    id="code"
-                    value={product.code}
-                    readOnly
-                    className="bg-muted"
-                  />
-                </div>
+                {/* Código (readonly) - only show in edit mode */}
+                {!isCreateMode && (
+                  <div className="space-y-2">
+                    <Label htmlFor="code">Código</Label>
+                    <Input
+                      id="code"
+                      value={product?.code || ""}
+                      readOnly
+                      className="bg-muted"
+                    />
+                  </div>
+                )}
 
                 {/* Tipo: Produto ou Serviço */}
                 <div className="space-y-2">
@@ -401,13 +458,15 @@ export const ProductEditModal = ({ open, onOpenChange, product, onSaveSuccess }:
                 />
               </div>
 
-              {/* Códigos dos Fornecedores */}
-              <div className="border rounded-lg p-4">
-                <ProductSupplierCodes
-                  productId={product.id}
-                  onCodesChange={setSupplierCodes}
-                />
-              </div>
+              {/* Códigos dos Fornecedores - only in edit mode */}
+              {!isCreateMode && product && (
+                <div className="border rounded-lg p-4">
+                  <ProductSupplierCodes
+                    productId={product.id}
+                    onCodesChange={setSupplierCodes}
+                  />
+                </div>
+              )}
             </div>
           </div>
 
@@ -423,7 +482,7 @@ export const ProductEditModal = ({ open, onOpenChange, product, onSaveSuccess }:
                   Salvando...
                 </>
               ) : (
-                "Salvar Alterações"
+                isCreateMode ? "Cadastrar Produto" : "Salvar Alterações"
               )}
             </Button>
           </div>
