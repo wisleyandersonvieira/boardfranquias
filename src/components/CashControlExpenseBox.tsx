@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Eye, Pencil, Ban, Upload, X, FileText, ArrowUp, ArrowDown, Link2, Download } from "lucide-react";
+import { Plus, Eye, Pencil, Ban, Upload, X, FileText, ArrowUp, ArrowDown, Link2, Download, Maximize2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -65,6 +65,7 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
   const [sortField, setSortField] = useState<SortField>('issue_date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [linkFilter, setLinkFilter] = useState<LinkFilter>('all');
+  const [expandedView, setExpandedView] = useState(false);
   
   // Permissions
   const { canEdit, canApprove } = useCaixaPermissions();
@@ -625,6 +626,15 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
                 <Download className="h-3 w-3 mr-1" />
                 PDF
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-6 text-xs px-2"
+                onClick={() => setExpandedView(true)}
+                title="Expandir visualização"
+              >
+                <Maximize2 className="h-3 w-3" />
+              </Button>
             </div>
           </div>
           <div className="border rounded">
@@ -1055,6 +1065,166 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
         onLinkSuccess={fetchExpenses}
         expenseType={expenseType}
       />
+
+      {/* Expanded View Modal */}
+      <Dialog open={expandedView} onOpenChange={setExpandedView}>
+        <DialogContent className="max-w-[95vw] max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>{title}</DialogTitle>
+          </DialogHeader>
+          
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Filtrar:</span>
+              <div className="flex gap-1">
+                {linkFilterOptions.map((option) => (
+                  <Button
+                    key={option.value}
+                    variant={linkFilter === option.value ? "default" : "outline"}
+                    size="sm"
+                    className="h-6 text-xs px-2"
+                    onClick={() => setLinkFilter(option.value)}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
+              <span className="text-xs font-medium text-primary ml-2">
+                Total: {formatCurrency(filteredTotal)} ({filteredCount} registro{filteredCount !== 1 ? 's' : ''})
+              </span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-6 text-xs px-2"
+              onClick={handleExportPDF}
+              title="Exportar PDF"
+            >
+              <Download className="h-3 w-3 mr-1" />
+              PDF
+            </Button>
+          </div>
+
+          <div className="flex-1 overflow-auto border rounded">
+            <Table>
+              <TableHeader className="sticky top-0 bg-card z-10">
+                <TableRow>
+                  <TableHead 
+                    className="text-xs cursor-pointer hover:bg-muted/50 select-none"
+                    onClick={() => handleSort('issue_date')}
+                  >
+                    Data <SortIcon field="issue_date" />
+                  </TableHead>
+                  <TableHead 
+                    className="text-xs cursor-pointer hover:bg-muted/50 select-none"
+                    onClick={() => handleSort('created_at')}
+                  >
+                    Criado em <SortIcon field="created_at" />
+                  </TableHead>
+                  <TableHead 
+                    className="text-xs cursor-pointer hover:bg-muted/50 select-none"
+                    onClick={() => handleSort('supplier')}
+                  >
+                    Fornecedor <SortIcon field="supplier" />
+                  </TableHead>
+                  <TableHead 
+                    className="text-xs cursor-pointer hover:bg-muted/50 select-none"
+                    onClick={() => handleSort('description')}
+                  >
+                    Descrição <SortIcon field="description" />
+                  </TableHead>
+                  <TableHead 
+                    className="text-xs cursor-pointer hover:bg-muted/50 select-none"
+                    onClick={() => handleSort('amount')}
+                  >
+                    Valor <SortIcon field="amount" />
+                  </TableHead>
+                  <TableHead className="text-xs">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sortedExpenses.map((expense) => {
+                  const isLinked = !!expense.linked_account_payable_id;
+                  const rowClassName = expense.is_disabled 
+                    ? "bg-red-50 text-red-700" 
+                    : isLinked 
+                      ? "bg-green-50" 
+                      : "";
+                  
+                  return (
+                    <TableRow key={expense.id} className={rowClassName}>
+                      <TableCell className="text-xs">
+                        {format(new Date(expense.issue_date + 'T12:00:00'), "dd/MM/yyyy")}
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {format(new Date(expense.created_at), "dd/MM/yyyy HH:mm")}
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {expense.supplier}
+                        {expense.is_disabled && " (inabilitado)"}
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {expense.description}
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {formatCurrency(expense.amount)}
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        <div className="flex gap-0.5">
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-6 w-6"
+                            onClick={() => handleView(expense)}
+                            title="Visualizar"
+                          >
+                            <Eye className="h-3 w-3" />
+                          </Button>
+                          {canEdit && (
+                            <>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className={`h-6 w-6 ${isLinked ? "opacity-50" : ""}`}
+                                onClick={() => handleOpenForm(expense)}
+                                title={isLinked ? "Não pode editar (vinculado)" : "Editar"}
+                                disabled={isLinked}
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className={`h-6 w-6 ${isLinked ? "opacity-50" : ""}`}
+                                onClick={() => handleDisable(expense)}
+                                title={isLinked ? "Não pode inabilitar (vinculado)" : (expense.is_disabled ? "Habilitar" : "Inabilitar")}
+                                disabled={isLinked}
+                              >
+                                <Ban className="h-3 w-3" />
+                              </Button>
+                              {!isLinked && !expense.is_disabled && (
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-6 w-6"
+                                  onClick={() => handleOpenLinkModal(expense)}
+                                  title="Vincular ao Contas a Pagar"
+                                >
+                                  <Link2 className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };
