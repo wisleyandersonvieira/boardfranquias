@@ -16,7 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { SupplierSearchModal } from "./SupplierSearchModal";
 import { SuppliersModal } from "./SuppliersModal";
 import { ProductSearchModal } from "./ProductSearchModal";
-import { ProductEditModal } from "./ProductEditModal";
+import { ProductsModal } from "./ProductsModal";
 import { CashPaymentModal } from "./CashPaymentModal";
 import { validateAccountsPayablePeriod } from "@/utils/periodValidation";
 
@@ -1242,16 +1242,11 @@ export function LinkToAccountsPayableModal({
         isEmployeeMode={isEmployeeMode}
       />
 
-      <ProductEditModal
+      <ProductsModal
         open={showProductRegister}
         onOpenChange={(open) => {
           setShowProductRegister(open);
           if (!open) fetchProducts();
-        }}
-        product={null}
-        onSaveSuccess={() => {
-          setShowProductRegister(false);
-          fetchProducts();
         }}
       />
 
