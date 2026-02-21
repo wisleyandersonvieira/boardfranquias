@@ -1101,10 +1101,15 @@ export function LinkToAccountsPayableModal({
                       <Search className="h-4 w-4" />
                     </Button>
                     <Button 
+                      type="button"
                       variant="outline" 
                       size="icon"
                       className="shrink-0"
-                      onClick={() => setShowProductRegister(true)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        setShowProductRegister(true);
+                      }}
                       title="Cadastrar novo produto"
                     >
                       <Plus className="h-4 w-4" />
