@@ -14,7 +14,9 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { SupplierSearchModal } from "./SupplierSearchModal";
+import { SuppliersModal } from "./SuppliersModal";
 import { ProductSearchModal } from "./ProductSearchModal";
+import { ProductEditModal } from "./ProductEditModal";
 import { CashPaymentModal } from "./CashPaymentModal";
 import { validateAccountsPayablePeriod } from "@/utils/periodValidation";
 
@@ -125,7 +127,9 @@ export function LinkToAccountsPayableModal({
 
   // Search modals
   const [showSupplierSearch, setShowSupplierSearch] = useState(false);
+  const [showSupplierRegister, setShowSupplierRegister] = useState(false);
   const [showProductSearch, setShowProductSearch] = useState(false);
+  const [showProductRegister, setShowProductRegister] = useState(false);
   const [supplierSearchTerm, setSupplierSearchTerm] = useState("");
   const [productSearchOpen, setProductSearchOpen] = useState(false);
   const [productSearchTerm, setProductSearchTerm] = useState("");
@@ -943,6 +947,14 @@ export function LinkToAccountsPayableModal({
                     >
                       <Search className="h-4 w-4" />
                     </Button>
+                    <Button 
+                      variant="outline" 
+                      size="icon"
+                      onClick={() => setShowSupplierRegister(true)}
+                      title="Cadastrar novo fornecedor"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
               )}
@@ -1088,6 +1100,15 @@ export function LinkToAccountsPayableModal({
                     >
                       <Search className="h-4 w-4" />
                     </Button>
+                    <Button 
+                      variant="outline" 
+                      size="icon"
+                      className="shrink-0"
+                      onClick={() => setShowProductRegister(true)}
+                      title="Cadastrar novo produto"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
                 
@@ -1199,11 +1220,34 @@ export function LinkToAccountsPayableModal({
         onSelectSupplier={handleSupplierSelect}
       />
 
+      <SuppliersModal
+        open={showSupplierRegister}
+        onOpenChange={(open) => {
+          setShowSupplierRegister(open);
+          if (!open) fetchSuppliers();
+        }}
+        canEdit={true}
+        canDelete={false}
+      />
+
       <ProductSearchModal
         open={showProductSearch}
         onOpenChange={setShowProductSearch}
         onSelectProduct={handleProductSelect}
         isEmployeeMode={isEmployeeMode}
+      />
+
+      <ProductEditModal
+        open={showProductRegister}
+        onOpenChange={(open) => {
+          setShowProductRegister(open);
+          if (!open) fetchProducts();
+        }}
+        product={null}
+        onSaveSuccess={() => {
+          setShowProductRegister(false);
+          fetchProducts();
+        }}
       />
 
       {/* Payment Confirmation Dialog */}
