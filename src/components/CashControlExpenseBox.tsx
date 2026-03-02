@@ -17,6 +17,7 @@ import { LinkToAccountsPayableModal } from "./LinkToAccountsPayableModal";
 import { useCaixaPermissions } from "@/hooks/useCaixaPermissions";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import * as XLSX from "xlsx";
 
 interface AttachmentInfo {
   path: string;
@@ -563,6 +564,46 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
     }
   };
 
+  // Export to Excel
+  const handleExportExcel = () => {
+    try {
+      const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+      
+      const data = sortedExpenses.map(expense => ({
+        'Data': format(new Date(expense.issue_date + 'T12:00:00'), "dd/MM/yyyy"),
+        'Criado em': format(new Date(expense.created_at), "dd/MM/yyyy HH:mm"),
+        'Fornecedor': expense.supplier + (expense.is_disabled ? ' (inabilitado)' : ''),
+        'Descrição': expense.description,
+        'Valor': expense.amount,
+        'Vinculado': expense.linked_account_payable_id ? 'Sim' : 'Não',
+        'Pago': expense.is_paid ? 'Sim' : 'Não',
+      }));
+
+      // Add total row
+      data.push({
+        'Data': '',
+        'Criado em': '',
+        'Fornecedor': '',
+        'Descrição': 'TOTAL',
+        'Valor': filteredTotal,
+        'Vinculado': '',
+        'Pago': '',
+      });
+
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Dados');
+
+      const fileName = `${title.replace(/\s+/g, '_')}_${monthNames[referenceMonth - 1]}_${referenceYear}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+
+      toast.success("Excel exportado com sucesso!");
+    } catch (error) {
+      console.error("Erro ao exportar Excel:", error);
+      toast.error("Erro ao exportar Excel");
+    }
+  };
+
   return (
     <Card className="h-full">
       <CardHeader className="pb-3">
@@ -625,6 +666,16 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
               >
                 <Download className="h-3 w-3 mr-1" />
                 PDF
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-6 text-xs px-2"
+                onClick={handleExportExcel}
+                title="Exportar Excel"
+              >
+                <FileText className="h-3 w-3 mr-1" />
+                Excel
               </Button>
               <Button
                 variant="outline"
@@ -1093,16 +1144,28 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
                 Total: {formatCurrency(filteredTotal)} ({filteredCount} registro{filteredCount !== 1 ? 's' : ''})
               </span>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-6 text-xs px-2"
-              onClick={handleExportPDF}
-              title="Exportar PDF"
-            >
-              <Download className="h-3 w-3 mr-1" />
-              PDF
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-6 text-xs px-2"
+                onClick={handleExportPDF}
+                title="Exportar PDF"
+              >
+                <Download className="h-3 w-3 mr-1" />
+                PDF
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-6 text-xs px-2"
+                onClick={handleExportExcel}
+                title="Exportar Excel"
+              >
+                <FileText className="h-3 w-3 mr-1" />
+                Excel
+              </Button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-auto border rounded">
