@@ -3908,7 +3908,11 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
                           </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-[300px] p-0 z-[9999] pointer-events-auto" onOpenAutoFocus={(e) => e.preventDefault()}>
-                          <Command>
+                          <Command filter={(value, search) => {
+                            if (!search) return 1;
+                            if (value.toLowerCase().includes(search.toLowerCase())) return 1;
+                            return 0;
+                          }}>
                             <CommandInput placeholder="Buscar fornecedor..." />
                             <CommandList className="max-h-[200px] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-muted [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:rounded-full">
                               <CommandEmpty>Nenhum fornecedor encontrado.</CommandEmpty>
