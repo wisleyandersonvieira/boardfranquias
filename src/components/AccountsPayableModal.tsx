@@ -3907,7 +3907,7 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                           </Button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-[300px] p-0">
+                        <PopoverContent className="w-[300px] p-0 z-[9999] pointer-events-auto" onOpenAutoFocus={(e) => e.preventDefault()}>
                           <Command>
                             <CommandInput placeholder="Buscar fornecedor..." />
                             <CommandList className="max-h-[200px] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-muted [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:rounded-full">
