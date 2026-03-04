@@ -3965,8 +3965,12 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                           </Button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-[300px] p-0">
-                          <Command>
+                        <PopoverContent className="w-[300px] p-0 z-[9999] pointer-events-auto" onOpenAutoFocus={(e) => e.preventDefault()}>
+                          <Command filter={(value, search) => {
+                            if (!search) return 1;
+                            if (value.toLowerCase().includes(search.toLowerCase())) return 1;
+                            return 0;
+                          }}>
                             <CommandInput placeholder="Buscar funcionário..." />
                             <CommandList>
                               <CommandEmpty>Nenhum funcionário encontrado.</CommandEmpty>
