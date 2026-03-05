@@ -32,19 +32,8 @@ import {
   Filter,
   ArrowUpDown,
   Calendar as CalendarIconLucide,
-  DollarSign,
-  Trash2
+  DollarSign
 } from "lucide-react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { format, subDays, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -131,11 +120,6 @@ const BankReconciliation = () => {
   const [reconciliationNote, setReconciliationNote] = useState("");
   const [reconciling, setReconciling] = useState(false);
 
-  // OFX Imports management
-  const [ofxImports, setOfxImports] = useState<{ id: string; file_name: string; created_at: string; total_transactions: number | null; status: string }[]>([]);
-  const [deleteImportId, setDeleteImportId] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState(false);
-
   // Stats
   const stats = useMemo<ReconciliationStats>(() => {
     const reconciled = ofxTransactions.filter(t => t.is_reconciled).length;
@@ -158,21 +142,11 @@ const BankReconciliation = () => {
       setSelectedAccountType("");
       setOfxTransactions([]);
       setInternalTransactions([]);
-      setOfxImports([]);
     } else {
       setAccounts([]);
-      setOfxImports([]);
     }
   }, [selectedStoreId]);
 
-  // Load OFX imports when account changes
-  useEffect(() => {
-    if (selectedAccount && selectedAccountType) {
-      loadOfxImports();
-    } else {
-      setOfxImports([]);
-    }
-  }, [selectedAccount, selectedAccountType]);
 
   // Load OFX transactions when account or dates change
   useEffect(() => {
@@ -517,82 +491,6 @@ const BankReconciliation = () => {
     }
   };
 
-  const loadOfxImports = async () => {
-    if (!selectedAccount || !selectedAccountType) return;
-    try {
-      const { data, error } = await supabase
-        .from('bank_ofx_imports')
-        .select('id, file_name, created_at, total_transactions, status')
-        .eq('account_id', selectedAccount)
-        .eq('account_type', selectedAccountType)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setOfxImports(data || []);
-    } catch (error) {
-      console.error('Error loading OFX imports:', error);
-    }
-  };
-
-  const handleDeleteImport = async () => {
-    if (!deleteImportId || deleting) return;
-    setDeleting(true);
-
-    try {
-      // 1. Get all transaction IDs for this import
-      const { data: transactions } = await supabase
-        .from('bank_ofx_transactions')
-        .select('id')
-        .eq('import_id', deleteImportId);
-
-      const txIds = (transactions || []).map(t => t.id);
-
-      // 2. Delete reconciliations linked to these transactions
-      if (txIds.length > 0) {
-        const { error: reconError } = await supabase
-          .from('bank_reconciliations')
-          .delete()
-          .in('ofx_transaction_id', txIds);
-        if (reconError) throw reconError;
-      }
-
-      // 3. Delete the OFX transactions
-      const { error: txError } = await supabase
-        .from('bank_ofx_transactions')
-        .delete()
-        .eq('import_id', deleteImportId);
-      if (txError) throw txError;
-
-      // 4. Delete the import record
-      const { error: importError } = await supabase
-        .from('bank_ofx_imports')
-        .delete()
-        .eq('id', deleteImportId);
-      if (importError) throw importError;
-
-      toast({
-        title: "Importação excluída",
-        description: "O arquivo OFX e todos os dados relacionados foram excluídos com sucesso.",
-      });
-
-      // Reload data
-      await loadOfxImports();
-      await loadOfxTransactions();
-      await loadReconciledInternalIds();
-      setSelectedOfxIds([]);
-
-    } catch (error: any) {
-      console.error('Error deleting OFX import:', error);
-      toast({
-        title: "Erro ao excluir",
-        description: error.message || "Erro ao excluir a importação OFX",
-        variant: "destructive",
-      });
-    } finally {
-      setDeleting(false);
-      setDeleteImportId(null);
-    }
-  };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -734,7 +632,6 @@ const BankReconciliation = () => {
       // Reload transactions
       await loadOfxTransactions();
       await loadInternalTransactions();
-      await loadOfxImports();
 
       toast({
         title: "Importação concluída",
@@ -1405,69 +1302,8 @@ const BankReconciliation = () => {
                 </Badge>
               </div>
             )}
-
-            {/* OFX Imports List */}
-            {ofxImports.length > 0 && (
-              <div className="mt-4">
-                <Label className="text-sm font-medium">Arquivos OFX importados</Label>
-                <div className="mt-2 space-y-2 max-h-[150px] overflow-y-auto">
-                  {ofxImports.map((imp) => (
-                    <div key={imp.id} className="flex items-center justify-between bg-muted/50 rounded-md px-3 py-2 text-sm">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-                        <span className="truncate">{imp.file_name}</span>
-                        <Badge variant="outline" className="text-xs shrink-0">
-                          {imp.total_transactions || 0} transações
-                        </Badge>
-                        <span className="text-xs text-muted-foreground shrink-0">
-                          {format(new Date(imp.created_at), "dd/MM/yyyy HH:mm")}
-                        </span>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => setDeleteImportId(imp.id)}
-                        title="Excluir importação"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </CardContent>
         </Card>
-
-        {/* Delete Import Confirmation Dialog */}
-        <AlertDialog open={!!deleteImportId} onOpenChange={(open) => !open && setDeleteImportId(null)}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Excluir importação OFX</AlertDialogTitle>
-              <AlertDialogDescription>
-                Tem certeza que deseja excluir este arquivo OFX? Esta ação irá remover:
-                <ul className="list-disc list-inside mt-2 space-y-1">
-                  <li>O registro da importação</li>
-                  <li>Todas as transações OFX associadas</li>
-                  <li>Todas as conciliações realizadas com essas transações</li>
-                </ul>
-                <span className="block mt-2 font-semibold text-destructive">Esta ação não pode ser desfeita.</span>
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={handleDeleteImport}
-                disabled={deleting}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              >
-                {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
-                Excluir
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
 
         {/* Two Panel Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
