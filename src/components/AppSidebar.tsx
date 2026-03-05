@@ -242,6 +242,7 @@ const AppSidebar = ({
         { id: "aportes-retiradas", label: "Aportes e Retiradas", action: "openPartnerTransactions" },
         { id: "registro-os", label: "Registro de OS", action: "openServiceOrders" },
         { id: "conciliacao-bancaria", label: "Conciliação Bancária", route: "/bank-reconciliation" },
+        { id: "gerenciar-ofx", label: "Gerenciar Arquivos OFX", route: "/ofx-management" },
         { id: "controle-periodo", label: "Controle de Período", action: "openPeriodControl" },
       ],
     },
