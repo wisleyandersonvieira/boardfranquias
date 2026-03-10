@@ -3336,6 +3336,7 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
     }
 
     // Verificar se a conta está vinculada às lojas dos itens (Regra 2)
+    setLoading(true);
     try {
       // Buscar itens da conta para obter as lojas
       const { data: accountItems, error: itemsError } = await supabase
