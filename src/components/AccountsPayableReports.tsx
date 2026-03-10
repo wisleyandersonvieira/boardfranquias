@@ -421,13 +421,13 @@ const AccountsPayableReports = () => {
         Fornecedor: account.suppliers?.name || "N/A",
         Loja: account.stores?.name || "N/A",
         Valor: account.amount,
-        Vencimento: format(parseISO(account.due_date), "dd/MM/yyyy"),
-        Pagamento: account.payment_date ? format(parseISO(account.payment_date), "dd/MM/yyyy") : "N/A",
+        Vencimento: format(parseLocalDate(account.due_date), "dd/MM/yyyy"),
+        Pagamento: account.payment_date ? format(parseLocalDate(account.payment_date), "dd/MM/yyyy") : "N/A",
         Status: account.status === "paid" ? "Pago" : "Pendente",
         Documento: account.document_number || "N/A",
-        "Data Cadastro": format(parseISO(account.created_at), "dd/MM/yyyy"),
+        "Data Cadastro": format(parseLocalDate(account.created_at), "dd/MM/yyyy"),
         "Data Competência": account.data_competencia
-          ? format(parseISO(account.data_competencia), "dd/MM/yyyy")
+          ? format(parseLocalDate(account.data_competencia), "dd/MM/yyyy")
           : "N/A",
       }))
     );
