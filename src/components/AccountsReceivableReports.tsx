@@ -11,6 +11,12 @@ import { Calendar, Download, FileSpreadsheet, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO } from "date-fns";
+
+// Helper to parse date strings without timezone issues
+const parseLocalDate = (dateString: string) => {
+  const datePart = dateString.split('T')[0];
+  return parseISO(datePart + 'T12:00:00');
+};
 import { ptBR } from "date-fns/locale";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
