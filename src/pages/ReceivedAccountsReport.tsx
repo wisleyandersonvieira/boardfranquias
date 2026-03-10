@@ -295,8 +295,8 @@ const ReceivedAccountsReport = () => {
     // Date range info
     let filterInfo = [];
     if (filters.payment_start || filters.payment_end) {
-      const start = filters.payment_start ? new Date(filters.payment_start).toLocaleDateString("pt-BR") : "Início";
-      const end = filters.payment_end ? new Date(filters.payment_end).toLocaleDateString("pt-BR") : "Hoje";
+      const start = filters.payment_start ? new Date(filters.payment_start + 'T12:00:00').toLocaleDateString("pt-BR") : "Início";
+      const end = filters.payment_end ? new Date(filters.payment_end + 'T12:00:00').toLocaleDateString("pt-BR") : "Hoje";
       filterInfo.push(`Recebimento: ${start} a ${end}`);
     }
     if (filters.creditor_id !== "all") {
