@@ -259,13 +259,13 @@ const AccountsReceivableReports = () => {
         Credor: account.creditors?.name || "N/A",
         Loja: account.stores?.name || "N/A",
         Valor: account.amount,
-        Vencimento: format(parseISO(account.due_date), "dd/MM/yyyy"),
-        Recebimento: account.payment_date ? format(parseISO(account.payment_date), "dd/MM/yyyy") : "N/A",
+        Vencimento: format(parseLocalDate(account.due_date), "dd/MM/yyyy"),
+        Recebimento: account.payment_date ? format(parseLocalDate(account.payment_date), "dd/MM/yyyy") : "N/A",
         Status: account.status === "paid" ? "Recebido" : "Pendente",
         Documento: account.document_number || "N/A",
-        "Data Cadastro": format(parseISO(account.created_at), "dd/MM/yyyy"),
+        "Data Cadastro": format(parseLocalDate(account.created_at), "dd/MM/yyyy"),
         "Data Competência": account.issue_date
-          ? format(parseISO(account.issue_date), "dd/MM/yyyy")
+          ? format(parseLocalDate(account.issue_date), "dd/MM/yyyy")
           : "N/A",
       }))
     );
