@@ -2264,24 +2264,37 @@ export function AccountsReceivableModal({ open, onOpenChange }: AccountsReceivab
         if (updateError) throw updateError;
       }
 
-      // Create financial transaction
-      const { error: transactionError } = await supabase
+      // Verificar se já existe transação para evitar duplicidade
+      const refId = selectedInstallment ? selectedInstallment.id : paymentAccount.id;
+      const refType = selectedInstallment ? "accounts_receivable_installments" : "accounts_receivable";
+      
+      const { data: existingTx } = await supabase
         .from("financial_transactions")
-        .insert({
-          store_id: paymentAccount.store_id || "",
-          account_id: selectedAccountId,
-          transaction_type: "entrada",
-          amount: finalAmount,
-          transaction_date: formatDateForDatabase(paymentDate),
-          description: selectedInstallment 
-            ? `Recebimento Parcela ${selectedInstallment.installment_number} - ${paymentAccount.description}`
-            : `Recebimento - ${paymentAccount.description}`,
-          reference_id: selectedInstallment ? selectedInstallment.id : paymentAccount.id,
-          reference_type: selectedInstallment ? "accounts_receivable_installments" : "accounts_receivable",
-          created_by: user.id,
-        });
+        .select("id")
+        .eq("reference_id", refId)
+        .eq("reference_type", refType)
+        .limit(1);
 
-      if (transactionError) throw transactionError;
+      if (!existingTx || existingTx.length === 0) {
+        // Create financial transaction
+        const { error: transactionError } = await supabase
+          .from("financial_transactions")
+          .insert({
+            store_id: paymentAccount.store_id || "",
+            account_id: selectedAccountId,
+            transaction_type: "entrada",
+            amount: finalAmount,
+            transaction_date: formatDateForDatabase(paymentDate),
+            description: selectedInstallment 
+              ? `Recebimento Parcela ${selectedInstallment.installment_number} - ${paymentAccount.description}`
+              : `Recebimento - ${paymentAccount.description}`,
+            reference_id: refId,
+            reference_type: refType,
+            created_by: user.id,
+          });
+
+        if (transactionError) throw transactionError;
+      }
 
       toast({
         title: "Sucesso",
