@@ -442,22 +442,32 @@ export function CashPaymentModal({
       // Isso garante que a transação apareça nos relatórios da loja correta
       const transactionStoreId = accountPayable.store_id;
 
-      // Create financial transaction
-      const { error: transactionError } = await supabase
+      // Verificar se já existe transação para esta conta (evitar duplicidade)
+      const { data: existingTx } = await supabase
         .from("financial_transactions")
-        .insert({
-          store_id: transactionStoreId,
-          account_id: selectedAccountId,
-          transaction_type: "saida",
-          amount: finalAmount,
-          transaction_date: paymentDate,
-          description: `Pagamento: ${accountPayable.description}`,
-          reference_id: accountPayable.id,
-          reference_type: "accounts_payable",
-          created_by: user.id,
-        });
+        .select("id")
+        .eq("reference_id", accountPayable.id)
+        .eq("reference_type", "accounts_payable")
+        .limit(1);
 
-      if (transactionError) throw transactionError;
+      if (!existingTx || existingTx.length === 0) {
+        // Create financial transaction
+        const { error: transactionError } = await supabase
+          .from("financial_transactions")
+          .insert({
+            store_id: transactionStoreId,
+            account_id: selectedAccountId,
+            transaction_type: "saida",
+            amount: finalAmount,
+            transaction_date: paymentDate,
+            description: `Pagamento: ${accountPayable.description}`,
+            reference_id: accountPayable.id,
+            reference_type: "accounts_payable",
+            created_by: user.id,
+          });
+
+        if (transactionError) throw transactionError;
+      }
 
       toast({
         title: "Sucesso",
