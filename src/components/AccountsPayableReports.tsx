@@ -240,8 +240,8 @@ const AccountsPayableReports = () => {
       account.suppliers?.name || "N/A",
       account.stores?.name || "N/A",
       `R$ ${account.amount.toFixed(2)}`,
-      format(parseISO(account.due_date), "dd/MM/yyyy"),
-      account.payment_date ? format(parseISO(account.payment_date), "dd/MM/yyyy") : "N/A",
+      format(parseLocalDate(account.due_date), "dd/MM/yyyy"),
+      account.payment_date ? format(parseLocalDate(account.payment_date), "dd/MM/yyyy") : "N/A",
       account.status === "paid" ? "Pago" : "Pendente",
       account.document_number || "N/A",
     ]);
