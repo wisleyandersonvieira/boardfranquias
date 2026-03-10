@@ -363,8 +363,8 @@ const AccountsPayableReports = () => {
           item.description,
           item.supplierName,
           item.storeName,
-          item.dueDate ? format(parseISO(item.dueDate), "dd/MM/yyyy") : "N/A",
-          item.paymentDate ? format(parseISO(item.paymentDate), "dd/MM/yyyy") : "N/A",
+          item.dueDate ? format(parseLocalDate(item.dueDate), "dd/MM/yyyy") : "N/A",
+          item.paymentDate ? format(parseLocalDate(item.paymentDate), "dd/MM/yyyy") : "N/A",
           item.amount?.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) || "N/A"
         ]);
         subgroupTotal += item.amount || 0;
