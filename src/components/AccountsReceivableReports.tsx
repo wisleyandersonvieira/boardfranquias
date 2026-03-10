@@ -296,10 +296,10 @@ const AccountsReceivableReports = () => {
             <TableCell>{account.creditors?.name || "N/A"}</TableCell>
             <TableCell>{account.stores?.name || "N/A"}</TableCell>
             <TableCell>R$ {account.amount.toFixed(2)}</TableCell>
-            <TableCell>{format(parseISO(account.due_date), "dd/MM/yyyy")}</TableCell>
+            <TableCell>{format(parseLocalDate(account.due_date), "dd/MM/yyyy")}</TableCell>
             {showPaymentDate && (
               <TableCell>
-                {account.payment_date ? format(parseISO(account.payment_date), "dd/MM/yyyy") : "N/A"}
+                {account.payment_date ? format(parseLocalDate(account.payment_date), "dd/MM/yyyy") : "N/A"}
               </TableCell>
             )}
             <TableCell>
