@@ -12,6 +12,12 @@ import { Calendar, Download, FileSpreadsheet, Search, ChevronDown, FileDown } fr
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO } from "date-fns";
+
+// Helper to parse date strings without timezone issues
+const parseLocalDate = (dateString: string) => {
+  const datePart = dateString.split('T')[0];
+  return parseISO(datePart + 'T12:00:00');
+};
 import { ptBR } from "date-fns/locale";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -234,8 +240,8 @@ const AccountsPayableReports = () => {
       account.suppliers?.name || "N/A",
       account.stores?.name || "N/A",
       `R$ ${account.amount.toFixed(2)}`,
-      format(parseISO(account.due_date), "dd/MM/yyyy"),
-      account.payment_date ? format(parseISO(account.payment_date), "dd/MM/yyyy") : "N/A",
+      format(parseLocalDate(account.due_date), "dd/MM/yyyy"),
+      account.payment_date ? format(parseLocalDate(account.payment_date), "dd/MM/yyyy") : "N/A",
       account.status === "paid" ? "Pago" : "Pendente",
       account.document_number || "N/A",
     ]);
@@ -357,8 +363,8 @@ const AccountsPayableReports = () => {
           item.description,
           item.supplierName,
           item.storeName,
-          item.dueDate ? format(parseISO(item.dueDate), "dd/MM/yyyy") : "N/A",
-          item.paymentDate ? format(parseISO(item.paymentDate), "dd/MM/yyyy") : "N/A",
+          item.dueDate ? format(parseLocalDate(item.dueDate), "dd/MM/yyyy") : "N/A",
+          item.paymentDate ? format(parseLocalDate(item.paymentDate), "dd/MM/yyyy") : "N/A",
           item.amount?.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) || "N/A"
         ]);
         subgroupTotal += item.amount || 0;
@@ -415,13 +421,13 @@ const AccountsPayableReports = () => {
         Fornecedor: account.suppliers?.name || "N/A",
         Loja: account.stores?.name || "N/A",
         Valor: account.amount,
-        Vencimento: format(parseISO(account.due_date), "dd/MM/yyyy"),
-        Pagamento: account.payment_date ? format(parseISO(account.payment_date), "dd/MM/yyyy") : "N/A",
+        Vencimento: format(parseLocalDate(account.due_date), "dd/MM/yyyy"),
+        Pagamento: account.payment_date ? format(parseLocalDate(account.payment_date), "dd/MM/yyyy") : "N/A",
         Status: account.status === "paid" ? "Pago" : "Pendente",
         Documento: account.document_number || "N/A",
-        "Data Cadastro": format(parseISO(account.created_at), "dd/MM/yyyy"),
+        "Data Cadastro": format(parseLocalDate(account.created_at), "dd/MM/yyyy"),
         "Data Competência": account.data_competencia
-          ? format(parseISO(account.data_competencia), "dd/MM/yyyy")
+          ? format(parseLocalDate(account.data_competencia), "dd/MM/yyyy")
           : "N/A",
       }))
     );
@@ -452,10 +458,10 @@ const AccountsPayableReports = () => {
             <TableCell>{account.suppliers?.name || "N/A"}</TableCell>
             <TableCell>{account.stores?.name || "N/A"}</TableCell>
             <TableCell>R$ {account.amount.toFixed(2)}</TableCell>
-            <TableCell>{format(parseISO(account.due_date), "dd/MM/yyyy")}</TableCell>
+            <TableCell>{format(parseLocalDate(account.due_date), "dd/MM/yyyy")}</TableCell>
             {showPaymentDate && (
               <TableCell>
-                {account.payment_date ? format(parseISO(account.payment_date), "dd/MM/yyyy") : "N/A"}
+                {account.payment_date ? format(parseLocalDate(account.payment_date), "dd/MM/yyyy") : "N/A"}
               </TableCell>
             )}
             <TableCell>
