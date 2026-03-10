@@ -308,8 +308,8 @@ const AccountsPayableReport = () => {
   const getFilterInfo = () => {
     let filterInfo = [];
     if (filters.due_start || filters.due_end) {
-      const start = filters.due_start ? new Date(filters.due_start).toLocaleDateString("pt-BR") : "Início";
-      const end = filters.due_end ? new Date(filters.due_end).toLocaleDateString("pt-BR") : "Hoje";
+      const start = filters.due_start ? new Date(filters.due_start + 'T12:00:00').toLocaleDateString("pt-BR") : "Início";
+      const end = filters.due_end ? new Date(filters.due_end + 'T12:00:00').toLocaleDateString("pt-BR") : "Hoje";
       filterInfo.push(`Vencimento: ${start} a ${end}`);
     }
     if (filters.supplier_id !== "all") {

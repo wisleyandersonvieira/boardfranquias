@@ -240,8 +240,8 @@ const AccountsReceivableReport = () => {
   const getFilterInfo = () => {
     let filterInfo: string[] = [];
     if (filters.due_start || filters.due_end) {
-      const start = filters.due_start ? new Date(filters.due_start + 'T00:00:00').toLocaleDateString("pt-BR") : "Início";
-      const end = filters.due_end ? new Date(filters.due_end + 'T00:00:00').toLocaleDateString("pt-BR") : "Hoje";
+      const start = filters.due_start ? new Date(filters.due_start + 'T12:00:00').toLocaleDateString("pt-BR") : "Início";
+      const end = filters.due_end ? new Date(filters.due_end + 'T12:00:00').toLocaleDateString("pt-BR") : "Hoje";
       filterInfo.push(`Vencimento: ${start} a ${end}`);
     }
     if (filters.creditor_id !== "all") {
