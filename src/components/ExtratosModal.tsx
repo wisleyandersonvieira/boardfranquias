@@ -313,11 +313,11 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
         .or(`source_account_id.eq.${selectedAccount},destination_account_id.eq.${selectedAccount}`)
         .order('transfer_date');
 
-      // Financial transactions - busca todas as transações da conta em TODAS as lojas vinculadas
+      // Financial transactions - busca todas as transações da conta, independente da loja
+      // O filtro por account_id já é suficiente, pois a transação já referencia a conta correta
       const financialTransPromise = supabase
         .from('financial_transactions')
-        .select('id, amount, transaction_date, description, reference_id, reference_type, transaction_type')
-        .in('store_id', linkedStoreIds)
+        .select('id, amount, transaction_date, description, reference_id, reference_type, transaction_type, store_id')
         .eq('account_id', selectedAccount);
 
       // Cash control items baseado no tipo de conta - busca com o cash_control para obter a data diretamente

@@ -374,12 +374,11 @@ const BankReconciliation = () => {
         return;
       }
 
-      // Load financial transactions
+      // Load financial transactions - filtro por account_id é suficiente
       const { data: financialTrans } = await supabase
         .from('financial_transactions')
         .select('id, amount, transaction_date, description, reference_id, reference_type, transaction_type')
         .eq('account_id', selectedAccount)
-        .in('store_id', linkedStoreIds)
         .gte('transaction_date', startDateStr)
         .lte('transaction_date', endDateStr);
 
