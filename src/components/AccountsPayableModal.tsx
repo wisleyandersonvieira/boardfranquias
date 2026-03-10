@@ -701,62 +701,59 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
         }
       }
 
-      // Helper to build query with common filters (excluding .in("id"))
-      const buildBaseQuery = () => {
-        let q = supabase
-          .from("accounts_payable")
-          .select(`
-            *,
-            suppliers(name),
-            employees(name),
-            stores(name)
-          `);
+      // Build the main query
+      let query = supabase
+        .from("accounts_payable")
+        .select(`
+          *,
+          suppliers(name),
+          employees(name),
+          stores(name)
+        `);
 
-        if (filterSupplier && filterSupplier !== "all" && filterSupplier !== "") {
-          q = q.eq("supplier_id", filterSupplier);
-        }
-        if (filterEmployee && filterEmployee !== "all" && filterEmployee !== "") {
-          q = q.eq("employee_id", filterEmployee);
-        }
-        if (filterDocumentNumber.trim()) {
-          q = q.ilike("document_number", `%${filterDocumentNumber}%`);
-        }
-        if (filterStatus && filterStatus !== "all") {
-          if (filterStatus === "pending") q = q.eq("status", "pending");
-          else if (filterStatus === "paid") q = q.eq("status", "paid");
-          else if (filterStatus === "partial") q = q.eq("status", "partial");
-        }
-        if (filterCreatedAtFrom) {
-          q = q.gte("created_at", `${filterCreatedAtFrom}T00:00:00`);
-        }
-        if (filterCreatedAtTo) {
-          q = q.lte("created_at", `${filterCreatedAtTo}T23:59:59`);
-        }
-        q = q.order("created_at", { ascending: false });
-        return q;
-      };
-
-      let allData: any[] = [];
-
+      // Apply the combined ID filter if we have one
       if (finalIds !== null) {
-        // Batch the .in() filter to avoid URL length limits (max ~200 IDs per batch)
-        const BATCH_SIZE = 200;
-        for (let i = 0; i < finalIds.length; i += BATCH_SIZE) {
-          const batch = finalIds.slice(i, i + BATCH_SIZE);
-          const { data: batchData, error: batchError } = await buildBaseQuery().in("id", batch);
-          if (batchError) throw batchError;
-          if (batchData) allData.push(...batchData);
+        query = query.in("id", finalIds);
+      }
+      
+      if (filterSupplier && filterSupplier !== "all" && filterSupplier !== "") {
+        query = query.eq("supplier_id", filterSupplier);
+      }
+      
+      // Filtro por funcionário
+      if (filterEmployee && filterEmployee !== "all" && filterEmployee !== "") {
+        query = query.eq("employee_id", filterEmployee);
+      }
+      
+      if (filterDocumentNumber.trim()) {
+        query = query.ilike("document_number", `%${filterDocumentNumber}%`);
+      }
+      
+      // Apply status filter
+      if (filterStatus && filterStatus !== "all") {
+        if (filterStatus === "pending") {
+          query = query.eq("status", "pending");
+        } else if (filterStatus === "paid") {
+          query = query.eq("status", "paid");
+        } else if (filterStatus === "partial") {
+          query = query.eq("status", "partial");
         }
-      } else {
-        const { data, error } = await buildBaseQuery();
-        if (error) throw error;
-        allData = data || [];
+      }
+      
+      // Apply created_at filter (data de cadastro)
+      if (filterCreatedAtFrom) {
+        query = query.gte("created_at", `${filterCreatedAtFrom}T00:00:00`);
+      }
+      if (filterCreatedAtTo) {
+        query = query.lte("created_at", `${filterCreatedAtTo}T23:59:59`);
       }
 
-      // Sort combined results by created_at descending
-      allData.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      query = query.order("created_at", { ascending: false });
 
-      const formattedData = allData.map(item => ({
+      const { data, error } = await query;
+
+      if (error) throw error;
+      const formattedData = (data || []).map(item => ({
         ...item,
         attachments: Array.isArray(item.attachments) ? item.attachments as Array<{name: string, url?: string, path?: string, size?: number, type?: string}> : []
       }));
