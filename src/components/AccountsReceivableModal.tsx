@@ -2264,37 +2264,28 @@ export function AccountsReceivableModal({ open, onOpenChange }: AccountsReceivab
         if (updateError) throw updateError;
       }
 
-      // Verificar se já existe transação para evitar duplicidade
+      // Inserir transação financeira (índice único previne duplicatas)
       const refId = selectedInstallment ? selectedInstallment.id : paymentAccount.id;
       const refType = selectedInstallment ? "accounts_receivable_installments" : "accounts_receivable";
       
-      const { data: existingTx } = await supabase
+      const { error: transactionError } = await supabase
         .from("financial_transactions")
-        .select("id")
-        .eq("reference_id", refId)
-        .eq("reference_type", refType)
-        .limit(1);
+        .insert({
+          store_id: paymentAccount.store_id || "",
+          account_id: selectedAccountId,
+          transaction_type: "entrada",
+          amount: finalAmount,
+          transaction_date: formatDateForDatabase(paymentDate),
+          description: selectedInstallment 
+            ? `Recebimento Parcela ${selectedInstallment.installment_number} - ${paymentAccount.description}`
+            : `Recebimento - ${paymentAccount.description}`,
+          reference_id: refId,
+          reference_type: refType,
+          created_by: user.id,
+        });
 
-      if (!existingTx || existingTx.length === 0) {
-        // Create financial transaction
-        const { error: transactionError } = await supabase
-          .from("financial_transactions")
-          .insert({
-            store_id: paymentAccount.store_id || "",
-            account_id: selectedAccountId,
-            transaction_type: "entrada",
-            amount: finalAmount,
-            transaction_date: formatDateForDatabase(paymentDate),
-            description: selectedInstallment 
-              ? `Recebimento Parcela ${selectedInstallment.installment_number} - ${paymentAccount.description}`
-              : `Recebimento - ${paymentAccount.description}`,
-            reference_id: refId,
-            reference_type: refType,
-            created_by: user.id,
-          });
-
-        if (transactionError) throw transactionError;
-      }
+      // Ignorar erro de duplicidade (23505 = unique_violation)
+      if (transactionError && transactionError.code !== '23505') throw transactionError;
 
       toast({
         title: "Sucesso",
