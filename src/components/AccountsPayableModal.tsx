@@ -3552,32 +3552,23 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
 
           if (updateInstallmentError) throw updateInstallmentError;
 
-          // Verificar se já existe transação para esta parcela (evitar duplicidade)
-          const { data: existingInstTx } = await supabase
+          // Inserir transação financeira (índice único previne duplicatas)
+          const { error: transactionError } = await supabase
             .from("financial_transactions")
-            .select("id")
-            .eq("reference_id", installment.id)
-            .eq("reference_type", "accounts_payable_installments")
-            .limit(1);
+            .insert({
+              store_id: paymentAccount.store_id,
+              account_id: selectedAccountId,
+              transaction_type: "saida",
+              amount: finalAmount,
+              transaction_date: formatDateForDatabase(paymentDate),
+              description: `Pagamento Parcela ${installment.installment_number}: ${paymentAccount.description}${surcharge > 0 ? ` + Acréscimo: R$ ${surcharge.toFixed(2)}` : ''}${discount > 0 ? ` - Desconto: R$ ${discount.toFixed(2)}` : ''}`,
+              reference_id: installment.id,
+              reference_type: "accounts_payable_installments",
+              created_by: user.id
+            });
 
-          if (!existingInstTx || existingInstTx.length === 0) {
-            // O store_id deve SEMPRE ser o store_id do contas a pagar para manter a integridade dos relatórios
-            const { error: transactionError } = await supabase
-              .from("financial_transactions")
-              .insert({
-                store_id: paymentAccount.store_id,
-                account_id: selectedAccountId,
-                transaction_type: "saida",
-                amount: finalAmount,
-                transaction_date: formatDateForDatabase(paymentDate),
-                description: `Pagamento Parcela ${installment.installment_number}: ${paymentAccount.description}${surcharge > 0 ? ` + Acréscimo: R$ ${surcharge.toFixed(2)}` : ''}${discount > 0 ? ` - Desconto: R$ ${discount.toFixed(2)}` : ''}`,
-                reference_id: installment.id,
-                reference_type: "accounts_payable_installments",
-                created_by: user.id
-              });
-
-            if (transactionError) throw transactionError;
-          }
+          // Ignorar erro de duplicidade (23505 = unique_violation)
+          if (transactionError && transactionError.code !== '23505') throw transactionError;
         }
 
         // Check if all installments are now paid
