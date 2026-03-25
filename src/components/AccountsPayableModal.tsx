@@ -701,59 +701,62 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
         }
       }
 
-      // Build the main query
-      let query = supabase
-        .from("accounts_payable")
-        .select(`
-          *,
-          suppliers(name),
-          employees(name),
-          stores(name)
-        `);
+      // Helper to build base query with common filters
+      const buildBaseQuery = () => {
+        let q = supabase
+          .from("accounts_payable")
+          .select(`
+            *,
+            suppliers(name),
+            employees(name),
+            stores(name)
+          `);
 
-      // Apply the combined ID filter if we have one
-      if (finalIds !== null) {
-        query = query.in("id", finalIds);
-      }
-      
-      if (filterSupplier && filterSupplier !== "all" && filterSupplier !== "") {
-        query = query.eq("supplier_id", filterSupplier);
-      }
-      
-      // Filtro por funcionário
-      if (filterEmployee && filterEmployee !== "all" && filterEmployee !== "") {
-        query = query.eq("employee_id", filterEmployee);
-      }
-      
-      if (filterDocumentNumber.trim()) {
-        query = query.ilike("document_number", `%${filterDocumentNumber}%`);
-      }
-      
-      // Apply status filter
-      if (filterStatus && filterStatus !== "all") {
-        if (filterStatus === "pending") {
-          query = query.eq("status", "pending");
-        } else if (filterStatus === "paid") {
-          query = query.eq("status", "paid");
-        } else if (filterStatus === "partial") {
-          query = query.eq("status", "partial");
+        if (filterSupplier && filterSupplier !== "all" && filterSupplier !== "") {
+          q = q.eq("supplier_id", filterSupplier);
         }
-      }
-      
-      // Apply created_at filter (data de cadastro)
-      if (filterCreatedAtFrom) {
-        query = query.gte("created_at", `${filterCreatedAtFrom}T00:00:00`);
-      }
-      if (filterCreatedAtTo) {
-        query = query.lte("created_at", `${filterCreatedAtTo}T23:59:59`);
+        if (filterEmployee && filterEmployee !== "all" && filterEmployee !== "") {
+          q = q.eq("employee_id", filterEmployee);
+        }
+        if (filterDocumentNumber.trim()) {
+          q = q.ilike("document_number", `%${filterDocumentNumber}%`);
+        }
+        if (filterStatus && filterStatus !== "all") {
+          q = q.eq("status", filterStatus);
+        }
+        if (filterCreatedAtFrom) {
+          q = q.gte("created_at", `${filterCreatedAtFrom}T00:00:00`);
+        }
+        if (filterCreatedAtTo) {
+          q = q.lte("created_at", `${filterCreatedAtTo}T23:59:59`);
+        }
+        q = q.order("created_at", { ascending: false });
+        return q;
+      };
+
+      let allData: any[] = [];
+
+      if (finalIds !== null) {
+        // Chunk IDs to avoid URL length limits (max ~200 UUIDs per request)
+        const CHUNK_SIZE = 150;
+        for (let i = 0; i < finalIds.length; i += CHUNK_SIZE) {
+          const chunk = finalIds.slice(i, i + CHUNK_SIZE);
+          const query = buildBaseQuery().in("id", chunk);
+          const { data, error } = await query;
+          if (error) throw error;
+          if (data) allData.push(...data);
+        }
+      } else {
+        const query = buildBaseQuery();
+        const { data, error } = await query;
+        if (error) throw error;
+        if (data) allData = data;
       }
 
-      query = query.order("created_at", { ascending: false });
+      // Sort combined results by created_at descending
+      allData.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-      const { data, error } = await query;
-
-      if (error) throw error;
-      const formattedData = (data || []).map(item => ({
+      const formattedData = allData.map(item => ({
         ...item,
         attachments: Array.isArray(item.attachments) ? item.attachments as Array<{name: string, url?: string, path?: string, size?: number, type?: string}> : []
       }));
