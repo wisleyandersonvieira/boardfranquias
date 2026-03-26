@@ -11,8 +11,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Eye, Pencil, Ban, Upload, X, FileText, ArrowUp, ArrowDown, Link2, Download, Maximize2 } from "lucide-react";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { format, isValid } from "date-fns";
 import { ptBR } from "date-fns/locale";
+
+const safeFormatDate = (dateStr: string | null | undefined, fmt: string, suffix?: string): string => {
+  if (!dateStr) return "-";
+  const d = new Date(dateStr + (suffix || ''));
+  return isValid(d) ? format(d, fmt) : "-";
+};
 import { LinkToAccountsPayableModal } from "./LinkToAccountsPayableModal";
 import { useCaixaPermissions } from "@/hooks/useCaixaPermissions";
 import jsPDF from "jspdf";
