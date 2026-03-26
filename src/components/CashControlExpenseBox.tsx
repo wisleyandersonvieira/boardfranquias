@@ -1092,7 +1092,7 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
 
               <div className="pt-2 border-t">
                 <p className="text-xs text-muted-foreground">
-                  Criado em {format(new Date(viewingExpense.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })} por {viewingExpense.created_by_name}
+                  Criado em {safeFormatDate(viewingExpense.created_at, "dd/MM/yyyy 'às' HH:mm")} por {viewingExpense.created_by_name}
                 </p>
                 {viewingExpense.edit_history.length > 0 && (
                   <div className="mt-2 space-y-1">
