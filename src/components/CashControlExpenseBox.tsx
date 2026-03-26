@@ -531,8 +531,8 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
       
       // Table data
       const tableData = sortedExpenses.map(expense => [
-        format(new Date(expense.issue_date + 'T12:00:00'), "dd/MM/yyyy"),
-        format(new Date(expense.created_at), "dd/MM/yyyy HH:mm"),
+        safeFormatDate(expense.issue_date, "dd/MM/yyyy", "T12:00:00"),
+        safeFormatDate(expense.created_at, "dd/MM/yyyy HH:mm"),
         expense.supplier + (expense.is_disabled ? ' (inabilitado)' : ''),
         expense.description,
         formatCurrency(expense.amount)
@@ -576,8 +576,8 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
       const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
       
       const data = sortedExpenses.map(expense => ({
-        'Data': format(new Date(expense.issue_date + 'T12:00:00'), "dd/MM/yyyy"),
-        'Criado em': format(new Date(expense.created_at), "dd/MM/yyyy HH:mm"),
+        'Data': safeFormatDate(expense.issue_date, "dd/MM/yyyy", "T12:00:00"),
+        'Criado em': safeFormatDate(expense.created_at, "dd/MM/yyyy HH:mm"),
         'Fornecedor': expense.supplier + (expense.is_disabled ? ' (inabilitado)' : ''),
         'Descrição': expense.description,
         'Valor': expense.amount,
@@ -749,10 +749,10 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
                       className={rowClassName}
                     >
                       <TableCell className="text-xs py-1 text-left w-[90px]">
-                        {format(new Date(expense.issue_date + 'T12:00:00'), "dd/MM/yyyy")}
+                        {safeFormatDate(expense.issue_date, "dd/MM/yyyy", "T12:00:00")}
                       </TableCell>
                       <TableCell className="text-xs py-1 text-left w-[130px]">
-                        {format(new Date(expense.created_at), "dd/MM/yyyy HH:mm")}
+                        {safeFormatDate(expense.created_at, "dd/MM/yyyy HH:mm")}
                       </TableCell>
                       <TableCell className="text-xs py-1 text-left w-[200px]">
                         {expense.supplier}
@@ -1223,10 +1223,10 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
                   return (
                     <TableRow key={expense.id} className={`${rowClassName} h-6`}>
                       <TableCell className="text-xs py-0.5">
-                        {format(new Date(expense.issue_date + 'T12:00:00'), "dd/MM/yyyy")}
+                        {safeFormatDate(expense.issue_date, "dd/MM/yyyy", "T12:00:00")}
                       </TableCell>
                       <TableCell className="text-xs py-0.5">
-                        {format(new Date(expense.created_at), "dd/MM/yyyy HH:mm")}
+                        {safeFormatDate(expense.created_at, "dd/MM/yyyy HH:mm")}
                       </TableCell>
                       <TableCell className="text-xs py-0.5">
                         {expense.supplier}
