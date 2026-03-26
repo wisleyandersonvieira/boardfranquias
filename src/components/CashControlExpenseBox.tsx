@@ -1045,7 +1045,7 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
                   <div>
                     <Label className="text-muted-foreground text-xs">Data do Pagamento</Label>
                     <p className="font-medium">
-                      {format(new Date(viewingExpense.payment_date + 'T12:00:00'), "dd/MM/yyyy")}
+                      {safeFormatDate(viewingExpense.payment_date, "dd/MM/yyyy", "T12:00:00")}
                     </p>
                   </div>
                 )}
