@@ -11,8 +11,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Eye, Pencil, Ban, Upload, X, FileText, ArrowUp, ArrowDown, Link2, Download, Maximize2 } from "lucide-react";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { format, isValid } from "date-fns";
 import { ptBR } from "date-fns/locale";
+
+const safeFormatDate = (dateStr: string | null | undefined, fmt: string, suffix?: string): string => {
+  if (!dateStr) return "-";
+  const d = new Date(dateStr + (suffix || ''));
+  return isValid(d) ? format(d, fmt) : "-";
+};
 import { LinkToAccountsPayableModal } from "./LinkToAccountsPayableModal";
 import { useCaixaPermissions } from "@/hooks/useCaixaPermissions";
 import jsPDF from "jspdf";
@@ -525,8 +531,8 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
       
       // Table data
       const tableData = sortedExpenses.map(expense => [
-        format(new Date(expense.issue_date + 'T12:00:00'), "dd/MM/yyyy"),
-        format(new Date(expense.created_at), "dd/MM/yyyy HH:mm"),
+        safeFormatDate(expense.issue_date, "dd/MM/yyyy", "T12:00:00"),
+        safeFormatDate(expense.created_at, "dd/MM/yyyy HH:mm"),
         expense.supplier + (expense.is_disabled ? ' (inabilitado)' : ''),
         expense.description,
         formatCurrency(expense.amount)
@@ -570,8 +576,8 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
       const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
       
       const data = sortedExpenses.map(expense => ({
-        'Data': format(new Date(expense.issue_date + 'T12:00:00'), "dd/MM/yyyy"),
-        'Criado em': format(new Date(expense.created_at), "dd/MM/yyyy HH:mm"),
+        'Data': safeFormatDate(expense.issue_date, "dd/MM/yyyy", "T12:00:00"),
+        'Criado em': safeFormatDate(expense.created_at, "dd/MM/yyyy HH:mm"),
         'Fornecedor': expense.supplier + (expense.is_disabled ? ' (inabilitado)' : ''),
         'Descrição': expense.description,
         'Valor': expense.amount,
@@ -743,10 +749,10 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
                       className={rowClassName}
                     >
                       <TableCell className="text-xs py-1 text-left w-[90px]">
-                        {format(new Date(expense.issue_date + 'T12:00:00'), "dd/MM/yyyy")}
+                        {safeFormatDate(expense.issue_date, "dd/MM/yyyy", "T12:00:00")}
                       </TableCell>
                       <TableCell className="text-xs py-1 text-left w-[130px]">
-                        {format(new Date(expense.created_at), "dd/MM/yyyy HH:mm")}
+                        {safeFormatDate(expense.created_at, "dd/MM/yyyy HH:mm")}
                       </TableCell>
                       <TableCell className="text-xs py-1 text-left w-[200px]">
                         {expense.supplier}
@@ -1011,7 +1017,7 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
                 <div>
                   <Label className="text-muted-foreground text-xs">Data de Emissão</Label>
                   <p className="font-medium">
-                    {format(new Date(viewingExpense.issue_date + 'T12:00:00'), "dd/MM/yyyy")}
+                    {safeFormatDate(viewingExpense.issue_date, "dd/MM/yyyy", "T12:00:00")}
                   </p>
                 </div>
                 <div>
@@ -1039,7 +1045,7 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
                   <div>
                     <Label className="text-muted-foreground text-xs">Data do Pagamento</Label>
                     <p className="font-medium">
-                      {format(new Date(viewingExpense.payment_date + 'T12:00:00'), "dd/MM/yyyy")}
+                      {safeFormatDate(viewingExpense.payment_date, "dd/MM/yyyy", "T12:00:00")}
                     </p>
                   </div>
                 )}
@@ -1086,13 +1092,13 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
 
               <div className="pt-2 border-t">
                 <p className="text-xs text-muted-foreground">
-                  Criado em {format(new Date(viewingExpense.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })} por {viewingExpense.created_by_name}
+                  Criado em {safeFormatDate(viewingExpense.created_at, "dd/MM/yyyy 'às' HH:mm")} por {viewingExpense.created_by_name}
                 </p>
                 {viewingExpense.edit_history.length > 0 && (
                   <div className="mt-2 space-y-1">
                     {viewingExpense.edit_history.map((edit, index) => (
                       <p key={index} className="text-xs text-muted-foreground">
-                        Editado em {format(new Date(edit.edited_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })} por {edit.edited_by_name}
+                        Editado em {safeFormatDate(edit.edited_at, "dd/MM/yyyy 'às' HH:mm")} por {edit.edited_by_name}
                       </p>
                     ))}
                   </div>
@@ -1217,10 +1223,10 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
                   return (
                     <TableRow key={expense.id} className={`${rowClassName} h-6`}>
                       <TableCell className="text-xs py-0.5">
-                        {format(new Date(expense.issue_date + 'T12:00:00'), "dd/MM/yyyy")}
+                        {safeFormatDate(expense.issue_date, "dd/MM/yyyy", "T12:00:00")}
                       </TableCell>
                       <TableCell className="text-xs py-0.5">
-                        {format(new Date(expense.created_at), "dd/MM/yyyy HH:mm")}
+                        {safeFormatDate(expense.created_at, "dd/MM/yyyy HH:mm")}
                       </TableCell>
                       <TableCell className="text-xs py-0.5">
                         {expense.supplier}
