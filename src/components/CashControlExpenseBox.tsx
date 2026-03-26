@@ -1098,7 +1098,7 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
                   <div className="mt-2 space-y-1">
                     {viewingExpense.edit_history.map((edit, index) => (
                       <p key={index} className="text-xs text-muted-foreground">
-                        Editado em {format(new Date(edit.edited_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })} por {edit.edited_by_name}
+                        Editado em {safeFormatDate(edit.edited_at, "dd/MM/yyyy 'às' HH:mm")} por {edit.edited_by_name}
                       </p>
                     ))}
                   </div>
