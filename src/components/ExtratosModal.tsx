@@ -417,10 +417,10 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
         const results: T[] = [];
         for (let i = 0; i < uniqueIds.length; i += batchSize) {
           const batch = uniqueIds.slice(i, i + batchSize);
-          const { data } = await supabase
-            .from(table)
+          const { data } = await (supabase
+            .from(table as any)
             .select(selectFields)
-            .in(idField, batch);
+            .in(idField, batch) as any);
           if (data) results.push(...(data as T[]));
         }
         return results;
