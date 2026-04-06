@@ -501,15 +501,15 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
         employeesMap.set(e.id, e.name);
       });
 
-      // Calcular total de parcelas por conta a pagar
+      // Calcular total de parcelas por conta a pagar (usando dados completos buscados por parent ID)
       const payableInstallmentCounts = new Map<string, number>();
-      (payableInstallmentsResult.data || []).forEach((inst: any) => {
+      (allPayableInstForCounts || []).forEach((inst: any) => {
         const current = payableInstallmentCounts.get(inst.account_payable_id) || 0;
         payableInstallmentCounts.set(inst.account_payable_id, Math.max(current, inst.installment_number));
       });
 
       const receivableInstallmentCounts = new Map<string, number>();
-      (receivableInstallmentsResult.data || []).forEach((inst: any) => {
+      (allReceivableInstForCounts || []).forEach((inst: any) => {
         const current = receivableInstallmentCounts.get(inst.account_receivable_id) || 0;
         receivableInstallmentCounts.set(inst.account_receivable_id, Math.max(current, inst.installment_number));
       });
