@@ -356,25 +356,6 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
         .in('store_id', linkedStoreIds)
         .eq('account_id', selectedAccount);
 
-      // Dados de referência para validação - busca de TODAS as lojas vinculadas
-      const payableInstallmentsPromise = supabase
-        .from('accounts_payable_installments')
-        .select('id, installment_number, payment_date, account_payable_id');
-
-      const payablesPromise = supabase
-        .from('accounts_payable')
-        .select('id, document_number, description, payment_date, status, employee_id, supplier_id, store_id')
-        .in('store_id', linkedStoreIds);
-
-      const receivableInstallmentsPromise = supabase
-        .from('accounts_receivable_installments')
-        .select('id, installment_number, payment_date, account_receivable_id');
-
-      const receivablesPromise = supabase
-        .from('accounts_receivable')
-        .select('id, document_number, description, payment_date, status, creditor_id, store_id')
-        .in('store_id', linkedStoreIds);
-
       // Fornecedores, credores e funcionários
       const suppliersPromise = supabase.from('suppliers').select('id, name');
       const creditorsPromise = supabase.from('creditors').select('id, name');
@@ -388,10 +369,6 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
         cashControlItemsResult,
         cashControlsResult,
         partnerTransResult,
-        payableInstallmentsResult,
-        payablesResult,
-        receivableInstallmentsResult,
-        receivablesResult,
         suppliersResult,
         creditorsResult,
         employeesResult
@@ -401,14 +378,87 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
         cashControlItemPromise,
         cashControlsPromise,
         partnerTransPromise,
-        payableInstallmentsPromise,
-        payablesPromise,
-        receivableInstallmentsPromise,
-        receivablesPromise,
         suppliersPromise,
         creditorsPromise,
         employeesPromise
       ]);
+
+      // ========== ETAPA 1.5: Buscar dados de referência apenas para transações encontradas ==========
+      // Isso evita o limite de 1000 linhas do Supabase ao buscar apenas os registros necessários
+      const financialTrans = financialTransResult.data || [];
+      
+      const payableRefIds = financialTrans
+        .filter(t => t.reference_type === 'accounts_payable')
+        .map(t => t.reference_id)
+        .filter(Boolean);
+      const payableInstRefIds = financialTrans
+        .filter(t => t.reference_type === 'accounts_payable_installments')
+        .map(t => t.reference_id)
+        .filter(Boolean);
+      const receivableRefIds = financialTrans
+        .filter(t => t.reference_type === 'accounts_receivable')
+        .map(t => t.reference_id)
+        .filter(Boolean);
+      const receivableInstRefIds = financialTrans
+        .filter(t => t.reference_type === 'accounts_receivable_installments')
+        .map(t => t.reference_id)
+        .filter(Boolean);
+
+      // Função auxiliar para buscar em lotes (evita limite de 1000 e limitação do IN clause)
+      const fetchInBatches = async <T,>(
+        table: string,
+        selectFields: string,
+        idField: string,
+        ids: string[],
+        batchSize = 500
+      ): Promise<T[]> => {
+        if (ids.length === 0) return [];
+        const uniqueIds = [...new Set(ids)];
+        const results: T[] = [];
+        for (let i = 0; i < uniqueIds.length; i += batchSize) {
+          const batch = uniqueIds.slice(i, i + batchSize);
+          const { data } = await (supabase
+            .from(table as any)
+            .select(selectFields)
+            .in(idField, batch) as any);
+          if (data) results.push(...(data as T[]));
+        }
+        return results;
+      };
+
+      const [payablesData, payableInstallmentsData, receivablesData, receivableInstallmentsData] = await Promise.all([
+        fetchInBatches<any>('accounts_payable', 'id, document_number, description, payment_date, status, employee_id, supplier_id, store_id', 'id', payableRefIds),
+        fetchInBatches<any>('accounts_payable_installments', 'id, installment_number, payment_date, account_payable_id', 'id', payableInstRefIds),
+        fetchInBatches<any>('accounts_receivable', 'id, document_number, description, payment_date, status, creditor_id, store_id', 'id', receivableRefIds),
+        fetchInBatches<any>('accounts_receivable_installments', 'id, installment_number, payment_date, account_receivable_id', 'id', receivableInstRefIds),
+      ]);
+
+      // Para parcelas, também precisamos buscar os payables/receivables pai
+      const parentPayableIds = payableInstallmentsData
+        .map((inst: any) => inst.account_payable_id)
+        .filter((id: string) => !payableRefIds.includes(id));
+      const parentReceivableIds = receivableInstallmentsData
+        .map((inst: any) => inst.account_receivable_id)
+        .filter((id: string) => !receivableRefIds.includes(id));
+
+      const [extraPayablesData, extraReceivablesData] = await Promise.all([
+        fetchInBatches<any>('accounts_payable', 'id, document_number, description, payment_date, status, employee_id, supplier_id, store_id', 'id', parentPayableIds),
+        fetchInBatches<any>('accounts_receivable', 'id, document_number, description, payment_date, status, creditor_id, store_id', 'id', parentReceivableIds),
+      ]);
+
+      // Também buscar todas as parcelas dos payables pai para calcular contagens (X/Y)
+      const allPayableIdsForCounts = [...new Set([...payableRefIds, ...payableInstallmentsData.map((i: any) => i.account_payable_id)])];
+      const allReceivableIdsForCounts = [...new Set([...receivableRefIds, ...receivableInstallmentsData.map((i: any) => i.account_receivable_id)])];
+
+      const [allPayableInstForCounts, allReceivableInstForCounts] = await Promise.all([
+        fetchInBatches<any>('accounts_payable_installments', 'id, installment_number, account_payable_id', 'account_payable_id', allPayableIdsForCounts),
+        fetchInBatches<any>('accounts_receivable_installments', 'id, installment_number, account_receivable_id', 'account_receivable_id', allReceivableIdsForCounts),
+      ]);
+
+      const payableInstallmentsResult = { data: payableInstallmentsData };
+      const payablesResult = { data: [...payablesData, ...extraPayablesData] };
+      const receivableInstallmentsResult = { data: receivableInstallmentsData };
+      const receivablesResult = { data: [...receivablesData, ...extraReceivablesData] };
 
       setLoadingProgress(50);
 
@@ -451,15 +501,15 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
         employeesMap.set(e.id, e.name);
       });
 
-      // Calcular total de parcelas por conta a pagar
+      // Calcular total de parcelas por conta a pagar (usando dados completos buscados por parent ID)
       const payableInstallmentCounts = new Map<string, number>();
-      (payableInstallmentsResult.data || []).forEach((inst: any) => {
+      (allPayableInstForCounts || []).forEach((inst: any) => {
         const current = payableInstallmentCounts.get(inst.account_payable_id) || 0;
         payableInstallmentCounts.set(inst.account_payable_id, Math.max(current, inst.installment_number));
       });
 
       const receivableInstallmentCounts = new Map<string, number>();
-      (receivableInstallmentsResult.data || []).forEach((inst: any) => {
+      (allReceivableInstForCounts || []).forEach((inst: any) => {
         const current = receivableInstallmentCounts.get(inst.account_receivable_id) || 0;
         receivableInstallmentCounts.set(inst.account_receivable_id, Math.max(current, inst.installment_number));
       });
