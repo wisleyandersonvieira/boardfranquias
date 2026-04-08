@@ -470,7 +470,30 @@ const BankReconciliation = () => {
         }
       }
 
-      // Load partner transactions
+      // Add cash control items as internal transactions
+      const cashControlLabels: Record<string, string> = {
+        cash: 'Faturamento: Dinheiro - Fechamento de Caixa',
+        card: 'Faturamento: Cartão - Fechamento de Caixa',
+        delivery: 'Faturamento: Delivery - Fechamento de Caixa',
+        current: 'Faturamento: Conta - Fechamento de Caixa',
+      };
+
+      if (cashControlItems) {
+        for (const item of cashControlItems) {
+          const ccDate = (item.cash_control as any)?.date;
+          if (ccDate && ccDate >= startDateStr && ccDate <= endDateStr && item.valor > 0) {
+            internal.push({
+              id: item.id,
+              date: parseDatePreservingLocal(ccDate),
+              amount: item.valor,
+              description: cashControlLabels[selectedAccountType] || 'Fechamento de Caixa',
+              type: 'accounts_receivable',
+              table: 'cash_control',
+            });
+          }
+        }
+      }
+
       const { data: partnerTrans } = await supabase
         .from('partner_transactions')
         .select('id, amount, payment_date, transaction_type, notes, partners:partner_id(name)')
