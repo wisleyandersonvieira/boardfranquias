@@ -428,6 +428,34 @@ const BankReconciliation = () => {
         .gte('transfer_date', startDateStr)
         .lte('transfer_date', endDateStr);
 
+      // Load cash control items based on account type
+      let cashControlItemPromise;
+      if (selectedAccountType === 'cash') {
+        cashControlItemPromise = supabase
+          .from('cash_control_cash_items')
+          .select('id, valor, cash_control_id, cash_control:cash_control_id(id, date, store_id)')
+          .eq('cash_account_id', selectedAccount);
+      } else if (selectedAccountType === 'card') {
+        cashControlItemPromise = supabase
+          .from('cash_control_card_items')
+          .select('id, valor, cash_control_id, cash_control:cash_control_id(id, date, store_id)')
+          .eq('card_account_id', selectedAccount);
+      } else if (selectedAccountType === 'delivery') {
+        cashControlItemPromise = supabase
+          .from('cash_control_delivery_items')
+          .select('id, valor, cash_control_id, cash_control:cash_control_id(id, date, store_id)')
+          .eq('delivery_account_id', selectedAccount);
+      } else if (selectedAccountType === 'current') {
+        cashControlItemPromise = supabase
+          .from('cash_control_account_items')
+          .select('id, valor, cash_control_id, cash_control:cash_control_id(id, date, store_id)')
+          .eq('current_account_id', selectedAccount);
+      } else {
+        cashControlItemPromise = Promise.resolve({ data: [] });
+      }
+
+      const { data: cashControlItems } = await cashControlItemPromise;
+
       if (transfers) {
         for (const t of transfers) {
           const isSource = t.source_account_id === selectedAccount;
