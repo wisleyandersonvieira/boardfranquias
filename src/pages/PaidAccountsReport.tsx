@@ -1083,6 +1083,136 @@ const PaidAccountsReport = () => {
     doc.save("contas-pagas-por-fornecedor.pdf");
   };
 
+  const exportToPDFFornecedorSubgrupo = async () => {
+    // This report shows supplier + sum of only the products matching the subgroup filter
+    const subgroupId = filters.subgroup_id !== "all" ? filters.subgroup_id : null;
+    const groupId = filters.group_id !== "all" ? filters.group_id : null;
+
+    if (!subgroupId && !groupId) {
+      toast({
+        title: "Filtro obrigatório",
+        description: "Selecione um Grupo ou Subgrupo para gerar este relatório.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const doc = new jsPDF();
+    const titleText = "Contas Pagas - Fornecedor/Subgrupo";
+    const startY = await addPdfHeaderWithLogo(doc, titleText);
+
+    const filterInfo = getFilterInfo();
+    let currentY = startY;
+
+    if (filterInfo.length > 0) {
+      doc.setFontSize(9);
+      doc.text(`Filtros: ${filterInfo.join(" | ")}`, 14, currentY);
+      currentY += 6;
+    }
+
+    // Group by supplier, summing only matching product items
+    const supplierMap: { [key: string]: { supplierName: string; totalFiltered: number; items: { description: string; paymentDate: string; productTotal: number }[] } } = {};
+
+    accounts.forEach(account => {
+      const supplierId = account.supplier_id || account.employee_id || 'sem-fornecedor';
+      const supplierName = getSupplierOrEmployeeName(account);
+
+      if (!supplierMap[supplierId]) {
+        supplierMap[supplierId] = { supplierName, totalFiltered: 0, items: [] };
+      }
+
+      // Sum only items matching the subgroup/group filter
+      let matchingTotal = 0;
+      if (account.accounts_payable_items && account.accounts_payable_items.length > 0) {
+        // Calculate proportion for installments
+        const totalItemsValue = account.accounts_payable_items.reduce((sum: number, it: any) => sum + (it.total_price || 0), 0);
+        const paidAmount = account.paid_amount ?? account.amount ?? 0;
+        const proportion = totalItemsValue > 0 ? paidAmount / totalItemsValue : 1;
+
+        account.accounts_payable_items.forEach((item: any) => {
+          let matches = false;
+          if (subgroupId) {
+            matches = item.products?.subgroup_id === subgroupId;
+          } else if (groupId) {
+            matches = item.products?.account_groups?.parent_id === groupId;
+          }
+          if (matches) {
+            matchingTotal += (item.total_price || 0) * proportion;
+          }
+        });
+      }
+
+      if (matchingTotal > 0) {
+        supplierMap[supplierId].totalFiltered += matchingTotal;
+        supplierMap[supplierId].items.push({
+          description: account.description,
+          paymentDate: account.payment_date ? new Date(account.payment_date + 'T00:00:00').toLocaleDateString("pt-BR") : "N/A",
+          productTotal: matchingTotal,
+        });
+      }
+    });
+
+    // Build table
+    const tableData: any[] = [];
+    let grandTotal = 0;
+    let totalEntries = 0;
+
+    // Sort suppliers by name
+    const sortedSuppliers = Object.values(supplierMap)
+      .filter(s => s.items.length > 0)
+      .sort((a, b) => a.supplierName.localeCompare(b.supplierName));
+
+    sortedSuppliers.forEach(supplier => {
+      // Supplier header
+      tableData.push([
+        { content: supplier.supplierName, colSpan: 3, styles: { fontStyle: "bold", fillColor: [220, 220, 220], fontSize: 10 } }
+      ]);
+
+      supplier.items.forEach(item => {
+        tableData.push([
+          item.description,
+          item.paymentDate,
+          item.productTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+        ]);
+        totalEntries++;
+      });
+
+      // Supplier subtotal
+      tableData.push([
+        { content: `Subtotal ${supplier.supplierName}`, colSpan: 2, styles: { fontStyle: "bold", halign: "right", fillColor: [240, 240, 240] } },
+        { content: supplier.totalFiltered.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), styles: { fontStyle: "bold", fillColor: [240, 240, 240] } },
+      ]);
+
+      grandTotal += supplier.totalFiltered;
+    });
+
+    // Grand total
+    tableData.push([
+      { content: "TOTAL GERAL", colSpan: 2, styles: { fontStyle: "bold", halign: "right", fillColor: [34, 197, 94], textColor: 255 } },
+      { content: grandTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), styles: { fontStyle: "bold", fillColor: [34, 197, 94], textColor: 255 } },
+    ]);
+
+    autoTable(doc, {
+      head: [["Título", "Pagamento", "Valor (Subgrupo)"]],
+      body: tableData,
+      startY: currentY,
+      styles: { fontSize: 9, cellPadding: 3 },
+      headStyles: { fillColor: [34, 197, 94], textColor: 255, fontStyle: "bold" },
+      margin: { top: startY, left: 20, right: 20 },
+      didDrawPage: (data: any) => { if (data.pageNumber > 1) renderPdfHeader(doc, titleText); },
+    });
+
+    const pageCount = (doc as any).internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.text(`Gerado em: ${new Date().toLocaleString("pt-BR")}`, 20, doc.internal.pageSize.height - 10);
+      doc.text(`Página ${i} de ${pageCount}`, doc.internal.pageSize.width - 40, doc.internal.pageSize.height - 10);
+    }
+
+    doc.save("contas-pagas-fornecedor-subgrupo.pdf");
+  };
+
   const exportToExcel = () => {
     const excelData = accounts.map(account => ({
       Título: account.description,
@@ -1435,6 +1565,9 @@ const PaidAccountsReport = () => {
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={exportToPDFPorFornecedor}>
                         Relatório por Fornecedor
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={exportToPDFFornecedorSubgrupo}>
+                        Fornecedor/Subgrupo (Filtrado)
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
