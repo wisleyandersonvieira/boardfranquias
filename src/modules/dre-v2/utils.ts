@@ -22,10 +22,15 @@ export const DRE_MONTHS = [
 ];
 
 export function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("pt-BR", {
+  const absolute = Math.abs(value || 0);
+  const formatted = new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency: "BRL",
-  }).format(value || 0);
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(absolute);
+
+  return value < 0 ? `-${formatted}` : formatted;
 }
 
 export function formatPercent(value?: number | null): string {
@@ -108,4 +113,28 @@ export function buildCsv(rows: string[][]): string {
         .join(","),
     )
     .join("\n");
+}
+
+export function formatDateTime(value: Date | string): string {
+  const date = value instanceof Date ? value : new Date(value);
+  return new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(date);
+}
+
+export function formatPeriodLabel(year: number, months: number[]): string {
+  const normalized = normalizeMonths(months);
+  if (normalized.length === 0) {
+    return String(year);
+  }
+
+  if (normalized.length === 1) {
+    const month = DRE_MONTHS.find((entry) => entry.value === normalized[0])?.label || normalized[0];
+    return `${month} de ${year}`;
+  }
+
+  const first = DRE_MONTHS.find((entry) => entry.value === normalized[0])?.label || normalized[0];
+  const last = DRE_MONTHS.find((entry) => entry.value === normalized[normalized.length - 1])?.label || normalized[normalized.length - 1];
+  return `${first} a ${last} de ${year}`;
 }

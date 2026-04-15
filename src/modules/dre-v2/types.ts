@@ -1,5 +1,6 @@
 export type DRERegime = "competence" | "cash";
 export type DREViewMode = "synthetic" | "analytic";
+export type DREValueDisplayMode = "value" | "value_percent" | "percent";
 
 export interface DREStoreOption {
   id: string;
@@ -157,4 +158,16 @@ export interface DREApuracaoResult {
     storeName?: string;
   }>;
   auditByLineId: Record<string, DREAuditEntry>;
+}
+
+export interface DREExportContext {
+  systemName: string;
+  reportTitle: string;
+  generatedAt: Date;
+  generatedBy?: string | null;
+  selectedStoreNames: string[];
+  showLogo?: boolean;
+  groupModeLabel: string;
+  valueDisplayMode: DREValueDisplayMode;
+  hideZeroLines?: boolean;
 }

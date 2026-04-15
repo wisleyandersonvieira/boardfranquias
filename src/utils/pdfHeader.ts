@@ -52,6 +52,11 @@ export const warmPdfLogoCache = async () => {
   await warmCache();
 };
 
+export const getPdfLogoCache = () => ({
+  logoBase64: logoBase64Cache,
+  textLogoBase64: textLogoBase64Cache,
+});
+
 /**
  * Renders the PDF header synchronously (call after warming cache).
  * Returns the Y coordinate where content should start.
