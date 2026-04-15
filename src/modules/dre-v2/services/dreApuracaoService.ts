@@ -307,7 +307,7 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
       const subgroupId = item.products?.subgroup_id || null;
       const structureItemIds = subgroupId ? structure.subgroupToItems[subgroupId] || [] : [];
       const functionType = item.products?.function_type || "debit";
-      const signedValue = functionType === "debit" ? -Math.abs(amount) : Math.abs(amount);
+      const signedValue = functionType === "debit" ? -amount : amount;
       const record: DREOriginRecord = {
         id: `ap:${account.id}:${item.id}:${suffix}`,
         origin: "accounts_payable",
@@ -366,16 +366,28 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
           });
 
           const payments = payablePaymentsByInstallment[installment.id] || [];
-          payments.forEach((payment: any) => {
-            adjustmentItems.forEach((item: any) => {
-              if (item.product_id === payment.interest_product_id && payment.interest_amount > 0) {
-                pushItemRecord(item, Number(payment.interest_amount || 0), payment.payment_date, "payment", `interest:${payment.id}`);
-              }
-              if (item.product_id === payment.discount_product_id && payment.discount_amount > 0) {
-                pushItemRecord(item, Number(payment.discount_amount || 0), payment.payment_date, "payment", `discount:${payment.id}`);
-              }
+          if (payments.length > 0) {
+            payments.forEach((payment: any) => {
+              adjustmentItems.forEach((item: any) => {
+                if (item.product_id === payment.interest_product_id && payment.interest_amount > 0) {
+                  pushItemRecord(item, Number(payment.interest_amount || 0), payment.payment_date, "payment", `interest:${payment.id}`);
+                }
+                if (item.product_id === payment.discount_product_id && payment.discount_amount > 0) {
+                  pushItemRecord(item, Number(payment.discount_amount || 0), payment.payment_date, "payment", `discount:${payment.id}`);
+                }
+              });
             });
-          });
+          } else {
+            adjustmentItems.forEach((item: any) => {
+              pushItemRecord(
+                item,
+                Number(item.total_price || 0) / Math.max(installments.filter((entry: any) => entry.payment_date).length, 1),
+                installment.payment_date,
+                "payment",
+                `legacy-adjustment:${installment.id}`,
+              );
+            });
+          }
         });
       } else if (isDateInsideFilters(account.payment_date, filters, "payment")) {
         normalItems.forEach((item: any) => {
@@ -391,16 +403,29 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
           return;
         }
         const payments = payablePaymentsByInstallment[installment.id] || [];
-        payments.forEach((payment: any) => {
-          adjustmentItems.forEach((item: any) => {
-            if (item.product_id === payment.interest_product_id && payment.interest_amount > 0) {
-              pushItemRecord(item, Number(payment.interest_amount || 0), payment.payment_date, "payment", `interest:${payment.id}`);
-            }
-            if (item.product_id === payment.discount_product_id && payment.discount_amount > 0) {
-              pushItemRecord(item, Number(payment.discount_amount || 0), payment.payment_date, "payment", `discount:${payment.id}`);
-            }
+        if (payments.length > 0) {
+          payments.forEach((payment: any) => {
+            adjustmentItems.forEach((item: any) => {
+              if (item.product_id === payment.interest_product_id && payment.interest_amount > 0) {
+                pushItemRecord(item, Number(payment.interest_amount || 0), payment.payment_date, "payment", `interest:${payment.id}`);
+              }
+              if (item.product_id === payment.discount_product_id && payment.discount_amount > 0) {
+                pushItemRecord(item, Number(payment.discount_amount || 0), payment.payment_date, "payment", `discount:${payment.id}`);
+              }
+            });
           });
-        });
+        } else {
+          const paidInstallmentsCount = Math.max(installments.filter((entry: any) => entry.payment_date).length, 1);
+          adjustmentItems.forEach((item: any) => {
+            pushItemRecord(
+              item,
+              Number(item.total_price || 0) / paidInstallmentsCount,
+              installment.payment_date,
+              "payment",
+              `legacy-adjustment:${installment.id}`,
+            );
+          });
+        }
       });
     }
   });

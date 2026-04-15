@@ -282,6 +282,7 @@ const AppSidebar = ({
       subMenus: [
         { id: "dre-competencia", label: "DRE Competência", route: "/dre/competencia" },
         { id: "dre-caixa", label: "DRE Regime de Caixa", route: "/dre/caixa" },
+        { id: "dre-confiavel", label: "Novo DRE Auditável", route: "/dre/confiavel" },
       ],
     },
     {
