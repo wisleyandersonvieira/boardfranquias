@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, FileBarChart, Banknote } from "lucide-react";
+import { ArrowLeft, FileBarChart, Banknote, ShieldCheck } from "lucide-react";
 
 const DRE = () => {
   const navigate = useNavigate();
@@ -22,6 +22,14 @@ const DRE = () => {
       icon: Banknote,
       color: "bg-green-500",
       onClick: () => navigate("/dre/caixa"),
+    },
+    {
+      id: "confiavel",
+      title: "Novo DRE Auditável",
+      description: "Módulo novo com conferência por linha, diagnóstico e exportação confiável",
+      icon: ShieldCheck,
+      color: "bg-amber-600",
+      onClick: () => navigate("/dre/confiavel"),
     },
   ];
 
@@ -51,7 +59,7 @@ const DRE = () => {
         </div>
 
         {/* Modules Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {dreModules.map((module) => {
             const IconComponent = module.icon;
             return (

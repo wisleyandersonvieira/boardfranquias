@@ -18,6 +18,7 @@ import Products from "./pages/Products";
 import DRE from "./pages/DRE";
 import DRECompetencia from "./pages/DRECompetencia";
 import DRECaixa from "./pages/DRECaixa";
+import DREConfiavel from "./pages/DREConfiavel";
 import Reports from "./pages/Reports";
 import StockModule from "./pages/StockModule";
 import StockControl from "./pages/StockControl";
@@ -71,6 +72,7 @@ function App() {
               <Route path="/dre" element={<DRE />} />
               <Route path="/dre/competencia" element={<DRECompetencia />} />
               <Route path="/dre/caixa" element={<DRECaixa />} />
+              <Route path="/dre/confiavel" element={<DREConfiavel />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/stock" element={<StockModule />} />
               <Route path="/stock/:storeId" element={<StockControl />} />
