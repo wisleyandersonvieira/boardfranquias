@@ -85,6 +85,8 @@ export interface DREOriginRecord {
   description?: string | null;
   categoryLabel?: string | null;
   paymentStatus?: string | null;
+  supplierName?: string | null;
+  friendlyOrigin?: string | null;
   storeScopedKey: string;
   monthKey: string;
   metadata?: Record<string, unknown>;

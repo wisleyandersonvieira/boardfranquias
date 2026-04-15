@@ -123,6 +123,86 @@ export function formatDateTime(value: Date | string): string {
   }).format(date);
 }
 
+export function formatShortDate(value?: string | null): string {
+  if (!value) {
+    return "-";
+  }
+
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (!match) {
+    return value;
+  }
+
+  const [, year, month, day] = match;
+  return `${day}/${month}/${year.slice(-2)}`;
+}
+
+export function getFriendlyOriginLabel(origin?: string | null): string {
+  switch (origin) {
+    case "accounts_payable":
+      return "Contas a Pagar";
+    case "accounts_receivable":
+      return "Contas a Receber";
+    case "cash_control":
+    case "cash_transactions":
+      return "Controle de Caixa";
+    case "partner_transactions":
+      return "Aportes e Retiradas";
+    case "stock_control":
+      return "Controle de Estoque";
+    default:
+      return origin || "-";
+  }
+}
+
+export function getFriendlyStatus(status?: string | null): { label: string; tone: "success" | "warning" | "muted" } {
+  const normalized = (status || "").toLowerCase();
+
+  if (["paid", "pago", "received", "recebido", "completed", "quitado"].includes(normalized)) {
+    return { label: "Pago", tone: "success" };
+  }
+
+  if (["pending", "pendente", "open", "aberto", "overdue", "vencido"].includes(normalized)) {
+    return { label: "Pendente", tone: "warning" };
+  }
+
+  return { label: status || "-", tone: "muted" };
+}
+
+export function buildSmartDocumentLabel(documentNumber?: string | null, description?: string | null): string {
+  const document = String(documentNumber || "").trim();
+  const desc = String(description || "").trim();
+
+  if (!document && !desc) {
+    return "-";
+  }
+
+  if (!document) {
+    return desc;
+  }
+
+  if (!desc) {
+    return document;
+  }
+
+  const normalizedDocument = document.toLowerCase();
+  const normalizedDescription = desc.toLowerCase();
+
+  if (normalizedDescription === normalizedDocument) {
+    return desc;
+  }
+
+  if (normalizedDescription.includes(normalizedDocument)) {
+    return desc;
+  }
+
+  if (normalizedDocument.includes(normalizedDescription)) {
+    return document;
+  }
+
+  return `${document} - ${desc}`;
+}
+
 export function formatPeriodLabel(year: number, months: number[]): string {
   const normalized = normalizeMonths(months);
   if (normalized.length === 0) {
