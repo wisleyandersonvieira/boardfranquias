@@ -640,7 +640,7 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
   const { rows: partnerRows, pages: partnerPages, pageSize: partnerPageSize } = await fetchAllPages<any>((from, to) =>
     supabase
       .from("partner_transactions")
-      .select("id, store_id, payment_date, competence_date, amount, transaction_type, description, stores(name)")
+      .select("id, store_id, payment_date, competence_date, amount, transaction_type, notes, stores(name)")
       .in("store_id", filters.storeIds)
       .range(from, to),
   );
@@ -696,7 +696,7 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
       dateCriterion: filters.regime === "cash" ? "partner_payment" : "partner_competence",
       competenceDate: row.competence_date,
       paymentDate: row.payment_date,
-      description: row.description || row.transaction_type,
+      description: row.notes || row.transaction_type,
       storeScopedKey: formatStoreScopedKey(row.store_id, monthKeyFromDate(dateField)),
       monthKey: monthKeyFromDate(dateField),
     };
