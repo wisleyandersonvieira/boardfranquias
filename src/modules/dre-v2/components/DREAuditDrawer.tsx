@@ -197,9 +197,9 @@ async function exportDetailsPdf(entry?: DREAuditEntry): Promise<void> {
     body: rows.map((row) => [row.data, row.loja, row.documento, row.fornecedor, row.produto, row.status, row.valor]),
     theme: "grid",
     styles: {
-      fontSize: 8.5,
+      fontSize: 8,
       textColor: [30, 41, 59],
-      cellPadding: { top: 6, right: 6, bottom: 6, left: 6 },
+      cellPadding: { top: 5, right: 5, bottom: 5, left: 5 },
       lineColor: border,
       lineWidth: 0.6,
       valign: "middle",
@@ -213,13 +213,13 @@ async function exportDetailsPdf(entry?: DREAuditEntry): Promise<void> {
       lineColor: [203, 213, 225],
     },
     columnStyles: {
-      0: { cellWidth: 58, halign: "center" },
-      1: { cellWidth: 110 },
-      2: { cellWidth: 240 },
-      3: { cellWidth: 155 },
-      4: { cellWidth: 150 },
-      5: { cellWidth: 72, halign: "center" },
-      6: { cellWidth: 96, halign: "right", fontStyle: "bold" },
+      0: { cellWidth: 52, halign: "center" },
+      1: { cellWidth: 82 },
+      2: { cellWidth: 184 },
+      3: { cellWidth: 138 },
+      4: { cellWidth: 132 },
+      5: { cellWidth: 58, halign: "center" },
+      6: { cellWidth: 76, halign: "right", fontStyle: "bold" },
     },
     didDrawPage: (hookData) => {
       drawHeader(hookData.pageNumber);
