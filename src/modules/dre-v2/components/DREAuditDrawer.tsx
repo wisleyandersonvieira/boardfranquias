@@ -193,8 +193,8 @@ async function exportDetailsPdf(entry?: DREAuditEntry): Promise<void> {
   autoTable(pdf, {
     startY: headerY + 114,
     margin: { left: marginX, right: marginX, top: 24, bottom: 30 },
-    head: [["Data", "Loja", "Documento", "Fornecedor", "Origem", "Produto", "Status", "Valor"]],
-    body: rows.map((row) => [row.data, row.loja, row.documento, row.fornecedor, row.origem, row.produto, row.status, row.valor]),
+    head: [["Data", "Loja", "Documento", "Fornecedor", "Produto", "Status", "Valor"]],
+    body: rows.map((row) => [row.data, row.loja, row.documento, row.fornecedor, row.produto, row.status, row.valor]),
     theme: "grid",
     styles: {
       fontSize: 8.5,
@@ -214,13 +214,12 @@ async function exportDetailsPdf(entry?: DREAuditEntry): Promise<void> {
     },
     columnStyles: {
       0: { cellWidth: 58, halign: "center" },
-      1: { cellWidth: 94 },
-      2: { cellWidth: 180 },
-      3: { cellWidth: 130 },
-      4: { cellWidth: 104 },
-      5: { cellWidth: 120 },
-      6: { cellWidth: 68, halign: "center" },
-      7: { cellWidth: 92, halign: "right", fontStyle: "bold" },
+      1: { cellWidth: 110 },
+      2: { cellWidth: 240 },
+      3: { cellWidth: 155 },
+      4: { cellWidth: 150 },
+      5: { cellWidth: 72, halign: "center" },
+      6: { cellWidth: 96, halign: "right", fontStyle: "bold" },
     },
     didDrawPage: (hookData) => {
       drawHeader(hookData.pageNumber);
