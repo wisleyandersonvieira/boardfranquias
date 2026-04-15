@@ -21,7 +21,7 @@ export function DREResultsGrid({ result, mode, showPercentages, onInspectLine }:
       <CardHeader>
         <CardTitle>DRE {mode === "synthetic" ? "Sintetico" : "Analitico"}</CardTitle>
         <CardDescription>
-          Clique em qualquer linha para abrir a conferencia detalhada do total.
+          Clique em grupos e linhas analíticas para abrir a conferência detalhada. Linhas de soma exibem apenas o total calculado.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -50,13 +50,19 @@ export function DREResultsGrid({ result, mode, showPercentages, onInspectLine }:
                     className={line.item.itemType === "sum_line" || line.item.itemType === "group" ? "bg-muted/30" : ""}
                   >
                     <TableCell className="sticky left-0 z-10 bg-background">
-                      <Button
-                        variant="ghost"
-                        className="h-auto w-full justify-start px-0 text-left"
-                        onClick={() => onInspectLine(line.item.id)}
-                      >
-                        <span style={{ paddingLeft: `${line.item.level * 18}px` }}>{line.item.name}</span>
-                      </Button>
+                      {line.item.itemType === "sum_line" ? (
+                        <div className="px-0" style={{ paddingLeft: `${line.item.level * 18}px` }}>
+                          {line.item.name}
+                        </div>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          className="h-auto w-full justify-start px-0 text-left"
+                          onClick={() => onInspectLine(line.item.id)}
+                        >
+                          <span style={{ paddingLeft: `${line.item.level * 18}px` }}>{line.item.name}</span>
+                        </Button>
+                      )}
                     </TableCell>
                     {result.columns.map((column) => {
                       const value = line.valuesByColumn[column.id] || 0;

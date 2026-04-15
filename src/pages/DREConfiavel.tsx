@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Download, FileSpreadsheet, Filter, Loader2, RefreshCcw } from "lucide-react";
 
@@ -14,7 +14,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useDREPermissions } from "@/hooks/useDREPermissions";
 import { useUserMatrix } from "@/hooks/useUserMatrix";
 import { DREAuditDrawer } from "@/modules/dre-v2/components/DREAuditDrawer";
-import { DREDiagnosticsCard } from "@/modules/dre-v2/components/DREDiagnosticsCard";
 import { DREResultsGrid } from "@/modules/dre-v2/components/DREResultsGrid";
 import { apurarDRE } from "@/modules/dre-v2/services/dreApuracaoService";
 import {
@@ -27,7 +26,7 @@ import {
   exportDrePdf,
 } from "@/modules/dre-v2/services/dreExportService";
 import type { DREApuracaoResult, DRERegime, DREStoreOption, DREViewMode } from "@/modules/dre-v2/types";
-import { DRE_MONTHS, formatCurrency, formatPercent } from "@/modules/dre-v2/utils";
+import { DRE_MONTHS } from "@/modules/dre-v2/utils";
 import { supabase } from "@/integrations/supabase/client";
 
 export default function DREConfiavel() {
@@ -95,7 +94,6 @@ export default function DREConfiavel() {
     loadBaseData();
   }, [matrixId, toast]);
 
-  const summaryCards = useMemo(() => result?.summaryCards || [], [result]);
   const selectedAuditEntry = selectedLineId && result ? result.auditByLineId[selectedLineId] : undefined;
 
   async function handleRun() {
@@ -347,28 +345,9 @@ export default function DREConfiavel() {
           </CardContent>
         </Card>
 
-        {summaryCards.length > 0 ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {summaryCards.map((card) => (
-              <Card key={card.id} className="border-slate-200 bg-white/90">
-                <CardHeader className="pb-2">
-                  <CardDescription>{card.label}</CardDescription>
-                  <CardTitle className="text-2xl">{formatCurrency(card.value)}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-sm text-muted-foreground">
-                    {card.percent !== undefined ? `Participação: ${formatPercent(card.percent)}` : "Sem base percentual"}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : null}
-
         {result ? (
-          <div className="grid gap-6 xl:grid-cols-[1.65fr_1fr]">
+          <div className="grid gap-6">
             <DREResultsGrid result={result} mode={mode} showPercentages={showPercentages} onInspectLine={setSelectedLineId} />
-            <DREDiagnosticsCard result={result} />
           </div>
         ) : (
           <Card>

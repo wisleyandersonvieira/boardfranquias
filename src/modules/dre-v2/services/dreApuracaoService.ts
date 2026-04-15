@@ -5,14 +5,12 @@ import type {
   DREFilters,
   DRELineResult,
   DREOriginRecord,
-  DRESummaryCard,
   DREValidationResult,
 } from "@/modules/dre-v2/types";
 import { fetchStructureDefinition } from "@/modules/dre-v2/services/dreStructureAuditService";
 import { fetchAllPages, supabase } from "@/modules/dre-v2/services/paginatedSupabase";
 import {
   buildColumnId,
-  calculatePercent,
   DRE_MONTHS,
   getMonthYearFromDate,
   monthKeyFromDate,
@@ -75,40 +73,6 @@ function buildDiagnosticCounters(records: DREOriginRecord[], keyBuilder: (record
 
 function getLineRecordIds(line: DRELineResult): string[] {
   return [...new Set(line.auditRecordIds)];
-}
-
-function inferSummaryCards(result: Pick<DREApuracaoResult, "lineResults">): DRESummaryCard[] {
-  const findLine = (...patterns: string[]) =>
-    result.lineResults.find((line) =>
-      patterns.some((pattern) => line.item.name.toLowerCase().includes(pattern)),
-    );
-
-  const faturamento = findLine("faturamento", "receita bruta", "receita total")?.total || 0;
-  const cmv = findLine("cmv", "custo")?.total || 0;
-  const lucroBruto = findLine("lucro bruto")?.total || faturamento + cmv;
-  const despesasOperacionais =
-    findLine("despesas operacionais", "despesa operacional", "despesas fixas")?.total || 0;
-  const ebitda = findLine("ebitda")?.total || lucroBruto + despesasOperacionais;
-  const lucroLiquido = findLine("lucro líquido", "resultado")?.total || ebitda;
-
-  return [
-    { id: "faturamento", label: "Faturamento", value: faturamento, percent: 1 },
-    { id: "cmv", label: "CMV", value: cmv, percent: calculatePercent(cmv, faturamento) },
-    { id: "lucro-bruto", label: "Lucro Bruto", value: lucroBruto, percent: calculatePercent(lucroBruto, faturamento) },
-    {
-      id: "despesas-operacionais",
-      label: "Despesas Operacionais",
-      value: despesasOperacionais,
-      percent: calculatePercent(despesasOperacionais, faturamento),
-    },
-    { id: "ebitda", label: "EBITDA", value: ebitda, percent: calculatePercent(ebitda, faturamento) },
-    {
-      id: "lucro-liquido",
-      label: "Lucro Líquido",
-      value: lucroLiquido,
-      percent: calculatePercent(lucroLiquido, faturamento),
-    },
-  ];
 }
 
 function buildColumns(filters: DREFilters, storeNameMap: Record<string, string>) {
@@ -830,20 +794,30 @@ function buildLineResults(
     }
 
     if (item.itemType === "sum_line") {
-      const referencedIds = item.sumItems.length > 0 ? item.sumItems : previousLineIds;
-      contributingRecords = referencedIds.flatMap((lineId) => {
+      const candidateIds = item.sumItems.length > 0 ? item.sumItems : previousLineIds;
+      const referencedGroupIds = candidateIds.filter((lineId) => lineMap.get(lineId)?.item.itemType === "group");
+      contributingRecords = [];
+
+      referencedGroupIds.forEach((lineId) => {
         const referenceLine = lineMap.get(lineId);
-        return referenceLine ? referenceLine.auditRecordIds.map((recordId) => records.find((record) => record.id === recordId)).filter(Boolean) as DREOriginRecord[] : [];
+        if (!referenceLine) {
+          return;
+        }
+
+        columns.forEach((column) => {
+          valuesByColumn[column.id] = (valuesByColumn[column.id] || 0) + (referenceLine.valuesByColumn[column.id] || 0);
+        });
       });
     }
-
-    contributingRecords.forEach((record) => addRecordToColumn(valuesByColumn, record, filters));
+    else {
+      contributingRecords.forEach((record) => addRecordToColumn(valuesByColumn, record, filters));
+    }
 
     const total = Object.values(valuesByColumn).reduce((sum, value) => sum + value, 0);
     const line: DRELineResult = {
       item,
       isExpandable: item.itemType !== "sum_line",
-      auditRecordIds: [...new Set(contributingRecords.map((record) => record.id))],
+      auditRecordIds: item.itemType === "sum_line" ? [] : [...new Set(contributingRecords.map((record) => record.id))],
       valuesByColumn,
       total,
     };
@@ -856,7 +830,7 @@ function buildLineResults(
       id: item.id,
       lineId: item.id,
       lineName: item.name,
-      records: contributingRecords,
+      records: item.itemType === "sum_line" ? [] : contributingRecords,
       total,
       filters,
     };
@@ -931,7 +905,6 @@ export async function apurarDRE(filters: DREFilters): Promise<DREApuracaoResult>
   });
   const enrichedColumns = buildColumns(normalizedFilters, storeNameMap);
   const { lineResults, auditByLineId } = buildLineResults(normalizedFilters, structure, records, enrichedColumns);
-  const summaryCards = inferSummaryCards({ lineResults });
   const validations = buildValidations({
     lineResults,
     columns: enrichedColumns,
@@ -950,7 +923,7 @@ export async function apurarDRE(filters: DREFilters): Promise<DREApuracaoResult>
       synthetic: lineResults.filter((line) => line.item.itemType !== "subgroup").map((line) => line.item.id),
       analytic: lineResults.map((line) => line.item.id),
     },
-    summaryCards,
+    summaryCards: [],
     diagnostics: {
       originCounters: buildDiagnosticCounters(records, (record) => record.origin),
       storeCounters: buildDiagnosticCounters(records, (record) => record.storeName || record.storeId),
