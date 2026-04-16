@@ -1,5 +1,7 @@
 import type {
+  DREAccountOption,
   DREApuracaoResult,
+  DREFinancialAccountType,
   DRELineResult,
   DREOriginRecord,
   DREStructureDefinition,
@@ -60,6 +62,35 @@ export function getMonthYearFromDate(date: string): { year: number; month: numbe
 
 export function buildColumnId(year: number, month: number, storeId?: string): string {
   return storeId ? `${year}-${String(month).padStart(2, "0")}-${storeId}` : `${year}-${String(month).padStart(2, "0")}`;
+}
+
+export function buildAccountFilterKey(type: DREFinancialAccountType, accountId: string): string {
+  return `${type}:${accountId}`;
+}
+
+export function getAccountTypeLabel(type: DREFinancialAccountType): string {
+  switch (type) {
+    case "current":
+      return "Conta Corrente";
+    case "cash":
+      return "Dinheiro";
+    case "card":
+      return "Cartao";
+    case "delivery":
+      return "Delivery";
+    default:
+      return type;
+  }
+}
+
+export function buildAccountOption(type: DREFinancialAccountType, accountId: string, name: string): DREAccountOption {
+  return {
+    id: accountId,
+    type,
+    name,
+    key: buildAccountFilterKey(type, accountId),
+    label: `${getAccountTypeLabel(type)} - ${name}`,
+  };
 }
 
 export function sumValues(records: DREOriginRecord[]): number {

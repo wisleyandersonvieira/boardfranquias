@@ -1,10 +1,19 @@
 export type DRERegime = "competence" | "cash";
 export type DREViewMode = "synthetic" | "analytic";
 export type DREValueDisplayMode = "value" | "value_percent" | "percent";
+export type DREFinancialAccountType = "current" | "cash" | "card" | "delivery";
 
 export interface DREStoreOption {
   id: string;
   name: string;
+}
+
+export interface DREAccountOption {
+  id: string;
+  type: DREFinancialAccountType;
+  name: string;
+  label: string;
+  key: string;
 }
 
 export interface DREFilters {
@@ -13,6 +22,7 @@ export interface DREFilters {
   year: number;
   months: number[];
   storeIds: string[];
+  accountFilters?: DREAccountOption[];
   groupByStore: boolean;
   competenceStart?: string;
   competenceEnd?: string;

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, ChevronDown, Download, FileSpreadsheet, Filter, Loader2, Printer, RefreshCcw } from "lucide-react";
+import { ArrowLeft, ChevronDown, Download, Filter, Loader2, Printer, RefreshCcw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +23,7 @@ import { useDREPermissions } from "@/hooks/useDREPermissions";
 import { useUserMatrix } from "@/hooks/useUserMatrix";
 import { DREAuditDrawer } from "@/modules/dre-v2/components/DREAuditDrawer";
 import { DREResultsGrid } from "@/modules/dre-v2/components/DREResultsGrid";
+import { fetchAccountsForStores } from "@/modules/dre-v2/services/dreAccountService";
 import { apurarDRE } from "@/modules/dre-v2/services/dreApuracaoService";
 import {
   fetchAccessibleStores,
@@ -33,7 +34,7 @@ import {
   exportDreExcel,
   exportDrePdf,
 } from "@/modules/dre-v2/services/dreExportService";
-import type { DREApuracaoResult, DRERegime, DREStoreOption, DREValueDisplayMode, DREViewMode } from "@/modules/dre-v2/types";
+import type { DREAccountOption, DREApuracaoResult, DRERegime, DREStoreOption, DREValueDisplayMode, DREViewMode } from "@/modules/dre-v2/types";
 import { DRE_MONTHS, formatDateTime, formatPeriodLabel } from "@/modules/dre-v2/utils";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -55,6 +56,9 @@ export default function DREConfiavel() {
   const [year, setYear] = useState(String(new Date().getFullYear()));
   const [months, setMonths] = useState<number[]>([new Date().getMonth() + 1]);
   const [storeIds, setStoreIds] = useState<string[]>([]);
+  const [accounts, setAccounts] = useState<DREAccountOption[]>([]);
+  const [selectedAccountKeys, setSelectedAccountKeys] = useState<string[]>([]);
+  const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [groupByStore, setGroupByStore] = useState(false);
   const [mode, setMode] = useState<DREViewMode>("synthetic");
   const [valueDisplayMode, setValueDisplayMode] = useState<DREValueDisplayMode>("value_percent");
@@ -116,6 +120,51 @@ export default function DREConfiavel() {
     () => stores.filter((store) => storeIds.includes(store.id)).map((store) => store.name),
     [storeIds, stores],
   );
+  const selectedAccountOptions = useMemo(
+    () => accounts.filter((account) => selectedAccountKeys.includes(account.key)),
+    [accounts, selectedAccountKeys],
+  );
+  const resultStoreNames = useMemo(() => {
+    if (!result) {
+      return selectedStoreNames;
+    }
+
+    return stores
+      .filter((store) => result.filters.storeIds.includes(store.id))
+      .map((store) => store.name);
+  }, [result, selectedStoreNames, stores]);
+  const resultAccountLabels = useMemo(
+    () => result?.filters.accountFilters?.map((account) => account.label) || [],
+    [result],
+  );
+
+  useEffect(() => {
+    async function loadAccounts() {
+      const resolvedStoreIds = storeIds.length > 0 ? storeIds : stores.map((store) => store.id);
+      if (resolvedStoreIds.length === 0) {
+        setAccounts([]);
+        setSelectedAccountKeys([]);
+        return;
+      }
+
+      setLoadingAccounts(true);
+      try {
+        const data = await fetchAccountsForStores(resolvedStoreIds);
+        setAccounts(data);
+        setSelectedAccountKeys((current) => current.filter((key) => data.some((account) => account.key === key)));
+      } catch (error: any) {
+        toast({
+          title: "Erro ao carregar contas",
+          description: error.message,
+          variant: "destructive",
+        });
+      } finally {
+        setLoadingAccounts(false);
+      }
+    }
+
+    loadAccounts();
+  }, [storeIds, stores, toast]);
 
   async function handleRun() {
     if (!structureId) {
@@ -136,6 +185,7 @@ export default function DREConfiavel() {
         year: Number(year),
         months,
         storeIds: resolvedStoreIds,
+        accountFilters: selectedAccountOptions,
         groupByStore,
         competenceStart: competenceStart || undefined,
         competenceEnd: competenceEnd || undefined,
@@ -167,9 +217,16 @@ export default function DREConfiavel() {
     setStoreIds((current) => (checked ? [...new Set([...current, storeId])] : current.filter((value) => value !== storeId)));
   }
 
+  function toggleAccount(accountKey: string, checked: boolean) {
+    setSelectedAccountKeys((current) =>
+      checked ? [...new Set([...current, accountKey])] : current.filter((value) => value !== accountKey),
+    );
+  }
+
   function clearFilters() {
     setMonths([new Date().getMonth() + 1]);
     setStoreIds(stores.map((store) => store.id));
+    setSelectedAccountKeys([]);
     setGroupByStore(false);
     setRegime("competence");
     setValueDisplayMode("value_percent");
@@ -188,9 +245,9 @@ export default function DREConfiavel() {
       reportTitle: "DRE – Demonstrativo de Resultados",
       generatedAt: new Date(),
       generatedBy: currentUserName || null,
-      selectedStoreNames,
+      selectedStoreNames: resultStoreNames,
       showLogo: true,
-      groupModeLabel: groupByStore ? "Agrupado por loja" : "Consolidado",
+      groupModeLabel: result.filters.groupByStore ? "Agrupado por loja" : "Consolidado",
       valueDisplayMode,
       hideZeroLines,
     });
@@ -326,7 +383,7 @@ export default function DREConfiavel() {
               </div>
             </div>
 
-            <div className="grid gap-6 lg:grid-cols-2">
+            <div className="grid gap-6 lg:grid-cols-3">
               <div className="space-y-3">
                 <Label>Meses</Label>
                 <div className="grid grid-cols-3 gap-3 md:grid-cols-4">
@@ -354,6 +411,32 @@ export default function DREConfiavel() {
                       {store.name}
                     </label>
                   ))}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <Label>Contas (opcional)</Label>
+                <div className="max-h-48 space-y-2 overflow-auto rounded-lg border p-3">
+                  {loadingAccounts ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Carregando contas das lojas selecionadas...
+                    </div>
+                  ) : accounts.length > 0 ? (
+                    accounts.map((account) => (
+                      <label key={account.key} className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={selectedAccountKeys.includes(account.key)}
+                          onCheckedChange={(checked) => toggleAccount(account.key, checked === true)}
+                        />
+                        {account.label}
+                      </label>
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Nenhuma conta encontrada para as lojas consideradas no filtro.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -422,8 +505,9 @@ export default function DREConfiavel() {
                   <div className="grid gap-2 text-sm text-slate-600 md:grid-cols-2 xl:min-w-[520px]">
                     <div><span className="font-semibold text-slate-800">Estrutura:</span> {result.structure.name}</div>
                     <div><span className="font-semibold text-slate-800">Período:</span> {formatPeriodLabel(result.filters.year, result.filters.months)}</div>
-                    <div><span className="font-semibold text-slate-800">Lojas:</span> {selectedStoreNames.join(", ") || "Todas"}</div>
-                    <div><span className="font-semibold text-slate-800">Agrupamento:</span> {groupByStore ? "Agrupado por loja" : "Consolidado"}</div>
+                    <div><span className="font-semibold text-slate-800">Lojas:</span> {resultStoreNames.join(", ") || "Todas"}</div>
+                    <div><span className="font-semibold text-slate-800">Agrupamento:</span> {result.filters.groupByStore ? "Agrupado por loja" : "Consolidado"}</div>
+                    <div><span className="font-semibold text-slate-800">Contas:</span> {resultAccountLabels.join(", ") || "Todas"}</div>
                     <div><span className="font-semibold text-slate-800">Exibição:</span> {valueDisplayMode === "value" ? "Apenas valor" : valueDisplayMode === "percent" ? "Apenas %" : "Valor e %"}</div>
                     <div><span className="font-semibold text-slate-800">Gerado em:</span> {formatDateTime(new Date())}</div>
                   </div>
