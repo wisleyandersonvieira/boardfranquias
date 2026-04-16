@@ -140,8 +140,7 @@ export default function DREConfiavel() {
 
   useEffect(() => {
     async function loadAccounts() {
-      const resolvedStoreIds = storeIds.length > 0 ? storeIds : stores.map((store) => store.id);
-      if (resolvedStoreIds.length === 0) {
+      if (storeIds.length === 0) {
         setAccounts([]);
         setSelectedAccountKeys([]);
         return;
@@ -149,7 +148,7 @@ export default function DREConfiavel() {
 
       setLoadingAccounts(true);
       try {
-        const data = await fetchAccountsForStores(resolvedStoreIds);
+        const data = await fetchAccountsForStores(storeIds);
         setAccounts(data);
         setSelectedAccountKeys((current) => current.filter((key) => data.some((account) => account.key === key)));
       } catch (error: any) {
@@ -176,15 +175,23 @@ export default function DREConfiavel() {
       return;
     }
 
+    if (storeIds.length === 0) {
+      toast({
+        title: "Lojas obrigatorias",
+        description: "Selecione ao menos uma loja para continuar.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoadingResult(true);
     try {
-      const resolvedStoreIds = storeIds.length > 0 ? storeIds : stores.map((store) => store.id);
       const apuracao = await apurarDRE({
         structureId,
         regime,
         year: Number(year),
         months,
-        storeIds: resolvedStoreIds,
+        storeIds,
         accountFilters: selectedAccountOptions,
         groupByStore,
         competenceStart: competenceStart || undefined,
@@ -193,9 +200,6 @@ export default function DREConfiavel() {
         paymentEnd: paymentEnd || undefined,
       });
       setResult(apuracao);
-      if (storeIds.length === 0) {
-        setStoreIds(resolvedStoreIds);
-      }
     } catch (error: any) {
       toast({
         title: "Erro ao apurar o DRE",
@@ -217,10 +221,26 @@ export default function DREConfiavel() {
     setStoreIds((current) => (checked ? [...new Set([...current, storeId])] : current.filter((value) => value !== storeId)));
   }
 
+  function selectAllStores() {
+    setStoreIds(stores.map((store) => store.id));
+  }
+
+  function clearAllStores() {
+    setStoreIds([]);
+  }
+
   function toggleAccount(accountKey: string, checked: boolean) {
     setSelectedAccountKeys((current) =>
       checked ? [...new Set([...current, accountKey])] : current.filter((value) => value !== accountKey),
     );
+  }
+
+  function selectAllAccounts() {
+    setSelectedAccountKeys(accounts.map((account) => account.key));
+  }
+
+  function clearAllAccounts() {
+    setSelectedAccountKeys([]);
   }
 
   function clearFilters() {
@@ -400,7 +420,17 @@ export default function DREConfiavel() {
               </div>
 
               <div className="space-y-3">
-                <Label>Lojas</Label>
+                <div className="flex items-center justify-between gap-3">
+                  <Label>Lojas</Label>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={selectAllStores}>
+                      Marcar todas
+                    </Button>
+                    <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={clearAllStores}>
+                      Desmarcar todas
+                    </Button>
+                  </div>
+                </div>
                 <div className="max-h-48 space-y-2 overflow-auto rounded-lg border p-3">
                   {stores.map((store) => (
                     <label key={store.id} className="flex items-center gap-2 text-sm">
@@ -415,7 +445,31 @@ export default function DREConfiavel() {
               </div>
 
               <div className="space-y-3">
-                <Label>Contas (opcional)</Label>
+                <div className="flex items-center justify-between gap-3">
+                  <Label>Contas (opcional)</Label>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={selectAllAccounts}
+                      disabled={loadingAccounts || accounts.length === 0}
+                    >
+                      Marcar todas
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={clearAllAccounts}
+                      disabled={loadingAccounts || accounts.length === 0}
+                    >
+                      Desmarcar todas
+                    </Button>
+                  </div>
+                </div>
                 <div className="max-h-48 space-y-2 overflow-auto rounded-lg border p-3">
                   {loadingAccounts ? (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">

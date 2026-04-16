@@ -416,6 +416,14 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
       (item: any) => item.product_id === parameterProducts.acrescimo_pagar || item.product_id === parameterProducts.desconto_pagar,
     );
     const baseAmount = normalItems.reduce((sum: number, item: any) => sum + Number(item.total_price || 0), 0);
+    const allPayments = (account.accounts_payable_installments || []).flatMap(
+      (installment: any) => payablePaymentsByInstallment[installment.id] || [],
+    );
+    const matchedPayments = selectedAccountKeys.size > 0
+      ? allPayments.filter((payment: any) =>
+          matchesSelectedFinancialAccount(selectedAccountKeys, payment.payment_account_id, payment.payment_account_type),
+        )
+      : allPayments;
 
     const pushItemRecord = (
       item: any,
@@ -471,9 +479,24 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
     };
 
     if (filters.regime === "competence" && isDateInsideFilters(account.data_competencia, filters, "competence")) {
-      normalItems.forEach((item: any) => {
-        pushItemRecord(item, Number(item.total_price || 0), account.data_competencia, "competence", "competence");
-      });
+      if (selectedAccountKeys.size > 0) {
+        const matchedAmount = matchedPayments.reduce((sum: number, payment: any) => sum + Number(payment.amount_paid || 0), 0);
+        const proportion = baseAmount > 0 ? Math.min(matchedAmount / baseAmount, 1) : matchedPayments.length > 0 ? 1 : 0;
+
+        normalItems.forEach((item: any) => {
+          pushItemRecord(
+            item,
+            Number(item.total_price || 0) * proportion,
+            account.data_competencia,
+            "competence",
+            "competence-account-filter",
+          );
+        });
+      } else {
+        normalItems.forEach((item: any) => {
+          pushItemRecord(item, Number(item.total_price || 0), account.data_competencia, "competence", "competence");
+        });
+      }
     }
 
     const installments = account.accounts_payable_installments || [];
@@ -720,6 +743,14 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
       (item: any) => item.product_id === parameterProducts.acrescimo_receber || item.product_id === parameterProducts.desconto_receber,
     );
     const baseAmount = normalItems.reduce((sum: number, item: any) => sum + Number(item.total_price || 0), 0);
+    const allPayments = (account.accounts_receivable_installments || []).flatMap(
+      (installment: any) => receivablePaymentsByInstallment[installment.id] || [],
+    );
+    const matchedPayments = selectedAccountKeys.size > 0
+      ? allPayments.filter((payment: any) =>
+          matchesSelectedFinancialAccount(selectedAccountKeys, payment.payment_account_id, payment.payment_account_type),
+        )
+      : allPayments;
 
     const pushItemRecord = (
       item: any,
@@ -781,9 +812,24 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
     };
 
     if (filters.regime === "competence" && isDateInsideFilters(account.data_competencia, filters, "competence")) {
-      normalItems.forEach((item: any) => {
-        pushItemRecord(item, Number(item.total_price || 0), account.data_competencia, "competence", "competence");
-      });
+      if (selectedAccountKeys.size > 0) {
+        const matchedAmount = matchedPayments.reduce((sum: number, payment: any) => sum + Number(payment.amount_paid || 0), 0);
+        const proportion = baseAmount > 0 ? Math.min(matchedAmount / baseAmount, 1) : matchedPayments.length > 0 ? 1 : 0;
+
+        normalItems.forEach((item: any) => {
+          pushItemRecord(
+            item,
+            Number(item.total_price || 0) * proportion,
+            account.data_competencia,
+            "competence",
+            "competence-account-filter",
+          );
+        });
+      } else {
+        normalItems.forEach((item: any) => {
+          pushItemRecord(item, Number(item.total_price || 0), account.data_competencia, "competence", "competence");
+        });
+      }
     }
 
     const installments = account.accounts_receivable_installments || [];
