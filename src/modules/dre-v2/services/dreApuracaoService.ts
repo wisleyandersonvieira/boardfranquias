@@ -40,6 +40,10 @@ function buildSelectedAccountKeys(filters: DREFilters): Set<string> {
   return new Set((filters.accountFilters || []).map((account) => account.key));
 }
 
+function buildSelectedAccountIds(filters: DREFilters): string[] {
+  return [...new Set((filters.accountFilters || []).map((account) => account.id).filter(Boolean))];
+}
+
 function normalizeFinancialAccountType(value?: string | null): DREFinancialAccountType | null {
   switch (value) {
     case "current":
@@ -159,6 +163,8 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
   const unmappedRecords: DREOriginRecord[] = [];
   const monthKeys = buildSelectedMonthKeys(filters);
   const selectedAccountKeys = buildSelectedAccountKeys(filters);
+  const selectedAccountIds = buildSelectedAccountIds(filters);
+  const shouldLoadAllPaymentsForAccountFilter = selectedAccountKeys.size > 0 && filters.regime === "competence";
   const yearStart = `${filters.year}-01-01`;
   const yearEnd = `${filters.year}-12-31`;
 
@@ -346,12 +352,22 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
   });
 
   const { rows: payablePayments, pages: payablePaymentPages, pageSize: payablePaymentPageSize } = await fetchAllPages<any>((from, to) =>
-    supabase
-      .from("accounts_payable_payments")
-      .select("id, installment_id, account_payable_id, payment_date, amount_paid, interest_amount, discount_amount, interest_product_id, discount_product_id, payment_account_id, payment_account_type")
-      .gte("payment_date", yearStart)
-      .lte("payment_date", yearEnd)
-      .range(from, to),
+    {
+      const query = supabase
+        .from("accounts_payable_payments")
+        .select("id, installment_id, account_payable_id, payment_date, amount_paid, interest_amount, discount_amount, interest_product_id, discount_product_id, payment_account_id, payment_account_type");
+
+      if (shouldLoadAllPaymentsForAccountFilter) {
+        return query
+          .in("payment_account_id", selectedAccountIds)
+          .range(from, to);
+      }
+
+      return query
+        .gte("payment_date", yearStart)
+        .lte("payment_date", yearEnd)
+        .range(from, to);
+    },
   );
   queryStats.push({
     label: "accounts_payable_payments",
@@ -668,12 +684,22 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
   });
 
   const { rows: receivablePayments, pages: receivablePaymentPages, pageSize: receivablePaymentPageSize } = await fetchAllPages<any>((from, to) =>
-    supabase
-      .from("accounts_receivable_payments")
-      .select("id, installment_id, account_receivable_id, payment_date, amount_paid, interest_amount, discount_amount, interest_product_id, discount_product_id, payment_account_id, payment_account_type")
-      .gte("payment_date", yearStart)
-      .lte("payment_date", yearEnd)
-      .range(from, to),
+    {
+      const query = supabase
+        .from("accounts_receivable_payments")
+        .select("id, installment_id, account_receivable_id, payment_date, amount_paid, interest_amount, discount_amount, interest_product_id, discount_product_id, payment_account_id, payment_account_type");
+
+      if (shouldLoadAllPaymentsForAccountFilter) {
+        return query
+          .in("payment_account_id", selectedAccountIds)
+          .range(from, to);
+      }
+
+      return query
+        .gte("payment_date", yearStart)
+        .lte("payment_date", yearEnd)
+        .range(from, to);
+    },
   );
   queryStats.push({
     label: "accounts_receivable_payments",
@@ -977,7 +1003,7 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
   const { rows: partnerRows, pages: partnerPages, pageSize: partnerPageSize } = await fetchAllPages<any>((from, to) =>
     supabase
       .from("partner_transactions")
-      .select("id, store_id, payment_date, competence_date, amount, transaction_type, notes, stores(name)")
+      .select("id, store_id, payment_date, competence_date, amount, transaction_type, notes, account_id, account_type, stores(name)")
       .in("store_id", filters.storeIds)
       .range(from, to),
   );
@@ -1006,6 +1032,10 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
     const dateField = filters.regime === "cash" ? row.payment_date : row.competence_date;
     const criterion = filters.regime === "cash" ? "payment" : "competence";
     if (!isDateInsideFilters(dateField, filters, criterion)) {
+      return;
+    }
+
+    if (!matchesSelectedFinancialAccount(selectedAccountKeys, row.account_id, row.account_type)) {
       return;
     }
 
@@ -1056,6 +1086,14 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
       .range(from, to),
   );
   queryStats.push({ label: "stock_control", pages: stockPages, records: stockRows.length, pageSize: stockPageSize });
+
+  if (selectedAccountKeys.size > 0) {
+    return {
+      records: records.filter((record) => monthKeys.includes(record.monthKey)),
+      unmappedRecords: unmappedRecords.filter((record) => monthKeys.includes(record.monthKey)),
+      queryStats,
+    };
+  }
 
   const stockLookup = new Map<string, any>();
   stockRows.forEach((row) => {
