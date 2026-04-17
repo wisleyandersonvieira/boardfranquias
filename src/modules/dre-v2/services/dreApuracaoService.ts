@@ -164,7 +164,6 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
   const monthKeys = buildSelectedMonthKeys(filters);
   const selectedAccountKeys = buildSelectedAccountKeys(filters);
   const selectedAccountIds = buildSelectedAccountIds(filters);
-  const shouldLoadAllPaymentsForAccountFilter = selectedAccountKeys.size > 0 && filters.regime === "competence";
   const yearStart = `${filters.year}-01-01`;
   const yearEnd = `${filters.year}-12-31`;
 
@@ -351,24 +350,19 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
     }
   });
 
-  const { rows: payablePayments, pages: payablePaymentPages, pageSize: payablePaymentPageSize } = await fetchAllPages<any>((from, to) =>
-    {
-      const query = supabase
-        .from("accounts_payable_payments")
-        .select("id, installment_id, account_payable_id, payment_date, amount_paid, interest_amount, discount_amount, interest_product_id, discount_product_id, payment_account_id, payment_account_type");
+  const { rows: payablePayments, pages: payablePaymentPages, pageSize: payablePaymentPageSize } = await fetchAllPages<any>((from, to) => {
+    const query = supabase
+      .from("accounts_payable_payments")
+      .select("id, installment_id, account_payable_id, payment_date, amount_paid, interest_amount, discount_amount, interest_product_id, discount_product_id, payment_account_id, payment_account_type")
+      .gte("payment_date", yearStart)
+      .lte("payment_date", yearEnd);
 
-      if (shouldLoadAllPaymentsForAccountFilter) {
-        return query
-          .in("payment_account_id", selectedAccountIds)
-          .range(from, to);
-      }
+    if (selectedAccountIds.length > 0) {
+      return query.in("payment_account_id", selectedAccountIds).range(from, to);
+    }
 
-      return query
-        .gte("payment_date", yearStart)
-        .lte("payment_date", yearEnd)
-        .range(from, to);
-    },
-  );
+    return query.range(from, to);
+  });
   queryStats.push({
     label: "accounts_payable_payments",
     pages: payablePaymentPages,
@@ -432,14 +426,6 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
       (item: any) => item.product_id === parameterProducts.acrescimo_pagar || item.product_id === parameterProducts.desconto_pagar,
     );
     const baseAmount = normalItems.reduce((sum: number, item: any) => sum + Number(item.total_price || 0), 0);
-    const allPayments = (account.accounts_payable_installments || []).flatMap(
-      (installment: any) => payablePaymentsByInstallment[installment.id] || [],
-    );
-    const matchedPayments = selectedAccountKeys.size > 0
-      ? allPayments.filter((payment: any) =>
-          matchesSelectedFinancialAccount(selectedAccountKeys, payment.payment_account_id, payment.payment_account_type),
-        )
-      : allPayments;
 
     const pushItemRecord = (
       item: any,
@@ -494,29 +480,67 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
       }
     };
 
-    if (filters.regime === "competence" && isDateInsideFilters(account.data_competencia, filters, "competence")) {
-      if (selectedAccountKeys.size > 0) {
-        const matchedAmount = matchedPayments.reduce((sum: number, payment: any) => sum + Number(payment.amount_paid || 0), 0);
-        const proportion = baseAmount > 0 ? Math.min(matchedAmount / baseAmount, 1) : matchedPayments.length > 0 ? 1 : 0;
-
-        normalItems.forEach((item: any) => {
-          pushItemRecord(
-            item,
-            Number(item.total_price || 0) * proportion,
-            account.data_competencia,
-            "competence",
-            "competence-account-filter",
-          );
-        });
-      } else {
-        normalItems.forEach((item: any) => {
-          pushItemRecord(item, Number(item.total_price || 0), account.data_competencia, "competence", "competence");
-        });
-      }
-    }
-
     const installments = account.accounts_payable_installments || [];
-    if (filters.regime === "cash") {
+
+    if (selectedAccountKeys.size > 0) {
+      // Quando filtro de contas ativo: exibe apenas pagamentos realizados na conta selecionada, usando data do pagamento
+      installments.forEach((installment: any) => {
+        const payments = payablePaymentsByInstallment[installment.id] || [];
+        const effectivePayments = payments.filter((payment: any) =>
+          matchesSelectedFinancialAccount(selectedAccountKeys, payment.payment_account_id, payment.payment_account_type),
+        );
+
+        effectivePayments.forEach((payment: any) => {
+          if (!isDateInsideFilters(payment.payment_date, filters, "payment")) {
+            return;
+          }
+
+          const paymentMetadata = payment.payment_account_id && payment.payment_account_type
+            ? { accountId: payment.payment_account_id, accountType: payment.payment_account_type }
+            : undefined;
+          const proportion = baseAmount > 0
+            ? Number(payment.amount_paid || 0) / baseAmount
+            : 1 / Math.max(effectivePayments.length, 1);
+
+          normalItems.forEach((item: any) => {
+            pushItemRecord(
+              item,
+              Number(item.total_price || 0) * proportion,
+              payment.payment_date,
+              "payment",
+              `account-filter:${installment.id}:${payment.id}`,
+              Number(item.total_price || 0) * proportion,
+              paymentMetadata,
+            );
+          });
+
+          adjustmentItems.forEach((item: any) => {
+            if (item.product_id === payment.interest_product_id && payment.interest_amount > 0) {
+              pushItemRecord(
+                item,
+                Number(payment.interest_amount || 0),
+                payment.payment_date,
+                "payment",
+                `interest:${payment.id}`,
+                Number(payment.interest_amount || 0),
+                paymentMetadata,
+              );
+            }
+            if (item.product_id === payment.discount_product_id && payment.discount_amount > 0) {
+              pushItemRecord(
+                item,
+                Number(payment.discount_amount || 0),
+                payment.payment_date,
+                "payment",
+                `discount:${payment.id}`,
+                Number(payment.discount_amount || 0),
+                paymentMetadata,
+              );
+            }
+          });
+        });
+      });
+    } else if (filters.regime === "cash") {
       if (installments.length > 0) {
         installments.forEach((installment: any) => {
           if (!isDateInsideFilters(installment.payment_date, filters, "payment")) {
@@ -525,22 +549,10 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
 
           const payments = payablePaymentsByInstallment[installment.id] || [];
           if (payments.length > 0) {
-            const effectivePayments = selectedAccountKeys.size > 0
-              ? payments.filter((payment: any) =>
-                  matchesSelectedFinancialAccount(selectedAccountKeys, payment.payment_account_id, payment.payment_account_type),
-                )
-              : payments;
-
-            effectivePayments.forEach((payment: any) => {
-              const paymentMetadata = payment.payment_account_id && payment.payment_account_type
-                ? {
-                    accountId: payment.payment_account_id,
-                    accountType: payment.payment_account_type,
-                  }
-                : undefined;
+            payments.forEach((payment: any) => {
               const proportion = baseAmount > 0
                 ? Number(payment.amount_paid || 0) / baseAmount
-                : 1 / Math.max(effectivePayments.length, 1);
+                : 1 / Math.max(payments.length, 1);
 
               normalItems.forEach((item: any) => {
                 pushItemRecord(
@@ -550,7 +562,6 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
                   "payment",
                   `cash:${installment.id}:${payment.id}`,
                   Number(item.total_price || 0) * proportion,
-                  paymentMetadata,
                 );
               });
 
@@ -563,7 +574,6 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
                     "payment",
                     `interest:${payment.id}`,
                     Number(payment.interest_amount || 0),
-                    paymentMetadata,
                   );
                 }
                 if (item.product_id === payment.discount_product_id && payment.discount_amount > 0) {
@@ -574,16 +584,11 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
                     "payment",
                     `discount:${payment.id}`,
                     Number(payment.discount_amount || 0),
-                    paymentMetadata,
                   );
                 }
               });
             });
           } else {
-            if (selectedAccountKeys.size > 0) {
-              return;
-            }
-
             const proportion = baseAmount > 0 ? Number(installment.amount || 0) / baseAmount : 1 / Math.max(installments.length, 1);
             normalItems.forEach((item: any) => {
               pushItemRecord(
@@ -607,10 +612,6 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
           }
         });
       } else if (isDateInsideFilters(account.payment_date, filters, "payment")) {
-        if (selectedAccountKeys.size > 0) {
-          return;
-        }
-
         normalItems.forEach((item: any) => {
           pushItemRecord(item, Number(item.total_price || 0), account.payment_date, "payment", "cash");
         });
@@ -619,25 +620,20 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
         });
       }
     } else {
+      // Regime de competência sem filtro de contas
+      if (isDateInsideFilters(account.data_competencia, filters, "competence")) {
+        normalItems.forEach((item: any) => {
+          pushItemRecord(item, Number(item.total_price || 0), account.data_competencia, "competence", "competence");
+        });
+      }
+
       installments.forEach((installment: any) => {
         if (!isDateInsideFilters(installment.payment_date, filters, "payment")) {
           return;
         }
         const payments = payablePaymentsByInstallment[installment.id] || [];
         if (payments.length > 0) {
-          const effectivePayments = selectedAccountKeys.size > 0
-            ? payments.filter((payment: any) =>
-                matchesSelectedFinancialAccount(selectedAccountKeys, payment.payment_account_id, payment.payment_account_type),
-              )
-            : payments;
-
-          effectivePayments.forEach((payment: any) => {
-            const paymentMetadata = payment.payment_account_id && payment.payment_account_type
-              ? {
-                  accountId: payment.payment_account_id,
-                  accountType: payment.payment_account_type,
-                }
-              : undefined;
+          payments.forEach((payment: any) => {
             adjustmentItems.forEach((item: any) => {
               if (item.product_id === payment.interest_product_id && payment.interest_amount > 0) {
                 pushItemRecord(
@@ -647,7 +643,6 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
                   "payment",
                   `interest:${payment.id}`,
                   Number(payment.interest_amount || 0),
-                  paymentMetadata,
                 );
               }
               if (item.product_id === payment.discount_product_id && payment.discount_amount > 0) {
@@ -658,16 +653,11 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
                   "payment",
                   `discount:${payment.id}`,
                   Number(payment.discount_amount || 0),
-                  paymentMetadata,
                 );
               }
             });
           });
         } else {
-          if (selectedAccountKeys.size > 0) {
-            return;
-          }
-
           const paidInstallmentsCount = Math.max(installments.filter((entry: any) => entry.payment_date).length, 1);
           adjustmentItems.forEach((item: any) => {
             pushItemRecord(
@@ -683,24 +673,19 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
     }
   });
 
-  const { rows: receivablePayments, pages: receivablePaymentPages, pageSize: receivablePaymentPageSize } = await fetchAllPages<any>((from, to) =>
-    {
-      const query = supabase
-        .from("accounts_receivable_payments")
-        .select("id, installment_id, account_receivable_id, payment_date, amount_paid, interest_amount, discount_amount, interest_product_id, discount_product_id, payment_account_id, payment_account_type");
+  const { rows: receivablePayments, pages: receivablePaymentPages, pageSize: receivablePaymentPageSize } = await fetchAllPages<any>((from, to) => {
+    const query = supabase
+      .from("accounts_receivable_payments")
+      .select("id, installment_id, account_receivable_id, payment_date, amount_paid, interest_amount, discount_amount, interest_product_id, discount_product_id, payment_account_id, payment_account_type")
+      .gte("payment_date", yearStart)
+      .lte("payment_date", yearEnd);
 
-      if (shouldLoadAllPaymentsForAccountFilter) {
-        return query
-          .in("payment_account_id", selectedAccountIds)
-          .range(from, to);
-      }
+    if (selectedAccountIds.length > 0) {
+      return query.in("payment_account_id", selectedAccountIds).range(from, to);
+    }
 
-      return query
-        .gte("payment_date", yearStart)
-        .lte("payment_date", yearEnd)
-        .range(from, to);
-    },
-  );
+    return query.range(from, to);
+  });
   queryStats.push({
     label: "accounts_receivable_payments",
     pages: receivablePaymentPages,
@@ -769,14 +754,6 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
       (item: any) => item.product_id === parameterProducts.acrescimo_receber || item.product_id === parameterProducts.desconto_receber,
     );
     const baseAmount = normalItems.reduce((sum: number, item: any) => sum + Number(item.total_price || 0), 0);
-    const allPayments = (account.accounts_receivable_installments || []).flatMap(
-      (installment: any) => receivablePaymentsByInstallment[installment.id] || [],
-    );
-    const matchedPayments = selectedAccountKeys.size > 0
-      ? allPayments.filter((payment: any) =>
-          matchesSelectedFinancialAccount(selectedAccountKeys, payment.payment_account_id, payment.payment_account_type),
-        )
-      : allPayments;
 
     const pushItemRecord = (
       item: any,
@@ -837,140 +814,40 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
       }
     };
 
-    if (filters.regime === "competence" && isDateInsideFilters(account.data_competencia, filters, "competence")) {
-      if (selectedAccountKeys.size > 0) {
-        const matchedAmount = matchedPayments.reduce((sum: number, payment: any) => sum + Number(payment.amount_paid || 0), 0);
-        const proportion = baseAmount > 0 ? Math.min(matchedAmount / baseAmount, 1) : matchedPayments.length > 0 ? 1 : 0;
-
-        normalItems.forEach((item: any) => {
-          pushItemRecord(
-            item,
-            Number(item.total_price || 0) * proportion,
-            account.data_competencia,
-            "competence",
-            "competence-account-filter",
-          );
-        });
-      } else {
-        normalItems.forEach((item: any) => {
-          pushItemRecord(item, Number(item.total_price || 0), account.data_competencia, "competence", "competence");
-        });
-      }
-    }
-
     const installments = account.accounts_receivable_installments || [];
-    if (filters.regime === "cash") {
-      if (installments.length > 0) {
-        installments.forEach((installment: any) => {
-          if (!isDateInsideFilters(installment.payment_date, filters, "payment")) {
+
+    if (selectedAccountKeys.size > 0) {
+      // Quando filtro de contas ativo: exibe apenas pagamentos realizados na conta selecionada, usando data do pagamento
+      installments.forEach((installment: any) => {
+        const payments = receivablePaymentsByInstallment[installment.id] || [];
+        const effectivePayments = payments.filter((payment: any) =>
+          matchesSelectedFinancialAccount(selectedAccountKeys, payment.payment_account_id, payment.payment_account_type),
+        );
+
+        effectivePayments.forEach((payment: any) => {
+          if (!isDateInsideFilters(payment.payment_date, filters, "payment")) {
             return;
           }
 
-          const payments = receivablePaymentsByInstallment[installment.id] || [];
-          if (payments.length > 0) {
-            const effectivePayments = selectedAccountKeys.size > 0
-              ? payments.filter((payment: any) =>
-                  matchesSelectedFinancialAccount(selectedAccountKeys, payment.payment_account_id, payment.payment_account_type),
-                )
-              : payments;
-
-            effectivePayments.forEach((payment: any) => {
-              const paymentMetadata = payment.payment_account_id && payment.payment_account_type
-                ? {
-                    accountId: payment.payment_account_id,
-                    accountType: payment.payment_account_type,
-                  }
-                : undefined;
-              const proportion = baseAmount > 0
-                ? Number(payment.amount_paid || 0) / baseAmount
-                : 1 / Math.max(effectivePayments.length, 1);
-
-              normalItems.forEach((item: any) => {
-                pushItemRecord(
-                  item,
-                  Number(item.total_price || 0) * proportion,
-                  payment.payment_date,
-                  "payment",
-                  `cash:${installment.id}:${payment.id}`,
-                  Number(item.total_price || 0) * proportion,
-                  paymentMetadata,
-                );
-              });
-
-              adjustmentItems.forEach((item: any) => {
-                if (item.product_id === payment.interest_product_id && payment.interest_amount > 0) {
-                  pushItemRecord(
-                    item,
-                    Number(payment.interest_amount || 0),
-                    payment.payment_date,
-                    "payment",
-                    `interest:${payment.id}`,
-                    Number(payment.interest_amount || 0),
-                    paymentMetadata,
-                  );
-                }
-                if (item.product_id === payment.discount_product_id && payment.discount_amount > 0) {
-                  pushItemRecord(
-                    item,
-                    Number(payment.discount_amount || 0),
-                    payment.payment_date,
-                    "payment",
-                    `discount:${payment.id}`,
-                    Number(payment.discount_amount || 0),
-                    paymentMetadata,
-                  );
-                }
-              });
-            });
-          } else {
-            if (selectedAccountKeys.size > 0) {
-              return;
-            }
-
-            const proportion = baseAmount > 0 ? Number(installment.amount || 0) / baseAmount : 1 / Math.max(installments.length, 1);
-            normalItems.forEach((item: any) => {
-              pushItemRecord(
-                item,
-                Number(item.total_price || 0) * proportion,
-                installment.payment_date,
-                "payment",
-                `cash:${installment.id}`,
-              );
-            });
-          }
-        });
-      } else if (isDateInsideFilters(account.payment_date, filters, "payment")) {
-        if (selectedAccountKeys.size > 0) {
-          return;
-        }
-
-        normalItems.forEach((item: any) => {
-          pushItemRecord(item, Number(item.total_price || 0), account.payment_date, "payment", "cash");
-        });
-        adjustmentItems.forEach((item: any) => {
-          pushItemRecord(item, Number(item.total_price || 0), account.payment_date, "payment", "cash-adjustment");
-        });
-      }
-    } else {
-      installments.forEach((installment: any) => {
-        if (!isDateInsideFilters(installment.payment_date, filters, "payment")) {
-          return;
-        }
-
-        const payments = receivablePaymentsByInstallment[installment.id] || [];
-        const effectivePayments = selectedAccountKeys.size > 0
-          ? payments.filter((payment: any) =>
-              matchesSelectedFinancialAccount(selectedAccountKeys, payment.payment_account_id, payment.payment_account_type),
-            )
-          : payments;
-
-        effectivePayments.forEach((payment: any) => {
           const paymentMetadata = payment.payment_account_id && payment.payment_account_type
-            ? {
-                accountId: payment.payment_account_id,
-                accountType: payment.payment_account_type,
-              }
+            ? { accountId: payment.payment_account_id, accountType: payment.payment_account_type }
             : undefined;
+          const proportion = baseAmount > 0
+            ? Number(payment.amount_paid || 0) / baseAmount
+            : 1 / Math.max(effectivePayments.length, 1);
+
+          normalItems.forEach((item: any) => {
+            pushItemRecord(
+              item,
+              Number(item.total_price || 0) * proportion,
+              payment.payment_date,
+              "payment",
+              `account-filter:${installment.id}:${payment.id}`,
+              Number(item.total_price || 0) * proportion,
+              paymentMetadata,
+            );
+          });
+
           adjustmentItems.forEach((item: any) => {
             if (item.product_id === payment.interest_product_id && payment.interest_amount > 0) {
               pushItemRecord(
@@ -992,6 +869,114 @@ async function buildOriginRecords(filters: DREFilters, structure: Awaited<Return
                 `discount:${payment.id}`,
                 Number(payment.discount_amount || 0),
                 paymentMetadata,
+              );
+            }
+          });
+        });
+      });
+    } else if (filters.regime === "cash") {
+      if (installments.length > 0) {
+        installments.forEach((installment: any) => {
+          if (!isDateInsideFilters(installment.payment_date, filters, "payment")) {
+            return;
+          }
+
+          const payments = receivablePaymentsByInstallment[installment.id] || [];
+          if (payments.length > 0) {
+            payments.forEach((payment: any) => {
+              const proportion = baseAmount > 0
+                ? Number(payment.amount_paid || 0) / baseAmount
+                : 1 / Math.max(payments.length, 1);
+
+              normalItems.forEach((item: any) => {
+                pushItemRecord(
+                  item,
+                  Number(item.total_price || 0) * proportion,
+                  payment.payment_date,
+                  "payment",
+                  `cash:${installment.id}:${payment.id}`,
+                  Number(item.total_price || 0) * proportion,
+                );
+              });
+
+              adjustmentItems.forEach((item: any) => {
+                if (item.product_id === payment.interest_product_id && payment.interest_amount > 0) {
+                  pushItemRecord(
+                    item,
+                    Number(payment.interest_amount || 0),
+                    payment.payment_date,
+                    "payment",
+                    `interest:${payment.id}`,
+                    Number(payment.interest_amount || 0),
+                  );
+                }
+                if (item.product_id === payment.discount_product_id && payment.discount_amount > 0) {
+                  pushItemRecord(
+                    item,
+                    Number(payment.discount_amount || 0),
+                    payment.payment_date,
+                    "payment",
+                    `discount:${payment.id}`,
+                    Number(payment.discount_amount || 0),
+                  );
+                }
+              });
+            });
+          } else {
+            const proportion = baseAmount > 0 ? Number(installment.amount || 0) / baseAmount : 1 / Math.max(installments.length, 1);
+            normalItems.forEach((item: any) => {
+              pushItemRecord(
+                item,
+                Number(item.total_price || 0) * proportion,
+                installment.payment_date,
+                "payment",
+                `cash:${installment.id}`,
+              );
+            });
+          }
+        });
+      } else if (isDateInsideFilters(account.payment_date, filters, "payment")) {
+        normalItems.forEach((item: any) => {
+          pushItemRecord(item, Number(item.total_price || 0), account.payment_date, "payment", "cash");
+        });
+        adjustmentItems.forEach((item: any) => {
+          pushItemRecord(item, Number(item.total_price || 0), account.payment_date, "payment", "cash-adjustment");
+        });
+      }
+    } else {
+      // Regime de competência sem filtro de contas
+      if (isDateInsideFilters(account.data_competencia, filters, "competence")) {
+        normalItems.forEach((item: any) => {
+          pushItemRecord(item, Number(item.total_price || 0), account.data_competencia, "competence", "competence");
+        });
+      }
+
+      installments.forEach((installment: any) => {
+        if (!isDateInsideFilters(installment.payment_date, filters, "payment")) {
+          return;
+        }
+
+        const payments = receivablePaymentsByInstallment[installment.id] || [];
+        payments.forEach((payment: any) => {
+          adjustmentItems.forEach((item: any) => {
+            if (item.product_id === payment.interest_product_id && payment.interest_amount > 0) {
+              pushItemRecord(
+                item,
+                Number(payment.interest_amount || 0),
+                payment.payment_date,
+                "payment",
+                `interest:${payment.id}`,
+                Number(payment.interest_amount || 0),
+              );
+            }
+            if (item.product_id === payment.discount_product_id && payment.discount_amount > 0) {
+              pushItemRecord(
+                item,
+                Number(payment.discount_amount || 0),
+                payment.payment_date,
+                "payment",
+                `discount:${payment.id}`,
+                Number(payment.discount_amount || 0),
               );
             }
           });
