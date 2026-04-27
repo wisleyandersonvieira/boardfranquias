@@ -43,6 +43,7 @@ import BankReconciliation from "./pages/BankReconciliation";
 import OFXManagement from "./pages/OFXManagement";
 import EmployeeReport from "./pages/EmployeeReport";
 import PurchasesReport from "./pages/PurchasesReport";
+import NfeImport from "./pages/NfeImport";
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -96,6 +97,7 @@ function App() {
               <Route path="/ofx-management" element={<OFXManagement />} />
               <Route path="/reports/employees" element={<EmployeeReport />} />
               <Route path="/reports/purchases" element={<PurchasesReport />} />
+              <Route path="/nfe-import" element={<NfeImport />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
             <Toaster />

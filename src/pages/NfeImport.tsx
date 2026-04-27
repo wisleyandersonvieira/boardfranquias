@@ -1,0 +1,545 @@
+import { useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import * as pdfjsLib from "pdfjs-dist";
+import { supabase } from "@/integrations/supabase/client";
+import { parseNfePdf, NfeCabecalho, NfeItemImportado } from "@/utils/nfeDanfeParser";
+import { useUserMatrix } from "@/hooks/useUserMatrix";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useToast } from "@/hooks/use-toast";
+import { ArrowLeft, CheckCircle2, FileText, Loader2, Plus, Save, Upload, WalletCards } from "lucide-react";
+
+type Produto = { id: string; code: string | null; name: string; unit_id?: string | null };
+type Fornecedor = { id: string; name: string; cnpj_cpf?: string | null };
+type Loja = { id: string; name: string; code?: string | null };
+type Unidade = { id: string; symbol: string; name: string };
+
+type ItemConferencia = NfeItemImportado & {
+  produto_id?: string;
+  produto_nome?: string;
+  status_vinculo: "vinculado" | "nao_vinculado" | "erro";
+  salvar_vinculo?: boolean;
+};
+
+const supabaseAny = supabase as any;
+
+export default function NfeImport() {
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { matrixId } = useUserMatrix();
+  const [file, setFile] = useState<File | null>(null);
+  const [reading, setReading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [status, setStatus] = useState("Aguardando upload do PDF.");
+  const [cabecalho, setCabecalho] = useState<NfeCabecalho | null>(null);
+  const [itens, setItens] = useState<ItemConferencia[]>([]);
+  const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [fornecedor, setFornecedor] = useState<Fornecedor | null>(null);
+  const [lojas, setLojas] = useState<Loja[]>([]);
+  const [storeId, setStoreId] = useState("");
+  const [unidades, setUnidades] = useState<Unidade[]>([]);
+  const [importacaoId, setImportacaoId] = useState<string | null>(null);
+  const [quickIndex, setQuickIndex] = useState<number | null>(null);
+  const [quickData, setQuickData] = useState({ name: "", unit_id: "", group_id: "", subgroup_id: "" });
+
+  const totalProdutos = useMemo(() => itens.reduce((sum, item) => sum + item.valor_total, 0), [itens]);
+  const vinculados = itens.filter((item) => item.status_vinculo === "vinculado").length;
+  const diferenca = (cabecalho?.valor_total_produtos || cabecalho?.valor_total_nota || 0) - totalProdutos;
+
+  const handleReadPdf = async () => {
+    if (!file) {
+      toast({ variant: "destructive", title: "Selecione um PDF", description: "Envie o arquivo da NF-e antes de ler." });
+      return;
+    }
+
+    setReading(true);
+    setStatus("Lendo páginas do PDF...");
+
+    try {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+      const buffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+      const pages: string[] = [];
+
+      for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+        const page = await pdf.getPage(pageNumber);
+        const content = await page.getTextContent();
+        pages.push(content.items.map((item: any) => item.str).join("\n"));
+      }
+
+      const parsed = parseNfePdf(pages.join("\n\n---PAGINA---\n\n"));
+      if (parsed.cabecalho.chave_acesso) {
+        const { data: existing } = await supabaseAny
+          .from("nfe_importacoes")
+          .select("id")
+          .eq("chave_acesso", parsed.cabecalho.chave_acesso)
+          .maybeSingle();
+        if (existing) {
+          setStatus("Esta NF-e já foi importada anteriormente.");
+          toast({ variant: "destructive", title: "NF-e duplicada", description: "Esta NF-e já foi importada anteriormente." });
+          return;
+        }
+      }
+
+      const [supplierFound, productsData, storesData, unitsData] = await Promise.all([
+        findSupplier(parsed.cabecalho.cnpj_fornecedor, parsed.cabecalho.fornecedor),
+        supabase.from("products").select("id, code, name, unit_id").eq("is_active", true).order("name"),
+        supabase.from("stores").select("id, name, code").order("name"),
+        supabase.from("units_of_measure").select("id, symbol, name").eq("is_active", true).order("name"),
+      ]);
+
+      setFornecedor(supplierFound);
+      setProdutos(productsData.data || []);
+      setLojas(storesData.data || []);
+      setUnidades(unitsData.data || []);
+      if (!storeId && storesData.data?.length === 1) setStoreId(storesData.data[0].id);
+
+      const correlated = await correlateItems(parsed.itens, supplierFound?.id, productsData.data || []);
+      setCabecalho(parsed.cabecalho);
+      setItens(correlated);
+      setImportacaoId(null);
+      setStatus(`NF-e lida com sucesso. ${correlated.length} itens encontrados. ${correlated.filter((i) => i.status_vinculo === "vinculado").length} vinculados automaticamente. ${correlated.filter((i) => i.status_vinculo !== "vinculado").length} aguardando correlação.`);
+    } catch (error: any) {
+      setStatus("Erro ao ler o PDF.");
+      toast({ variant: "destructive", title: "Erro ao ler NF-e", description: error.message || "Não foi possível processar o PDF." });
+    } finally {
+      setReading(false);
+    }
+  };
+
+  const handleProductChange = (index: number, productId: string) => {
+    const product = produtos.find((item) => item.id === productId);
+    setItens((current) => current.map((item, i) => i === index ? {
+      ...item,
+      produto_id: productId,
+      produto_nome: product?.name,
+      status_vinculo: "vinculado",
+      salvar_vinculo: item.produto_id === productId ? item.salvar_vinculo : true,
+    } : item));
+  };
+
+  const openQuickProduct = (index: number) => {
+    const item = itens[index];
+    const unit = unidades.find((u) => u.symbol.toUpperCase() === item.unidade.toUpperCase());
+    setQuickIndex(index);
+    setQuickData({ name: item.descricao_limpa, unit_id: unit?.id || "", group_id: "", subgroup_id: "" });
+  };
+
+  const saveQuickProduct = async () => {
+    if (quickIndex === null || !quickData.name.trim()) return;
+    if (!fornecedor?.id) {
+      toast({ variant: "destructive", title: "Fornecedor não localizado", description: "Cadastre ou selecione o fornecedor antes de criar o vínculo." });
+      return;
+    }
+    if (!matrixId) {
+      toast({ variant: "destructive", title: "Matriz não localizada", description: "Não foi possível identificar a matriz do usuário para cadastrar o produto." });
+      return;
+    }
+
+    const item = itens[quickIndex];
+    const { data: userData } = await supabase.auth.getUser();
+    const { data: nextCode } = await supabase.rpc("get_next_product_code");
+    const { data: product, error } = await supabase
+      .from("products")
+      .insert({
+        code: String(nextCode || ""),
+        name: quickData.name.trim(),
+        description: item.descricao_original_pdf,
+        unit_id: quickData.unit_id || null,
+        cost_price: item.valor_unitario,
+        product_type: "product",
+        function_type: "debit",
+        matrix_id: matrixId,
+        created_by: userData.user?.id,
+        is_active: true,
+      } as any)
+      .select("id, code, name, unit_id")
+      .single();
+
+    if (error) {
+      toast({ variant: "destructive", title: "Erro ao cadastrar produto", description: error.message });
+      return;
+    }
+
+    await supabase.from("product_supplier_codes").insert({
+      product_id: product.id,
+      supplier_id: fornecedor.id,
+      supplier_code: item.codigo_fornecedor,
+    });
+
+    setProdutos((current) => [...current, product]);
+    handleProductChange(quickIndex, product.id);
+    setQuickIndex(null);
+    toast({ title: "Produto cadastrado", description: "Produto e vínculo do fornecedor criados com sucesso." });
+  };
+
+  const validateBeforeSave = () => {
+    if (!cabecalho || itens.length === 0) return "Leia uma NF-e antes de salvar.";
+    if (!fornecedor?.id) return "Fornecedor da nota não localizado no cadastro.";
+    if (!storeId) return "Selecione a loja/empresa da importação.";
+    if (itens.some((item) => !item.produto_id)) return "Todos os itens precisam estar vinculados a um produto.";
+    if (Math.abs(diferenca) > 0.05) return "A soma dos itens diverge do total de produtos da nota.";
+    return "";
+  };
+
+  const saveImport = async () => {
+    const validation = validateBeforeSave();
+    if (validation) {
+      toast({ variant: "destructive", title: "Revise a importação", description: validation });
+      return null;
+    }
+
+    setSaving(true);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const arquivoPath = await uploadPdfIfPossible(file, storeId, cabecalho?.chave_acesso);
+      const { data: importacao, error } = await supabaseAny
+        .from("nfe_importacoes")
+        .insert({
+          store_id: storeId,
+          matrix_id: matrixId,
+          usuario_id: userData.user?.id,
+          fornecedor_id: fornecedor?.id,
+          numero_nfe: cabecalho?.numero_nfe,
+          serie: cabecalho?.serie,
+          chave_acesso: cabecalho?.chave_acesso,
+          data_emissao: toIsoDate(cabecalho?.data_emissao),
+          valor_total_nota: cabecalho?.valor_total_nota,
+          valor_total_produtos: totalProdutos,
+          vencimentos: cabecalho?.duplicatas || [],
+          arquivo_nome: file?.name,
+          arquivo_path: arquivoPath,
+          status: "conferida",
+        })
+        .select("id")
+        .single();
+      if (error) throw error;
+
+      const rows = itens.map((item) => ({
+        importacao_id: importacao.id,
+        produto_id: item.produto_id,
+        codigo_fornecedor: item.codigo_fornecedor,
+        descricao_original_pdf: item.descricao_original_pdf,
+        descricao_limpa: item.descricao_limpa,
+        unidade: item.unidade,
+        quantidade: item.quantidade,
+        valor_unitario: item.valor_unitario,
+        valor_total: item.valor_total,
+        ncm: item.ncm,
+        cst: item.cst,
+        cfop: item.cfop,
+        valor_icms: item.valor_icms,
+        valor_ipi: item.valor_ipi,
+        aliquota_icms: item.aliquota_icms,
+        aliquota_ipi: item.aliquota_ipi,
+        status_vinculo: item.status_vinculo,
+      }));
+      const { error: itemsError } = await supabaseAny.from("nfe_importacao_itens").insert(rows);
+      if (itemsError) throw itemsError;
+
+      const linksToSave = itens.filter((item) => item.salvar_vinculo && item.produto_id && fornecedor?.id);
+      for (const item of linksToSave) {
+        await supabase.from("product_supplier_codes").delete().eq("supplier_id", fornecedor!.id).eq("supplier_code", item.codigo_fornecedor);
+        await supabase.from("product_supplier_codes").insert({
+          product_id: item.produto_id,
+          supplier_id: fornecedor!.id,
+          supplier_code: item.codigo_fornecedor,
+        } as any);
+      }
+      setImportacaoId(importacao.id);
+      toast({ title: "Importação salva", description: "A NF-e e seus itens foram gravados para rastreabilidade." });
+      return importacao.id as string;
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Erro ao salvar importação", description: error.message });
+      return null;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const generateAccountsPayable = async () => {
+    const id = importacaoId || await saveImport();
+    if (!id || !cabecalho || !fornecedor) return;
+
+    const firstDue = cabecalho.duplicatas[0];
+    if (!firstDue?.vencimento) {
+      toast({ variant: "destructive", title: "Vencimento obrigatório", description: "Informe uma duplicata/vencimento na NF-e antes de gerar o Contas a Pagar." });
+      return;
+    }
+
+    setGenerating(true);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const { data: payable, error } = await supabase.from("accounts_payable").insert({
+        store_id: storeId,
+        supplier_id: fornecedor.id,
+        description: `NF-e nº ${cabecalho.numero_nfe || ""} - ${fornecedor.name}`,
+        document_number: cabecalho.numero_nfe,
+        document_type: "NF-e",
+        issue_date: toIsoDate(cabecalho.data_emissao),
+        due_date: toIsoDate(firstDue.vencimento),
+        data_competencia: competenceFromDate(cabecalho.data_emissao),
+        amount: cabecalho.valor_total_nota || totalProdutos,
+        total_amount: cabecalho.valor_total_nota || totalProdutos,
+        status: "pending",
+        created_by: userData.user?.id,
+        notes: `Importação NF-e: ${id}`,
+      } as any).select("id").single();
+      if (error) throw error;
+
+      await supabase.from("accounts_payable_items").insert(itens.map((item) => ({
+        account_payable_id: payable.id,
+        product_id: item.produto_id,
+        quantity: item.quantidade,
+        unit_price: item.valor_unitario,
+        total_price: item.valor_total,
+        store_id: storeId,
+      })) as any);
+
+      await supabaseAny.from("nfe_importacoes").update({ status: "contas_pagar_gerado", contas_pagar_id: payable.id }).eq("id", id);
+      toast({ title: "Contas a Pagar gerado", description: "O título foi criado com os itens vinculados à NF-e." });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Erro ao gerar Contas a Pagar", description: error.message });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      <header className="border-b bg-card">
+        <div className="container mx-auto px-4 py-4 flex items-center gap-4">
+          <Button onClick={() => navigate("/dashboard")} variant="outline" size="sm">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Voltar
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold text-primary">Importação de NF-e</h1>
+            <p className="text-sm text-muted-foreground">Envie o PDF da nota fiscal eletrônica para conferir os itens e vincular aos produtos cadastrados.</p>
+          </div>
+        </div>
+      </header>
+
+      <main className="container mx-auto px-4 py-8 space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><Upload className="h-5 w-5" /> Upload</CardTitle>
+            <CardDescription>Selecione o DANFE em PDF e clique em Ler NF-e.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 lg:grid-cols-[1fr_auto]">
+            <Input ref={fileInputRef} type="file" accept="application/pdf" onChange={(event) => setFile(event.target.files?.[0] || null)} />
+            <Button onClick={handleReadPdf} disabled={reading}>
+              {reading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
+              Ler NF-e
+            </Button>
+            <div className="lg:col-span-2 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">{status}</div>
+          </CardContent>
+        </Card>
+
+        {cabecalho && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Dados da Nota</CardTitle>
+              <CardDescription>Confira o cabeçalho extraído do PDF.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <Info label="Fornecedor" value={fornecedor?.name || cabecalho.fornecedor || "Não localizado"} />
+              <Info label="CNPJ" value={cabecalho.cnpj_fornecedor} />
+              <Info label="NF-e" value={cabecalho.numero_nfe} />
+              <Info label="Série" value={cabecalho.serie} />
+              <Info label="Chave de acesso" value={cabecalho.chave_acesso} className="lg:col-span-2" />
+              <Info label="Emissão" value={cabecalho.data_emissao} />
+              <Info label="Valor total" value={formatCurrency(cabecalho.valor_total_nota)} />
+              <div className="space-y-2">
+                <Label>Loja/Empresa</Label>
+                <Select value={storeId} onValueChange={setStoreId}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>{lojas.map((loja) => <SelectItem key={loja.id} value={loja.id}>{loja.code ? `${loja.code} - ` : ""}{loja.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <Info label="Vencimento" value={cabecalho.duplicatas.map((d) => `${d.parcela} ${d.vencimento} ${formatCurrency(d.valor)}`).join(" | ") || "Não encontrado"} className="lg:col-span-3" />
+            </CardContent>
+          </Card>
+        )}
+
+        {itens.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Itens da Nota</CardTitle>
+              <CardDescription>{itens.length} itens encontrados. {vinculados} vinculados automaticamente. {itens.length - vinculados} aguardando correlação.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Código Fornecedor</TableHead>
+                      <TableHead className="min-w-[280px]">Produto na NF-e</TableHead>
+                      <TableHead className="min-w-[260px]">Produto no Sistema</TableHead>
+                      <TableHead>Ações</TableHead>
+                      <TableHead>Unid.</TableHead>
+                      <TableHead className="text-right">Qtd.</TableHead>
+                      <TableHead className="text-right">Valor Unit.</TableHead>
+                      <TableHead className="text-right">Valor Total</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {itens.map((item, index) => (
+                      <TableRow key={`${item.codigo_fornecedor}-${index}`} className={item.status_vinculo !== "vinculado" ? "bg-amber-50" : undefined}>
+                        <TableCell className="font-mono">{item.codigo_fornecedor}</TableCell>
+                        <TableCell>{item.descricao_limpa}</TableCell>
+                        <TableCell>
+                          <Select value={item.produto_id || ""} onValueChange={(value) => handleProductChange(index, value)}>
+                            <SelectTrigger><SelectValue placeholder="Selecionar produto" /></SelectTrigger>
+                            <SelectContent>{produtos.map((produto) => <SelectItem key={produto.id} value={produto.id}>{produto.code ? `${produto.code} - ` : ""}{produto.name}</SelectItem>)}</SelectContent>
+                          </Select>
+                          {item.produto_id && (
+                            <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                              <Checkbox checked={!!item.salvar_vinculo} onCheckedChange={(checked) => setItens((current) => current.map((row, i) => i === index ? { ...row, salvar_vinculo: checked === true } : row))} />
+                              Salvar vínculo para próximas importações
+                            </label>
+                          )}
+                        </TableCell>
+                        <TableCell><Button variant="outline" size="sm" onClick={() => openQuickProduct(index)}><Plus className="h-4 w-4" /></Button></TableCell>
+                        <TableCell>{item.unidade}</TableCell>
+                        <TableCell className="text-right">{formatNumber(item.quantidade, 4)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(item.valor_unitario, 4)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(item.valor_total)}</TableCell>
+                        <TableCell><StatusBadge status={item.status_vinculo} /></TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-4 text-sm">
+                <Summary label="Total de itens" value={String(itens.length)} />
+                <Summary label="Total dos produtos" value={formatCurrency(totalProdutos)} />
+                <Summary label="Total da nota" value={formatCurrency(cabecalho?.valor_total_nota)} />
+                <Summary label="Diferença" value={formatCurrency(diferenca)} warning={Math.abs(diferenca) > 0.05} />
+              </div>
+
+              <div className="flex flex-col sm:flex-row justify-end gap-2">
+                <Button variant="outline" onClick={() => { setCabecalho(null); setItens([]); setFile(null); fileInputRef.current && (fileInputRef.current.value = ""); }}>Cancelar</Button>
+                <Button onClick={saveImport} disabled={saving}><Save className="h-4 w-4 mr-2" /> Salvar Importação</Button>
+                <Button onClick={generateAccountsPayable} disabled={saving || generating}><WalletCards className="h-4 w-4 mr-2" /> Gerar Contas a Pagar</Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </main>
+
+      <Dialog open={quickIndex !== null} onOpenChange={(open) => !open && setQuickIndex(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Cadastro rápido de produto</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Nome/descrição</Label>
+              <Input value={quickData.name} onChange={(e) => setQuickData({ ...quickData, name: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <Label>Unidade</Label>
+              <Select value={quickData.unit_id} onValueChange={(unit_id) => setQuickData({ ...quickData, unit_id })}>
+                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectContent>{unidades.map((u) => <SelectItem key={u.id} value={u.id}>{u.symbol} - {u.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            {quickIndex !== null && <p className="text-sm text-muted-foreground">Fornecedor: {fornecedor?.name || "não localizado"} | Código: {itens[quickIndex]?.codigo_fornecedor} | Último valor: {formatCurrency(itens[quickIndex]?.valor_unitario, 4)}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setQuickIndex(null)}>Cancelar</Button>
+            <Button onClick={saveQuickProduct}><CheckCircle2 className="h-4 w-4 mr-2" /> Salvar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+async function findSupplier(cnpj?: string, name?: string): Promise<Fornecedor | null> {
+  if (cnpj) {
+    const digits = cnpj.replace(/\D/g, "");
+    const { data: formatted } = await supabase.from("suppliers").select("id, name, cnpj_cpf").eq("cnpj_cpf", cnpj).maybeSingle();
+    if (formatted) return formatted as Fornecedor;
+    const { data: onlyDigits } = await supabase.from("suppliers").select("id, name, cnpj_cpf").eq("cnpj_cpf", digits).maybeSingle();
+    if (onlyDigits) return onlyDigits as Fornecedor;
+  }
+  if (name) {
+    const { data } = await supabase.from("suppliers").select("id, name, cnpj_cpf").ilike("name", `%${name.slice(0, 20)}%`).maybeSingle();
+    if (data) return data as Fornecedor;
+  }
+  return null;
+}
+
+async function correlateItems(items: NfeItemImportado[], supplierId: string | undefined, products: Produto[]): Promise<ItemConferencia[]> {
+  if (!supplierId) return items.map((item) => ({ ...item, status_vinculo: "nao_vinculado" }));
+  const { data: codes } = await supabase
+    .from("product_supplier_codes")
+    .select("supplier_code, product_id")
+    .eq("supplier_id", supplierId)
+    .in("supplier_code", items.map((item) => item.codigo_fornecedor));
+
+  return items.map((item) => {
+    const link = codes?.find((code) => code.supplier_code === item.codigo_fornecedor);
+    const product = link ? products.find((p) => p.id === link.product_id) : undefined;
+    return {
+      ...item,
+      produto_id: product?.id,
+      produto_nome: product?.name,
+      status_vinculo: product ? "vinculado" : "nao_vinculado",
+    };
+  });
+}
+
+function Info({ label, value, className = "" }: { label: string; value?: string | number; className?: string }) {
+  return <div className={className}><div className="text-xs font-medium text-muted-foreground">{label}</div><div className="mt-1 break-words text-sm font-medium">{value || "-"}</div></div>;
+}
+
+function Summary({ label, value, warning }: { label: string; value: string; warning?: boolean }) {
+  return <div className={`rounded-md border p-3 ${warning ? "border-red-200 bg-red-50" : "bg-muted/30"}`}><div className="text-xs text-muted-foreground">{label}</div><div className="font-semibold">{value}</div></div>;
+}
+
+function StatusBadge({ status }: { status: ItemConferencia["status_vinculo"] }) {
+  if (status === "vinculado") return <Badge className="bg-green-600 hover:bg-green-600">Vinculado</Badge>;
+  if (status === "erro") return <Badge variant="destructive">Erro</Badge>;
+  return <Badge className="bg-amber-500 hover:bg-amber-500">Não vinculado</Badge>;
+}
+
+function formatCurrency(value?: number, maximumFractionDigits = 2) {
+  return typeof value === "number" ? value.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits }) : "-";
+}
+
+function formatNumber(value: number, maximumFractionDigits = 2) {
+  return value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits });
+}
+
+function toIsoDate(value?: string) {
+  if (!value) return null;
+  const [day, month, year] = value.split("/");
+  return `${year}-${month}-${day}`;
+}
+
+function competenceFromDate(value?: string) {
+  const iso = toIsoDate(value);
+  return iso ? iso.slice(0, 7) + "-01" : null;
+}
+
+async function uploadPdfIfPossible(file: File | null, storeId: string, chave?: string) {
+  if (!file || !chave) return null;
+  const filePath = `${storeId}/nfe/${chave}.pdf`;
+  const { error } = await supabase.storage.from("account-documents").upload(filePath, file, {
+    contentType: "application/pdf",
+    upsert: true,
+  });
+  return error ? null : filePath;
+}
