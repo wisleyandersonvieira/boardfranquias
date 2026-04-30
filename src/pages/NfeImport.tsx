@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import * as pdfjsLib from "pdfjs-dist";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,12 +16,27 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, CheckCircle2, FileText, Loader2, Plus, Save, Search, Trash2, Upload, WalletCards } from "lucide-react";
+import { ArrowLeft, CheckCircle2, FileText, History, Loader2, Plus, Save, Search, Trash2, Upload, WalletCards } from "lucide-react";
 
 type Produto = { id: string; code: string | null; name: string; unit_id?: string | null };
 type Fornecedor = { id: string; name: string; cnpj_cpf?: string | null };
 type Loja = { id: string; name: string; code?: string | null };
 type Unidade = { id: string; symbol: string; name: string };
+type DocType = { id: string; code: string; name: string };
+type Parcela = { installment_number: number; due_date: string; amount: number };
+type ImportacaoHistorico = {
+  id: string;
+  numero_nfe: string | null;
+  serie: string | null;
+  data_emissao: string | null;
+  valor_total_nota: number | null;
+  status: string;
+  contas_pagar_id: string | null;
+  created_at: string;
+  store_id: string;
+  store_name?: string;
+  fornecedor_nome?: string;
+};
 
 type ItemConferencia = NfeItemImportado & {
   produto_id?: string;
@@ -54,9 +69,82 @@ export default function NfeImport() {
   const [quickData, setQuickData] = useState({ name: "", unit_id: "", group_id: "", subgroup_id: "" });
   const [productPopoverOpen, setProductPopoverOpen] = useState<number | null>(null);
 
+  // Modal pré-geração do Contas a Pagar
+  const [docTypes, setDocTypes] = useState<DocType[]>([]);
+  const [showApDialog, setShowApDialog] = useState(false);
+  const [apDocType, setApDocType] = useState("");
+  const [apIssueDate, setApIssueDate] = useState("");
+  const [apCompetenceDate, setApCompetenceDate] = useState("");
+  const [apDueDate, setApDueDate] = useState("");
+
+  // Modal de parcelas
+  const [showInstallmentsModal, setShowInstallmentsModal] = useState(false);
+  const [createdPayableId, setCreatedPayableId] = useState<string | null>(null);
+  const [createdPayableAmount, setCreatedPayableAmount] = useState(0);
+  const [numberOfInstallments, setNumberOfInstallments] = useState(1);
+  const [installments, setInstallments] = useState<Parcela[]>([]);
+
+  // Histórico
+  const [historico, setHistorico] = useState<ImportacaoHistorico[]>([]);
+  const [histLoja, setHistLoja] = useState<string>("all");
+  const [histDataIni, setHistDataIni] = useState("");
+  const [histDataFim, setHistDataFim] = useState("");
+  const [loadingHistorico, setLoadingHistorico] = useState(false);
+
   const totalProdutos = useMemo(() => itens.reduce((sum, item) => sum + item.valor_total, 0), [itens]);
   const vinculados = itens.filter((item) => item.status_vinculo === "vinculado").length;
   const diferenca = (cabecalho?.valor_total_produtos || cabecalho?.valor_total_nota || 0) - totalProdutos;
+
+  useEffect(() => {
+    (async () => {
+      const [storesData, docs] = await Promise.all([
+        supabase.from("stores").select("id, name, code").order("name"),
+        supabase.from("document_types").select("id, code, name").eq("is_active", true).order("code"),
+      ]);
+      setLojas((current) => current.length ? current : (storesData.data || []));
+      setDocTypes((docs.data || []) as DocType[]);
+    })();
+  }, []);
+
+  useEffect(() => { fetchHistorico(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [histLoja, histDataIni, histDataFim]);
+
+  const fetchHistorico = async () => {
+    setLoadingHistorico(true);
+    try {
+      let q = supabaseAny.from("nfe_importacoes")
+        .select("id, numero_nfe, serie, data_emissao, valor_total_nota, status, contas_pagar_id, created_at, store_id, fornecedor_id, stores:store_id(name), suppliers:fornecedor_id(name)")
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (histLoja && histLoja !== "all") q = q.eq("store_id", histLoja);
+      if (histDataIni) q = q.gte("created_at", `${histDataIni}T00:00:00`);
+      if (histDataFim) q = q.lte("created_at", `${histDataFim}T23:59:59`);
+      const { data, error } = await q;
+      if (error) throw error;
+      setHistorico((data || []).map((r: any) => ({
+        ...r,
+        store_name: r.stores?.name,
+        fornecedor_nome: r.suppliers?.name,
+      })));
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Erro ao carregar histórico", description: e.message });
+    } finally {
+      setLoadingHistorico(false);
+    }
+  };
+
+  const deleteImportacao = async (imp: ImportacaoHistorico) => {
+    if (imp.contas_pagar_id) {
+      toast({ variant: "destructive", title: "Não é possível excluir", description: "Esta importação possui Contas a Pagar vinculado. Exclua o título antes." });
+      return;
+    }
+    if (!confirm(`Excluir a importação da NF-e ${imp.numero_nfe || ""}?`)) return;
+    const { error: errItems } = await supabaseAny.from("nfe_importacao_itens").delete().eq("importacao_id", imp.id);
+    if (errItems) { toast({ variant: "destructive", title: "Erro", description: errItems.message }); return; }
+    const { error } = await supabaseAny.from("nfe_importacoes").delete().eq("id", imp.id);
+    if (error) { toast({ variant: "destructive", title: "Erro", description: error.message }); return; }
+    toast({ title: "Importação excluída" });
+    fetchHistorico();
+  };
 
   const handleReadPdf = async () => {
     if (!file) {
@@ -305,29 +393,41 @@ export default function NfeImport() {
   };
 
   const generateAccountsPayable = async () => {
-    const id = importacaoId || await saveImport();
-    if (!id || !cabecalho || !fornecedor) return;
+    // Abre modal de pré-preenchimento (tipo doc, datas)
+    const validation = validateBeforeSave();
+    if (validation) { toast({ variant: "destructive", title: "Revise a importação", description: validation }); return; }
+    const issue = toIsoDate(cabecalho?.data_emissao) || "";
+    const firstDue = cabecalho?.duplicatas[0]?.vencimento;
+    setApIssueDate(issue);
+    setApCompetenceDate(issue ? issue.slice(0, 7) + "-01" : "");
+    setApDueDate(toIsoDate(firstDue) || issue);
+    setApDocType(docTypes.find((d) => /nfe|nf-?e|nota/i.test(d.name))?.code || "");
+    setShowApDialog(true);
+  };
 
-    const firstDue = cabecalho.duplicatas[0];
-    if (!firstDue?.vencimento) {
-      toast({ variant: "destructive", title: "Vencimento obrigatório", description: "Informe uma duplicata/vencimento na NF-e antes de gerar o Contas a Pagar." });
+  const confirmGenerateAp = async () => {
+    if (!apDocType || !apIssueDate || !apCompetenceDate || !apDueDate) {
+      toast({ variant: "destructive", title: "Preencha todos os campos", description: "Tipo de documento e datas são obrigatórios." });
       return;
     }
+    const id = importacaoId || await saveImport();
+    if (!id || !cabecalho || !fornecedor) return;
 
     setGenerating(true);
     try {
       const { data: userData } = await supabase.auth.getUser();
+      const totalAmount = cabecalho.valor_total_nota || totalProdutos;
       const { data: payable, error } = await supabase.from("accounts_payable").insert({
         store_id: storeId,
         supplier_id: fornecedor.id,
         description: `NF-e nº ${cabecalho.numero_nfe || ""} - ${fornecedor.name}`,
         document_number: cabecalho.numero_nfe,
-        document_type: "NF-e",
-        issue_date: toIsoDate(cabecalho.data_emissao),
-        due_date: toIsoDate(firstDue.vencimento),
-        data_competencia: competenceFromDate(cabecalho.data_emissao),
-        amount: cabecalho.valor_total_nota || totalProdutos,
-        total_amount: cabecalho.valor_total_nota || totalProdutos,
+        document_type: apDocType,
+        issue_date: apIssueDate,
+        due_date: apDueDate,
+        data_competencia: apCompetenceDate,
+        amount: totalAmount,
+        total_amount: totalAmount,
         status: "pending",
         created_by: userData.user?.id,
         notes: `Importação NF-e: ${id}`,
@@ -344,11 +444,72 @@ export default function NfeImport() {
       })) as any);
 
       await supabaseAny.from("nfe_importacoes").update({ status: "contas_pagar_gerado", contas_pagar_id: payable.id }).eq("id", id);
-      toast({ title: "Contas a Pagar gerado", description: "O título foi criado com os itens vinculados à NF-e." });
+
+      // Pré-popular parcelas a partir das duplicatas, se existirem
+      const dups = cabecalho.duplicatas || [];
+      const initial: Parcela[] = dups.length
+        ? dups.map((d, i) => ({ installment_number: i + 1, due_date: toIsoDate(d.vencimento) || apDueDate, amount: d.valor }))
+        : [{ installment_number: 1, due_date: apDueDate, amount: totalAmount }];
+      setCreatedPayableId(payable.id);
+      setCreatedPayableAmount(totalAmount);
+      setNumberOfInstallments(initial.length);
+      setInstallments(initial);
+      setShowApDialog(false);
+      setShowInstallmentsModal(true);
+      toast({ title: "Contas a Pagar gerado", description: "Configure as parcelas." });
+      fetchHistorico();
     } catch (error: any) {
       toast({ variant: "destructive", title: "Erro ao gerar Contas a Pagar", description: error.message });
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const generateInstallmentsLocal = () => {
+    const total = createdPayableAmount;
+    const base = Number((total / numberOfInstallments).toFixed(2));
+    const startDate = new Date(apDueDate + "T12:00:00");
+    const list: Parcela[] = [];
+    for (let i = 1; i <= numberOfInstallments; i++) {
+      const d = new Date(startDate);
+      d.setMonth(d.getMonth() + (i - 1));
+      list.push({
+        installment_number: i,
+        due_date: d.toISOString().slice(0, 10),
+        amount: i === numberOfInstallments ? Number((total - base * (numberOfInstallments - 1)).toFixed(2)) : base,
+      });
+    }
+    setInstallments(list);
+  };
+
+  const updateInstallment = (idx: number, field: keyof Parcela, value: string | number) => {
+    setInstallments((cur) => cur.map((it, i) => i === idx ? { ...it, [field]: field === "amount" ? Number(value) : value } : it));
+  };
+
+  const confirmInstallments = async () => {
+    if (!createdPayableId) return;
+    const sum = installments.reduce((s, i) => s + i.amount, 0);
+    if (Math.abs(sum - createdPayableAmount) > 0.01) {
+      toast({ variant: "destructive", title: "Soma inválida", description: `Soma das parcelas (${formatCurrency(sum)}) difere do total (${formatCurrency(createdPayableAmount)}).` });
+      return;
+    }
+    try {
+      await supabase.from("accounts_payable_installments").delete().eq("account_payable_id", createdPayableId);
+      const rows = installments.map((p) => ({
+        account_payable_id: createdPayableId,
+        installment_number: p.installment_number,
+        due_date: p.due_date,
+        amount: p.amount,
+      }));
+      const { error } = await supabase.from("accounts_payable_installments").insert(rows);
+      if (error) throw error;
+      toast({ title: "Parcelas salvas" });
+      setShowInstallmentsModal(false);
+      // Limpar tela após sucesso
+      setCabecalho(null); setItens([]); setFile(null); setImportacaoId(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Erro ao salvar parcelas", description: e.message });
     }
   };
 
@@ -544,12 +705,97 @@ export default function NfeImport() {
 
               <div className="flex flex-col sm:flex-row justify-end gap-2">
                 <Button variant="outline" onClick={() => { setCabecalho(null); setItens([]); setFile(null); fileInputRef.current && (fileInputRef.current.value = ""); }}>Cancelar</Button>
-                <Button onClick={saveImport} disabled={saving}><Save className="h-4 w-4 mr-2" /> Salvar Importação</Button>
+                <Button onClick={async () => { const id = await saveImport(); if (id) fetchHistorico(); }} disabled={saving}><Save className="h-4 w-4 mr-2" /> Salvar Importação</Button>
                 <Button onClick={generateAccountsPayable} disabled={saving || generating}><WalletCards className="h-4 w-4 mr-2" /> Gerar Contas a Pagar</Button>
               </div>
             </CardContent>
           </Card>
         )}
+
+        {/* Histórico de NF-e Importadas */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><History className="h-5 w-5" /> NF-e Importadas</CardTitle>
+            <CardDescription>Histórico de notas importadas. Pode-se excluir importações sem Contas a Pagar vinculado.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-4">
+              <div className="space-y-1">
+                <Label>Loja</Label>
+                <Select value={histLoja} onValueChange={setHistLoja}>
+                  <SelectTrigger><SelectValue placeholder="Todas" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas</SelectItem>
+                    {lojas.map((l) => <SelectItem key={l.id} value={l.id}>{l.code ? `${l.code} - ` : ""}{l.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Importado de</Label>
+                <Input type="date" value={histDataIni} onChange={(e) => setHistDataIni(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label>Importado até</Label>
+                <Input type="date" value={histDataFim} onChange={(e) => setHistDataFim(e.target.value)} />
+              </div>
+              <div className="flex items-end">
+                <Button variant="outline" onClick={fetchHistorico} disabled={loadingHistorico}>
+                  {loadingHistorico ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Search className="h-4 w-4 mr-2" />}
+                  Atualizar
+                </Button>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Importado em</TableHead>
+                    <TableHead>Loja</TableHead>
+                    <TableHead>NF-e</TableHead>
+                    <TableHead>Série</TableHead>
+                    <TableHead>Fornecedor</TableHead>
+                    <TableHead>Emissão</TableHead>
+                    <TableHead className="text-right">Valor</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {historico.length === 0 && (
+                    <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-6">Nenhuma importação encontrada.</TableCell></TableRow>
+                  )}
+                  {historico.map((imp) => (
+                    <TableRow key={imp.id}>
+                      <TableCell>{new Date(imp.created_at).toLocaleDateString("pt-BR")}</TableCell>
+                      <TableCell>{imp.store_name || "-"}</TableCell>
+                      <TableCell className="font-mono">{imp.numero_nfe || "-"}</TableCell>
+                      <TableCell>{imp.serie || "-"}</TableCell>
+                      <TableCell>{imp.fornecedor_nome || "-"}</TableCell>
+                      <TableCell>{imp.data_emissao ? new Date(imp.data_emissao + "T12:00:00").toLocaleDateString("pt-BR") : "-"}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(imp.valor_total_nota || 0)}</TableCell>
+                      <TableCell>
+                        {imp.contas_pagar_id
+                          ? <Badge className="bg-green-600 hover:bg-green-600">Contas a Pagar</Badge>
+                          : <Badge variant="secondary">{imp.status}</Badge>}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => deleteImportacao(imp)}
+                          disabled={!!imp.contas_pagar_id}
+                          title={imp.contas_pagar_id ? "Possui Contas a Pagar vinculado" : "Excluir importação"}
+                        >
+                          <Trash2 className="h-4 w-4 text-red-600" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
       </main>
 
       <Dialog open={quickIndex !== null} onOpenChange={(open) => !open && setQuickIndex(null)}>
@@ -572,6 +818,100 @@ export default function NfeImport() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setQuickIndex(null)}>Cancelar</Button>
             <Button onClick={saveQuickProduct}><CheckCircle2 className="h-4 w-4 mr-2" /> Salvar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal pré-Contas a Pagar */}
+      <Dialog open={showApDialog} onOpenChange={setShowApDialog}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Gerar Contas a Pagar</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Tipo do Documento *</Label>
+              <Select value={apDocType} onValueChange={setApDocType}>
+                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectContent>
+                  {docTypes.map((t) => <SelectItem key={t.id} value={t.code}>{t.name} ({t.code})</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="space-y-2">
+                <Label>Data de Emissão *</Label>
+                <Input type="date" value={apIssueDate} onChange={(e) => setApIssueDate(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Data de Competência *</Label>
+                <Input type="date" value={apCompetenceDate} onChange={(e) => setApCompetenceDate(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Data de Vencimento *</Label>
+                <Input type="date" value={apDueDate} onChange={(e) => setApDueDate(e.target.value)} />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowApDialog(false)}>Cancelar</Button>
+            <Button onClick={confirmGenerateAp} disabled={generating}>
+              {generating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <WalletCards className="h-4 w-4 mr-2" />}
+              Gerar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de parcelas */}
+      <Dialog open={showInstallmentsModal} onOpenChange={setShowInstallmentsModal}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader><DialogTitle>Configurar Parcelas</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+              <div className="space-y-2">
+                <Label>Quantidade de Parcelas</Label>
+                <Input type="number" min={1} value={numberOfInstallments} onChange={(e) => setNumberOfInstallments(Math.max(1, Number(e.target.value)))} />
+              </div>
+              <div>
+                <Button variant="outline" onClick={generateInstallmentsLocal}>Gerar Parcelas</Button>
+              </div>
+              <div className="text-right text-sm text-muted-foreground">
+                Total da nota: <span className="font-semibold text-foreground">{formatCurrency(createdPayableAmount)}</span>
+              </div>
+            </div>
+
+            {installments.length > 0 && (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Parcela</TableHead>
+                      <TableHead>Vencimento</TableHead>
+                      <TableHead className="text-right">Valor</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {installments.map((inst, i) => (
+                      <TableRow key={i}>
+                        <TableCell>{inst.installment_number}ª</TableCell>
+                        <TableCell>
+                          <Input type="date" value={inst.due_date} onChange={(e) => updateInstallment(i, "due_date", e.target.value)} />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Input type="number" step="0.01" value={inst.amount} onChange={(e) => updateInstallment(i, "amount", e.target.value)} className="text-right" />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <div className="text-right mt-2 text-sm">
+                  Soma: <span className="font-semibold">{formatCurrency(installments.reduce((s, i) => s + i.amount, 0))}</span>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowInstallmentsModal(false)}>Fechar</Button>
+            <Button onClick={confirmInstallments}><CheckCircle2 className="h-4 w-4 mr-2" /> Confirmar Parcelas</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
