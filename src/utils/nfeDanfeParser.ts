@@ -69,9 +69,23 @@ export function parseBrazilianNumber(valor?: string | number | null): number {
 }
 
 export function cleanNfeItemDescription(description: string): string {
-  return description
-    .replace(/\((F|R|O|Z|Q|V|TRIB|B|E)\)[\s\S]{0,80}?\(\/\1\)/gi, " ")
+  let s = description;
+  // Normalize whitespace inside tag tokens that may have been split by PDF line breaks.
+  // e.g. "( /TRIB)", "(/T RIB)", "( Z)N ( /Z)" -> "(/TRIB)", "(Z)N(/Z)"
+  s = s.replace(/\(\s*\/?\s*([A-Za-z]{1,6})\s*\)/g, (_m, tag) => `(${tag.startsWith("/") ? tag : (tag.length === 0 ? "" : tag)})`);
+  // Re-add the slash where present. Easier alternative: explicit normalization below.
+  s = description
+    // collapse internal whitespace inside tag parentheses: ( /TRIB ) -> (/TRIB), (TR IB) -> (TRIB)
+    .replace(/\(\s*([\/A-Za-z]{1,8})\s*\)/g, (_m, inner) => `(${inner.replace(/\s+/g, "")})`)
+    .replace(/\(([^)]*)\)/g, (m, inner) => {
+      // Inner may still contain spaces around the slash
+      const cleaned = inner.replace(/\s+/g, "");
+      return /^\/?(F|R|O|Z|Q|V|TRIB|B|E)$/i.test(cleaned) ? `(${cleaned})` : m;
+    });
+  return s
+    .replace(/\((F|R|O|Z|Q|V|TRIB|B|E)\)[\s\S]{0,160}?\(\/\1\)/gi, " ")
     .replace(/\((?:\/)?(?:F|R|O|Z|Q|V|TRIB|B|E)\)/gi, " ")
+    .replace(/\bSUB\s+TRIB\b[^\n]*?(?=$|\n|[A-Z]{3,})/gi, " ")
     .replace(/\bSUB\s+TRIB\b/gi, " ")
     .replace(/\bBase\s*:\s*[\d.,]+/gi, " ")
     .replace(/\bValor\s*:\s*[\d.,]+/gi, " ")
@@ -79,6 +93,7 @@ export function cleanNfeItemDescription(description: string): string {
     .replace(/\b\d{8,14}\b/g, " ")
     .replace(/\s+/g, " ")
     .replace(/\s+([,.;:])/g, "$1")
+    .replace(/[-]\s*$/, "")
     .trim();
 }
 
