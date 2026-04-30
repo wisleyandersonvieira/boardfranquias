@@ -705,12 +705,97 @@ export default function NfeImport() {
 
               <div className="flex flex-col sm:flex-row justify-end gap-2">
                 <Button variant="outline" onClick={() => { setCabecalho(null); setItens([]); setFile(null); fileInputRef.current && (fileInputRef.current.value = ""); }}>Cancelar</Button>
-                <Button onClick={saveImport} disabled={saving}><Save className="h-4 w-4 mr-2" /> Salvar Importação</Button>
+                <Button onClick={async () => { const id = await saveImport(); if (id) fetchHistorico(); }} disabled={saving}><Save className="h-4 w-4 mr-2" /> Salvar Importação</Button>
                 <Button onClick={generateAccountsPayable} disabled={saving || generating}><WalletCards className="h-4 w-4 mr-2" /> Gerar Contas a Pagar</Button>
               </div>
             </CardContent>
           </Card>
         )}
+
+        {/* Histórico de NF-e Importadas */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><History className="h-5 w-5" /> NF-e Importadas</CardTitle>
+            <CardDescription>Histórico de notas importadas. Pode-se excluir importações sem Contas a Pagar vinculado.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-4">
+              <div className="space-y-1">
+                <Label>Loja</Label>
+                <Select value={histLoja} onValueChange={setHistLoja}>
+                  <SelectTrigger><SelectValue placeholder="Todas" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas</SelectItem>
+                    {lojas.map((l) => <SelectItem key={l.id} value={l.id}>{l.code ? `${l.code} - ` : ""}{l.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Importado de</Label>
+                <Input type="date" value={histDataIni} onChange={(e) => setHistDataIni(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label>Importado até</Label>
+                <Input type="date" value={histDataFim} onChange={(e) => setHistDataFim(e.target.value)} />
+              </div>
+              <div className="flex items-end">
+                <Button variant="outline" onClick={fetchHistorico} disabled={loadingHistorico}>
+                  {loadingHistorico ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Search className="h-4 w-4 mr-2" />}
+                  Atualizar
+                </Button>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Importado em</TableHead>
+                    <TableHead>Loja</TableHead>
+                    <TableHead>NF-e</TableHead>
+                    <TableHead>Série</TableHead>
+                    <TableHead>Fornecedor</TableHead>
+                    <TableHead>Emissão</TableHead>
+                    <TableHead className="text-right">Valor</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {historico.length === 0 && (
+                    <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-6">Nenhuma importação encontrada.</TableCell></TableRow>
+                  )}
+                  {historico.map((imp) => (
+                    <TableRow key={imp.id}>
+                      <TableCell>{new Date(imp.created_at).toLocaleDateString("pt-BR")}</TableCell>
+                      <TableCell>{imp.store_name || "-"}</TableCell>
+                      <TableCell className="font-mono">{imp.numero_nfe || "-"}</TableCell>
+                      <TableCell>{imp.serie || "-"}</TableCell>
+                      <TableCell>{imp.fornecedor_nome || "-"}</TableCell>
+                      <TableCell>{imp.data_emissao ? new Date(imp.data_emissao + "T12:00:00").toLocaleDateString("pt-BR") : "-"}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(imp.valor_total_nota || 0)}</TableCell>
+                      <TableCell>
+                        {imp.contas_pagar_id
+                          ? <Badge className="bg-green-600 hover:bg-green-600">Contas a Pagar</Badge>
+                          : <Badge variant="secondary">{imp.status}</Badge>}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => deleteImportacao(imp)}
+                          disabled={!!imp.contas_pagar_id}
+                          title={imp.contas_pagar_id ? "Possui Contas a Pagar vinculado" : "Excluir importação"}
+                        >
+                          <Trash2 className="h-4 w-4 text-red-600" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
       </main>
 
       <Dialog open={quickIndex !== null} onOpenChange={(open) => !open && setQuickIndex(null)}>
@@ -733,6 +818,100 @@ export default function NfeImport() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setQuickIndex(null)}>Cancelar</Button>
             <Button onClick={saveQuickProduct}><CheckCircle2 className="h-4 w-4 mr-2" /> Salvar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal pré-Contas a Pagar */}
+      <Dialog open={showApDialog} onOpenChange={setShowApDialog}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Gerar Contas a Pagar</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Tipo do Documento *</Label>
+              <Select value={apDocType} onValueChange={setApDocType}>
+                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectContent>
+                  {docTypes.map((t) => <SelectItem key={t.id} value={t.code}>{t.name} ({t.code})</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="space-y-2">
+                <Label>Data de Emissão *</Label>
+                <Input type="date" value={apIssueDate} onChange={(e) => setApIssueDate(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Data de Competência *</Label>
+                <Input type="date" value={apCompetenceDate} onChange={(e) => setApCompetenceDate(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Data de Vencimento *</Label>
+                <Input type="date" value={apDueDate} onChange={(e) => setApDueDate(e.target.value)} />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowApDialog(false)}>Cancelar</Button>
+            <Button onClick={confirmGenerateAp} disabled={generating}>
+              {generating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <WalletCards className="h-4 w-4 mr-2" />}
+              Gerar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de parcelas */}
+      <Dialog open={showInstallmentsModal} onOpenChange={setShowInstallmentsModal}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader><DialogTitle>Configurar Parcelas</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+              <div className="space-y-2">
+                <Label>Quantidade de Parcelas</Label>
+                <Input type="number" min={1} value={numberOfInstallments} onChange={(e) => setNumberOfInstallments(Math.max(1, Number(e.target.value)))} />
+              </div>
+              <div>
+                <Button variant="outline" onClick={generateInstallmentsLocal}>Gerar Parcelas</Button>
+              </div>
+              <div className="text-right text-sm text-muted-foreground">
+                Total da nota: <span className="font-semibold text-foreground">{formatCurrency(createdPayableAmount)}</span>
+              </div>
+            </div>
+
+            {installments.length > 0 && (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Parcela</TableHead>
+                      <TableHead>Vencimento</TableHead>
+                      <TableHead className="text-right">Valor</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {installments.map((inst, i) => (
+                      <TableRow key={i}>
+                        <TableCell>{inst.installment_number}ª</TableCell>
+                        <TableCell>
+                          <Input type="date" value={inst.due_date} onChange={(e) => updateInstallment(i, "due_date", e.target.value)} />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Input type="number" step="0.01" value={inst.amount} onChange={(e) => updateInstallment(i, "amount", e.target.value)} className="text-right" />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <div className="text-right mt-2 text-sm">
+                  Soma: <span className="font-semibold">{formatCurrency(installments.reduce((s, i) => s + i.amount, 0))}</span>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowInstallmentsModal(false)}>Fechar</Button>
+            <Button onClick={confirmInstallments}><CheckCircle2 className="h-4 w-4 mr-2" /> Confirmar Parcelas</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
