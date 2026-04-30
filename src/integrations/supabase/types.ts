@@ -1825,6 +1825,222 @@ export type Database = {
           },
         ]
       }
+      dre_estruturas: {
+        Row: {
+          ativo: boolean
+          brand_id: string | null
+          created_at: string
+          descricao: string | null
+          id: string
+          legado_structure_id: string | null
+          nome: string
+          tipo_regime_padrao: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          brand_id?: string | null
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          legado_structure_id?: string | null
+          nome: string
+          tipo_regime_padrao?: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          brand_id?: string | null
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          legado_structure_id?: string | null
+          nome?: string
+          tipo_regime_padrao?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dre_estruturas_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dre_estruturas_legado_structure_id_fkey"
+            columns: ["legado_structure_id"]
+            isOneToOne: false
+            referencedRelation: "dre_structures"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dre_linhas: {
+        Row: {
+          ativo: boolean
+          colapsavel: boolean
+          created_at: string
+          descricao: string
+          estrutura_id: string
+          exibir_sinal: boolean
+          formula_json: Json | null
+          id: string
+          legado_structure_item_id: string | null
+          linha_pai_id: string | null
+          negrito: boolean
+          nivel: number
+          ordem: number
+          tipo_linha: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          colapsavel?: boolean
+          created_at?: string
+          descricao: string
+          estrutura_id: string
+          exibir_sinal?: boolean
+          formula_json?: Json | null
+          id?: string
+          legado_structure_item_id?: string | null
+          linha_pai_id?: string | null
+          negrito?: boolean
+          nivel?: number
+          ordem?: number
+          tipo_linha: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          colapsavel?: boolean
+          created_at?: string
+          descricao?: string
+          estrutura_id?: string
+          exibir_sinal?: boolean
+          formula_json?: Json | null
+          id?: string
+          legado_structure_item_id?: string | null
+          linha_pai_id?: string | null
+          negrito?: boolean
+          nivel?: number
+          ordem?: number
+          tipo_linha?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dre_linhas_estrutura_id_fkey"
+            columns: ["estrutura_id"]
+            isOneToOne: false
+            referencedRelation: "dre_estruturas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dre_linhas_legado_structure_item_id_fkey"
+            columns: ["legado_structure_item_id"]
+            isOneToOne: false
+            referencedRelation: "dre_structure_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dre_linhas_linha_pai_id_fkey"
+            columns: ["linha_pai_id"]
+            isOneToOne: false
+            referencedRelation: "dre_linhas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dre_logs_auditoria: {
+        Row: {
+          created_at: string
+          estrutura_id: string | null
+          filtros_json: Json
+          id: string
+          tempo_execucao_ms: number
+          total_linhas: number
+          total_registros_descartados: number
+          total_registros_lidos: number
+          total_registros_sem_vinculo: number
+        }
+        Insert: {
+          created_at?: string
+          estrutura_id?: string | null
+          filtros_json: Json
+          id?: string
+          tempo_execucao_ms?: number
+          total_linhas?: number
+          total_registros_descartados?: number
+          total_registros_lidos?: number
+          total_registros_sem_vinculo?: number
+        }
+        Update: {
+          created_at?: string
+          estrutura_id?: string | null
+          filtros_json?: Json
+          id?: string
+          tempo_execucao_ms?: number
+          total_linhas?: number
+          total_registros_descartados?: number
+          total_registros_lidos?: number
+          total_registros_sem_vinculo?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dre_logs_auditoria_estrutura_id_fkey"
+            columns: ["estrutura_id"]
+            isOneToOne: false
+            referencedRelation: "dre_estruturas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dre_snapshots_mensais: {
+        Row: {
+          competencia: string
+          created_at: string
+          estrutura_id: string
+          id: string
+          payload_json: Json
+          regime: string
+          store_id: string | null
+        }
+        Insert: {
+          competencia: string
+          created_at?: string
+          estrutura_id: string
+          id?: string
+          payload_json: Json
+          regime: string
+          store_id?: string | null
+        }
+        Update: {
+          competencia?: string
+          created_at?: string
+          estrutura_id?: string
+          id?: string
+          payload_json?: Json
+          regime?: string
+          store_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dre_snapshots_mensais_estrutura_id_fkey"
+            columns: ["estrutura_id"]
+            isOneToOne: false
+            referencedRelation: "dre_estruturas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dre_snapshots_mensais_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dre_structure_items: {
         Row: {
           account_group_id: string | null
@@ -1930,6 +2146,64 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dre_vinculos: {
+        Row: {
+          categoria_id: string | null
+          classificacao: string | null
+          created_at: string
+          id: string
+          linha_id: string
+          natureza: string | null
+          observacao_regra: string | null
+          origem: string
+          subcategoria_id: string | null
+        }
+        Insert: {
+          categoria_id?: string | null
+          classificacao?: string | null
+          created_at?: string
+          id?: string
+          linha_id: string
+          natureza?: string | null
+          observacao_regra?: string | null
+          origem: string
+          subcategoria_id?: string | null
+        }
+        Update: {
+          categoria_id?: string | null
+          classificacao?: string | null
+          created_at?: string
+          id?: string
+          linha_id?: string
+          natureza?: string | null
+          observacao_regra?: string | null
+          origem?: string
+          subcategoria_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dre_vinculos_categoria_id_fkey"
+            columns: ["categoria_id"]
+            isOneToOne: false
+            referencedRelation: "account_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dre_vinculos_linha_id_fkey"
+            columns: ["linha_id"]
+            isOneToOne: false
+            referencedRelation: "dre_linhas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dre_vinculos_subcategoria_id_fkey"
+            columns: ["subcategoria_id"]
+            isOneToOne: false
+            referencedRelation: "account_groups"
             referencedColumns: ["id"]
           },
         ]
@@ -2351,6 +2625,189 @@ export type Database = {
             columns: ["brand_id"]
             isOneToOne: true
             referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nfe_importacao_itens: {
+        Row: {
+          aliquota_icms: number | null
+          aliquota_ipi: number | null
+          cfop: string | null
+          codigo_fornecedor: string
+          created_at: string
+          cst: string | null
+          descricao_limpa: string
+          descricao_original_pdf: string
+          id: string
+          importacao_id: string
+          ncm: string | null
+          produto_id: string | null
+          quantidade: number
+          status_vinculo: string
+          unidade: string | null
+          updated_at: string
+          valor_icms: number | null
+          valor_ipi: number | null
+          valor_total: number
+          valor_unitario: number
+        }
+        Insert: {
+          aliquota_icms?: number | null
+          aliquota_ipi?: number | null
+          cfop?: string | null
+          codigo_fornecedor: string
+          created_at?: string
+          cst?: string | null
+          descricao_limpa: string
+          descricao_original_pdf: string
+          id?: string
+          importacao_id: string
+          ncm?: string | null
+          produto_id?: string | null
+          quantidade?: number
+          status_vinculo?: string
+          unidade?: string | null
+          updated_at?: string
+          valor_icms?: number | null
+          valor_ipi?: number | null
+          valor_total?: number
+          valor_unitario?: number
+        }
+        Update: {
+          aliquota_icms?: number | null
+          aliquota_ipi?: number | null
+          cfop?: string | null
+          codigo_fornecedor?: string
+          created_at?: string
+          cst?: string | null
+          descricao_limpa?: string
+          descricao_original_pdf?: string
+          id?: string
+          importacao_id?: string
+          ncm?: string | null
+          produto_id?: string | null
+          quantidade?: number
+          status_vinculo?: string
+          unidade?: string | null
+          updated_at?: string
+          valor_icms?: number | null
+          valor_ipi?: number | null
+          valor_total?: number
+          valor_unitario?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nfe_importacao_itens_importacao_id_fkey"
+            columns: ["importacao_id"]
+            isOneToOne: false
+            referencedRelation: "nfe_importacoes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfe_importacao_itens_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nfe_importacoes: {
+        Row: {
+          arquivo_nome: string | null
+          arquivo_path: string | null
+          chave_acesso: string
+          contas_pagar_id: string | null
+          created_at: string
+          data_emissao: string | null
+          fornecedor_id: string | null
+          id: string
+          matrix_id: string | null
+          numero_nfe: string | null
+          serie: string | null
+          status: string
+          store_id: string
+          updated_at: string
+          usuario_id: string | null
+          valor_total_nota: number | null
+          valor_total_produtos: number | null
+          vencimentos: Json
+        }
+        Insert: {
+          arquivo_nome?: string | null
+          arquivo_path?: string | null
+          chave_acesso: string
+          contas_pagar_id?: string | null
+          created_at?: string
+          data_emissao?: string | null
+          fornecedor_id?: string | null
+          id?: string
+          matrix_id?: string | null
+          numero_nfe?: string | null
+          serie?: string | null
+          status?: string
+          store_id: string
+          updated_at?: string
+          usuario_id?: string | null
+          valor_total_nota?: number | null
+          valor_total_produtos?: number | null
+          vencimentos?: Json
+        }
+        Update: {
+          arquivo_nome?: string | null
+          arquivo_path?: string | null
+          chave_acesso?: string
+          contas_pagar_id?: string | null
+          created_at?: string
+          data_emissao?: string | null
+          fornecedor_id?: string | null
+          id?: string
+          matrix_id?: string | null
+          numero_nfe?: string | null
+          serie?: string | null
+          status?: string
+          store_id?: string
+          updated_at?: string
+          usuario_id?: string | null
+          valor_total_nota?: number | null
+          valor_total_produtos?: number | null
+          vencimentos?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nfe_importacoes_contas_pagar_id_fkey"
+            columns: ["contas_pagar_id"]
+            isOneToOne: false
+            referencedRelation: "accounts_payable"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfe_importacoes_fornecedor_id_fkey"
+            columns: ["fornecedor_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfe_importacoes_matrix_id_fkey"
+            columns: ["matrix_id"]
+            isOneToOne: false
+            referencedRelation: "matrices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfe_importacoes_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfe_importacoes_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
