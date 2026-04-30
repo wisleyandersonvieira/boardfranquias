@@ -13,8 +13,10 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, CheckCircle2, FileText, Loader2, Plus, Save, Upload, WalletCards } from "lucide-react";
+import { ArrowLeft, CheckCircle2, FileText, Loader2, Plus, Save, Search, Trash2, Upload, WalletCards } from "lucide-react";
 
 type Produto = { id: string; code: string | null; name: string; unit_id?: string | null };
 type Fornecedor = { id: string; name: string; cnpj_cpf?: string | null };
@@ -50,6 +52,7 @@ export default function NfeImport() {
   const [importacaoId, setImportacaoId] = useState<string | null>(null);
   const [quickIndex, setQuickIndex] = useState<number | null>(null);
   const [quickData, setQuickData] = useState({ name: "", unit_id: "", group_id: "", subgroup_id: "" });
+  const [productPopoverOpen, setProductPopoverOpen] = useState<number | null>(null);
 
   const totalProdutos = useMemo(() => itens.reduce((sum, item) => sum + item.valor_total, 0), [itens]);
   const vinculados = itens.filter((item) => item.status_vinculo === "vinculado").length;
@@ -125,6 +128,41 @@ export default function NfeImport() {
       status_vinculo: "vinculado",
       salvar_vinculo: item.produto_id === productId ? item.salvar_vinculo : true,
     } : item));
+  };
+
+  const updateItemField = (index: number, patch: Partial<ItemConferencia>) => {
+    setItens((current) => current.map((item, i) => {
+      if (i !== index) return item;
+      const merged = { ...item, ...patch } as ItemConferencia;
+      if (patch.quantidade !== undefined || patch.valor_unitario !== undefined) {
+        merged.valor_total = Number(((merged.quantidade || 0) * (merged.valor_unitario || 0)).toFixed(2));
+      }
+      return merged;
+    }));
+  };
+
+  const removeItem = (index: number) => {
+    setItens((current) => current.filter((_, i) => i !== index));
+  };
+
+  const addEmptyItem = () => {
+    setItens((current) => [...current, {
+      codigo_fornecedor: "",
+      descricao_original_pdf: "",
+      descricao_limpa: "",
+      unidade: "",
+      quantidade: 1,
+      valor_unitario: 0,
+      valor_total: 0,
+      ncm: "",
+      cst: "",
+      cfop: "",
+      valor_icms: 0,
+      valor_ipi: 0,
+      aliquota_icms: 0,
+      aliquota_ipi: 0,
+      status_vinculo: "nao_vinculado",
+    } as ItemConferencia]);
   };
 
   const openQuickProduct = (index: number) => {
@@ -399,10 +437,50 @@ export default function NfeImport() {
                         <TableCell className="font-mono">{item.codigo_fornecedor}</TableCell>
                         <TableCell>{item.descricao_limpa}</TableCell>
                         <TableCell>
-                          <Select value={item.produto_id || ""} onValueChange={(value) => handleProductChange(index, value)}>
-                            <SelectTrigger><SelectValue placeholder="Selecionar produto" /></SelectTrigger>
-                            <SelectContent>{produtos.map((produto) => <SelectItem key={produto.id} value={produto.id}>{produto.code ? `${produto.code} - ` : ""}{produto.name}</SelectItem>)}</SelectContent>
-                          </Select>
+                          <Popover
+                            open={productPopoverOpen === index}
+                            onOpenChange={(o) => setProductPopoverOpen(o ? index : null)}
+                          >
+                            <PopoverTrigger asChild>
+                              <Button variant="outline" role="combobox" className="w-[260px] justify-between font-normal">
+                                <span className="truncate text-left">
+                                  {item.produto_id
+                                    ? (produtos.find((p) => p.id === item.produto_id)?.name || "Selecionar produto")
+                                    : "Selecionar produto"}
+                                </span>
+                                <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent
+                              className="w-[320px] p-0 z-[9999] pointer-events-auto"
+                              align="start"
+                              onOpenAutoFocus={(e) => e.preventDefault()}
+                            >
+                              <Command>
+                                <CommandInput placeholder="Digite parte do nome..." />
+                                <CommandList>
+                                  <CommandEmpty>Nenhum produto encontrado.</CommandEmpty>
+                                  <CommandGroup>
+                                    {produtos.map((p) => (
+                                      <CommandItem
+                                        key={p.id}
+                                        value={`${p.code || ""} ${p.name}`}
+                                        onSelect={() => {
+                                          handleProductChange(index, p.id);
+                                          setProductPopoverOpen(null);
+                                        }}
+                                      >
+                                        <div className="flex flex-col">
+                                          <span className="font-medium">{p.name}</span>
+                                          <span className="text-xs text-muted-foreground">Cód: {p.code}</span>
+                                        </div>
+                                      </CommandItem>
+                                    ))}
+                                  </CommandGroup>
+                                </CommandList>
+                              </Command>
+                            </PopoverContent>
+                          </Popover>
                           {item.produto_id && (
                             <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
                               <Checkbox checked={!!item.salvar_vinculo} onCheckedChange={(checked) => setItens((current) => current.map((row, i) => i === index ? { ...row, salvar_vinculo: checked === true } : row))} />
@@ -410,16 +488,51 @@ export default function NfeImport() {
                             </label>
                           )}
                         </TableCell>
-                        <TableCell><Button variant="outline" size="sm" onClick={() => openQuickProduct(index)}><Plus className="h-4 w-4" /></Button></TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button variant="outline" size="sm" onClick={() => openQuickProduct(index)} title="Cadastro rápido"><Plus className="h-4 w-4" /></Button>
+                            <Button variant="ghost" size="sm" onClick={() => removeItem(index)} title="Excluir linha"><Trash2 className="h-4 w-4 text-red-600" /></Button>
+                          </div>
+                        </TableCell>
                         <TableCell>{item.unidade}</TableCell>
-                        <TableCell className="text-right">{formatNumber(item.quantidade, 4)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(item.valor_unitario, 4)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(item.valor_total)}</TableCell>
+                        <TableCell className="text-right">
+                          <Input
+                            type="number"
+                            step="0.0001"
+                            value={item.quantidade}
+                            onChange={(e) => updateItemField(index, { quantidade: Number(e.target.value) })}
+                            className="w-24 text-right"
+                          />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Input
+                            type="number"
+                            step="0.0001"
+                            value={item.valor_unitario}
+                            onChange={(e) => updateItemField(index, { valor_unitario: Number(e.target.value) })}
+                            className="w-28 text-right"
+                          />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={item.valor_total}
+                            onChange={(e) => setItens((current) => current.map((row, i) => i === index ? { ...row, valor_total: Number(e.target.value) } : row))}
+                            className="w-28 text-right"
+                          />
+                        </TableCell>
                         <TableCell><StatusBadge status={item.status_vinculo} /></TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
+              </div>
+
+              <div>
+                <Button variant="outline" size="sm" onClick={addEmptyItem}>
+                  <Plus className="h-4 w-4 mr-2" /> Inserir nova linha
+                </Button>
               </div>
 
               <div className="grid gap-3 md:grid-cols-4 text-sm">
