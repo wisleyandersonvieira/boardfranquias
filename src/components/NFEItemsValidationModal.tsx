@@ -33,7 +33,7 @@ interface Store {
 interface Product {
   id: string;
   name: string;
-  code: string;
+  code?: string;
 }
 
 interface NFEItemsValidationModalProps {
