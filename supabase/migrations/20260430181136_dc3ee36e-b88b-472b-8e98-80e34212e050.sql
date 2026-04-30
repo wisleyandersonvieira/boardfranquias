@@ -1,0 +1,1 @@
+ALTER TABLE public.nfe_importacoes ALTER COLUMN chave_acesso DROP NOT NULL;
