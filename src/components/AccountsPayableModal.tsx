@@ -5056,6 +5056,7 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
           nfeItems={nfeItems}
           stores={stores}
           supplierId={supplierId}
+          products={products}
           onItemsValidated={handleValidatedItems}
         />
 
