@@ -7,7 +7,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, AlertCircle, Edit2, Save, X } from "lucide-react";
+import { CheckCircle, AlertCircle, Trash2, Plus, Search } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { cn } from "@/lib/utils";
 
 interface NFEItem {
   codigo: string;
@@ -30,7 +33,7 @@ interface Store {
 interface Product {
   id: string;
   name: string;
-  code: string;
+  code?: string;
 }
 
 interface NFEItemsValidationModalProps {
@@ -39,6 +42,7 @@ interface NFEItemsValidationModalProps {
   nfeItems: NFEItem[];
   stores: Store[];
   supplierId: string;
+  products?: Product[];
   onItemsValidated: (validatedItems: any[]) => void;
 }
 
@@ -48,12 +52,12 @@ export const NFEItemsValidationModal = ({
   nfeItems,
   stores,
   supplierId,
+  products = [],
   onItemsValidated
 }: NFEItemsValidationModalProps) => {
   const [items, setItems] = useState<NFEItem[]>([]);
   const [globalStoreId, setGlobalStoreId] = useState("");
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [editingItem, setEditingItem] = useState<NFEItem | null>(null);
+  const [productPopoverOpen, setProductPopoverOpen] = useState<number | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -75,24 +79,46 @@ export const NFEItemsValidationModal = ({
     }
   };
 
-  const handleEditItem = (index: number) => {
-    setEditingIndex(index);
-    setEditingItem({ ...items[index] });
+  const updateItem = (index: number, patch: Partial<NFEItem>) => {
+    setItems((prev) => {
+      const next = [...prev];
+      const merged = { ...next[index], ...patch };
+      // Recalcular total quando qtd ou valor unit mudam
+      if (patch.quantidade !== undefined || patch.valor_unitario !== undefined) {
+        merged.valor_total = Number(((merged.quantidade || 0) * (merged.valor_unitario || 0)).toFixed(2));
+      }
+      next[index] = merged;
+      return next;
+    });
   };
 
-  const handleSaveEdit = () => {
-    if (editingIndex !== null && editingItem) {
-      const updatedItems = [...items];
-      updatedItems[editingIndex] = { ...editingItem };
-      setItems(updatedItems);
-      setEditingIndex(null);
-      setEditingItem(null);
-    }
+  const handleSelectProduct = (index: number, product: Product) => {
+    updateItem(index, {
+      product_id: product.id,
+      product_name: product.name,
+      found: true,
+    });
+    setProductPopoverOpen(null);
   };
 
-  const handleCancelEdit = () => {
-    setEditingIndex(null);
-    setEditingItem(null);
+  const handleRemoveItem = (index: number) => {
+    setItems((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleAddItem = () => {
+    setItems((prev) => [
+      ...prev,
+      {
+        codigo: "",
+        descricao: "",
+        quantidade: 1,
+        valor_unitario: 0,
+        valor_total: 0,
+        store_id: globalStoreId || undefined,
+        store_name: stores.find((s) => s.id === globalStoreId)?.name,
+        found: false,
+      },
+    ]);
   };
 
   const handleItemStoreChange = (index: number, storeId: string) => {
@@ -106,15 +132,6 @@ export const NFEItemsValidationModal = ({
       };
       setItems(updatedItems);
     }
-  };
-
-  const adjustItemValue = (index: number, newValue: number) => {
-    const updatedItems = [...items];
-    updatedItems[index] = {
-      ...updatedItems[index],
-      valor_total: newValue
-    };
-    setItems(updatedItems);
   };
 
   const getTotalValue = () => {
@@ -254,77 +271,83 @@ export const NFEItemsValidationModal = ({
                         </TableCell>
                         <TableCell className="font-mono text-sm">{item.codigo}</TableCell>
                         <TableCell>
-                          {editingIndex === index ? (
-                            <Input
-                              value={editingItem?.descricao || ""}
-                              onChange={(e) => setEditingItem(prev => prev ? {...prev, descricao: e.target.value} : null)}
-                              className="min-w-[200px]"
-                            />
-                          ) : (
-                            <div>
-                              <div className="font-medium">{item.product_name || item.descricao}</div>
-                              {item.found && item.product_name && (
-                                <div className="text-xs text-green-600">✓ Produto cadastrado</div>
-                              )}
-                              {!item.found && (
-                                <div className="text-xs text-orange-600">⚠ Código não encontrado</div>
-                              )}
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {editingIndex === index ? (
-                            <Input
-                              type="number"
-                              step="0.01"
-                              value={editingItem?.quantidade || 0}
-                              onChange={(e) => setEditingItem(prev => prev ? {...prev, quantidade: Number(e.target.value)} : null)}
-                              className="w-20"
-                            />
-                          ) : (
-                            item.quantidade
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {editingIndex === index ? (
-                            <Input
-                              type="number"
-                              step="0.01"
-                              value={editingItem?.valor_unitario || 0}
-                              onChange={(e) => setEditingItem(prev => prev ? {...prev, valor_unitario: Number(e.target.value)} : null)}
-                              className="w-24"
-                            />
-                          ) : (
-                            `R$ ${item.valor_unitario.toFixed(2)}`
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {editingIndex === index ? (
-                            <Input
-                              type="number"
-                              step="0.01"
-                              value={editingItem?.valor_total || 0}
-                              onChange={(e) => setEditingItem(prev => prev ? {...prev, valor_total: Number(e.target.value)} : null)}
-                              className="w-24"
-                            />
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <span>R$ {item.valor_total.toFixed(2)}</span>
+                          <Popover
+                            open={productPopoverOpen === index}
+                            onOpenChange={(o) => setProductPopoverOpen(o ? index : null)}
+                          >
+                            <PopoverTrigger asChild>
                               <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  const newValue = prompt("Ajustar valor total:", item.valor_total.toString());
-                                  if (newValue) {
-                                    adjustItemValue(index, parseFloat(newValue));
-                                  }
-                                }}
-                                className="h-6 w-6 p-0"
+                                variant="outline"
+                                role="combobox"
+                                className="w-[260px] justify-between font-normal"
                               >
-                                <Edit2 className="h-3 w-3" />
+                                <span className="truncate text-left">
+                                  {item.product_name || item.descricao || "Selecionar produto"}
+                                </span>
+                                <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                               </Button>
-                            </div>
+                            </PopoverTrigger>
+                            <PopoverContent
+                              className="w-[320px] p-0 z-[9999] pointer-events-auto"
+                              align="start"
+                              onOpenAutoFocus={(e) => e.preventDefault()}
+                            >
+                              <Command>
+                                <CommandInput placeholder="Digite parte do nome..." />
+                                <CommandList>
+                                  <CommandEmpty>Nenhum produto encontrado.</CommandEmpty>
+                                  <CommandGroup>
+                                    {products.map((p) => (
+                                      <CommandItem
+                                        key={p.id}
+                                        value={`${p.code} ${p.name}`}
+                                        onSelect={() => handleSelectProduct(index, p)}
+                                      >
+                                        <div className="flex flex-col">
+                                          <span className="font-medium">{p.name}</span>
+                                          <span className="text-xs text-muted-foreground">Cód: {p.code}</span>
+                                        </div>
+                                      </CommandItem>
+                                    ))}
+                                  </CommandGroup>
+                                </CommandList>
+                              </Command>
+                            </PopoverContent>
+                          </Popover>
+                          {!item.found && (
+                            <div className="text-xs text-orange-600 mt-1">⚠ Selecione o produto</div>
                           )}
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={item.quantidade}
+                            onChange={(e) => updateItem(index, { quantidade: Number(e.target.value) })}
+                            className="w-20"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={item.valor_unitario}
+                            onChange={(e) => updateItem(index, { valor_unitario: Number(e.target.value) })}
+                            className="w-24"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={item.valor_total}
+                            onChange={(e) => setItems((prev) => {
+                              const n = [...prev];
+                              n[index] = { ...n[index], valor_total: Number(e.target.value) };
+                              return n;
+                            })}
+                            className="w-24"
+                          />
                         </TableCell>
                         <TableCell>
                           <Select
@@ -344,40 +367,25 @@ export const NFEItemsValidationModal = ({
                           </Select>
                         </TableCell>
                         <TableCell>
-                          {editingIndex === index ? (
-                            <div className="flex gap-1">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={handleSaveEdit}
-                                className="h-8 w-8 p-0"
-                              >
-                                <Save className="h-4 w-4 text-green-600" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={handleCancelEdit}
-                                className="h-8 w-8 p-0"
-                              >
-                                <X className="h-4 w-4 text-red-600" />
-                              </Button>
-                            </div>
-                          ) : (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleEditItem(index)}
-                              className="h-8 w-8 p-0"
-                            >
-                              <Edit2 className="h-4 w-4" />
-                            </Button>
-                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveItem(index)}
+                            className="h-8 w-8 p-0"
+                            title="Excluir linha"
+                          >
+                            <Trash2 className="h-4 w-4 text-red-600" />
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
+                <div className="mt-4">
+                  <Button variant="outline" size="sm" onClick={handleAddItem}>
+                    <Plus className="h-4 w-4 mr-2" /> Inserir nova linha
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
