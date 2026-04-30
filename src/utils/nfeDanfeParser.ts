@@ -43,9 +43,17 @@ export interface NfeParseResult {
 }
 
 const BR_NUMBER = "\\d{1,3}(?:\\.\\d{3})*,\\d{2,4}|\\d+,\\d{2,4}";
+// Pattern A: NCM CST CFOP UN + 5..8 numbers (single-line layout, e.g. plain text exports)
 const FISCAL_LINE_REGEX = new RegExp(
-  `^(\\d{8})\\s+(\\d{2,3})\\s+(\\d{4})\\s+([A-Z]{1,6})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})(?:\\s+(${BR_NUMBER}))?(?:\\s+(${BR_NUMBER}))?(?:\\s+(${BR_NUMBER}))?(?:\\s+(${BR_NUMBER}))?(?:\\s+(${BR_NUMBER}))?.*$`,
+  `(\\d{8})\\s+(\\d{2,3})\\s+(\\d{4})\\s+([A-Z]{1,6})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})(?:\\s+(${BR_NUMBER}))?(?:\\s+(${BR_NUMBER}))?(?:\\s+(${BR_NUMBER}))?(?:\\s+(${BR_NUMBER}))?(?:\\s+(${BR_NUMBER}))?`,
   "i",
+);
+
+// Pattern B: NCM CFOP UN + 8 numbers + CST (DANFE PDF layout where CST is rendered after the row)
+// e.g. "21050090 6401 CX 20,0000 38,9637 779,27 779,27 54,55 25,33 7,00 3,25 010"
+const FISCAL_LINE_REGEX_B = new RegExp(
+  `(\\d{8})\\s+(\\d{4})\\s+([A-Z]{1,6})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})\\s+(\\d{3})`,
+  "gi",
 );
 
 export function parseBrazilianNumber(valor?: string | number | null): number {
@@ -61,9 +69,23 @@ export function parseBrazilianNumber(valor?: string | number | null): number {
 }
 
 export function cleanNfeItemDescription(description: string): string {
-  return description
-    .replace(/\((F|R|O|Z|Q|V|TRIB|B|E)\)[\s\S]{0,80}?\(\/\1\)/gi, " ")
+  let s = description;
+  // Normalize whitespace inside tag tokens that may have been split by PDF line breaks.
+  // e.g. "( /TRIB)", "(/T RIB)", "( Z)N ( /Z)" -> "(/TRIB)", "(Z)N(/Z)"
+  s = s.replace(/\(\s*\/?\s*([A-Za-z]{1,6})\s*\)/g, (_m, tag) => `(${tag.startsWith("/") ? tag : (tag.length === 0 ? "" : tag)})`);
+  // Re-add the slash where present. Easier alternative: explicit normalization below.
+  s = description
+    // collapse internal whitespace inside tag parentheses: ( /TRIB ) -> (/TRIB), (TR IB) -> (TRIB)
+    .replace(/\(\s*([\/A-Za-z]{1,8})\s*\)/g, (_m, inner) => `(${inner.replace(/\s+/g, "")})`)
+    .replace(/\(([^)]*)\)/g, (m, inner) => {
+      // Inner may still contain spaces around the slash
+      const cleaned = inner.replace(/\s+/g, "");
+      return /^\/?(F|R|O|Z|Q|V|TRIB|B|E)$/i.test(cleaned) ? `(${cleaned})` : m;
+    });
+  return s
+    .replace(/\((F|R|O|Z|Q|V|TRIB|B|E)\)[\s\S]{0,160}?\(\/\1\)/gi, " ")
     .replace(/\((?:\/)?(?:F|R|O|Z|Q|V|TRIB|B|E)\)/gi, " ")
+    .replace(/\bSUB\s+TRIB\b[^\n]*?(?=$|\n|[A-Z]{3,})/gi, " ")
     .replace(/\bSUB\s+TRIB\b/gi, " ")
     .replace(/\bBase\s*:\s*[\d.,]+/gi, " ")
     .replace(/\bValor\s*:\s*[\d.,]+/gi, " ")
@@ -71,6 +93,7 @@ export function cleanNfeItemDescription(description: string): string {
     .replace(/\b\d{8,14}\b/g, " ")
     .replace(/\s+/g, " ")
     .replace(/\s+([,.;:])/g, "$1")
+    .replace(/[-]\s*$/, "")
     .trim();
 }
 
@@ -115,28 +138,77 @@ function parseCabecalho(text: string): NfeCabecalho {
 }
 
 function parseItens(text: string): NfeItemImportado[] {
-  const block = extractProdutosBlock(text);
-  const lines = block
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .filter((line) => !isRepeatedProductHeader(line));
-
   const items: NfeItemImportado[] = [];
+  // Combine all "DADOS DOS PRODUTOS" blocks (multi-page DANFE)
+  const blocks = extractAllProdutosBlocks(text);
+
+  for (const block of blocks) {
+    items.push(...parseItensFromBlock(block));
+  }
+
+  // De-duplicate items that may repeat across page headers
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = `${item.codigo_fornecedor}|${item.quantidade}|${item.valor_total}|${item.descricao_limpa.slice(0, 40)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function parseItensFromBlock(block: string): NfeItemImportado[] {
+  const items: NfeItemImportado[] = [];
+  // Collapse all whitespace to single space for easier matching while preserving content
+  const flat = block.replace(/\s+/g, " ").trim();
+
+  // Strip the column-header preamble if present
+  const cleaned = flat.replace(/^.*?(?:ALÍQUOTAS\s+ICMS\s+IPI|VALOR\s+IPI[^0-9]*)/i, "");
+
+  // Try Pattern B first (DANFE PDF layout: NCM CFOP UN ... CST)
+  let matches = [...cleaned.matchAll(FISCAL_LINE_REGEX_B)];
+  if (matches.length > 0) {
+    let cursor = 0;
+    for (const match of matches) {
+      const segment = cleaned.slice(cursor, match.index!).trim();
+      cursor = match.index! + match[0].length;
+      const codeMatch = segment.match(/^(\d{1,8})\s+([\s\S]+)$/);
+      if (!codeMatch) continue;
+      const code = codeMatch[1];
+      const description = codeMatch[2];
+      // Reorder Pattern B groups to match buildItem's expected layout (NCM, CST, CFOP, UN, qty, vu, vt, bc, vicms, vipi, aIcms, aIpi)
+      const reordered = [
+        match[0],
+        match[1], // NCM
+        match[12], // CST
+        match[2], // CFOP
+        match[3], // UN
+        match[4], // QTD
+        match[5], // VU
+        match[6], // VT
+        match[7], // BC
+        match[8], // V_ICMS
+        match[9], // V_IPI
+        match[10], // ALIQ_ICMS
+        match[11], // ALIQ_IPI
+      ] as unknown as RegExpMatchArray;
+      items.push(buildItem(code, description, reordered));
+    }
+    return items;
+  }
+
+  // Fallback: Pattern A (line-based)
+  const lines = block.split("\n").map((l) => l.trim()).filter(Boolean).filter((l) => !isRepeatedProductHeader(l));
   let currentCode = "";
   let descriptionLines: string[] = [];
-
   for (const line of lines) {
-    const start = line.match(/^(\d{1,8})\s+(.+)$/);
-    const fiscalLine = line.match(FISCAL_LINE_REGEX);
-
-    if (fiscalLine && currentCode) {
-      items.push(buildItem(currentCode, descriptionLines.join(" "), fiscalLine));
+    const fiscal = line.match(FISCAL_LINE_REGEX);
+    if (fiscal && currentCode) {
+      items.push(buildItem(currentCode, descriptionLines.join(" "), fiscal));
       currentCode = "";
       descriptionLines = [];
       continue;
     }
-
+    const start = line.match(/^(\d{1,8})\s+(.+)$/);
     if (start && !line.match(/^\d{8}\s+\d{2,3}\s+\d{4}\s+/)) {
       if (currentCode && descriptionLines.length > 0) {
         descriptionLines.push(line);
@@ -146,13 +218,22 @@ function parseItens(text: string): NfeItemImportado[] {
       }
       continue;
     }
-
-    if (currentCode) {
-      descriptionLines.push(line);
-    }
+    if (currentCode) descriptionLines.push(line);
   }
-
   return items;
+}
+
+function extractAllProdutosBlocks(text: string): string[] {
+  const blocks: string[] = [];
+  const startRegex = /DADOS\s+DOS\s+PRODUTOS\s*\/\s*SERVI[ÇC]OS/gi;
+  const endRegex = /(?:C[ÁA]LCULO\s+DO\s+ISSQN|DADOS\s+ADICIONAIS|INFORMA[ÇC][ÕO]ES\s+COMPLEMENTARES|RESERVADO\s+AO\s+FISCO|---PAGINA---)/i;
+  let m;
+  while ((m = startRegex.exec(text)) !== null) {
+    const sliced = text.slice(m.index + m[0].length);
+    const endMatch = sliced.match(endRegex);
+    blocks.push(endMatch ? sliced.slice(0, endMatch.index) : sliced);
+  }
+  return blocks.length > 0 ? blocks : [text];
 }
 
 function extractProdutosBlock(text: string): string {
