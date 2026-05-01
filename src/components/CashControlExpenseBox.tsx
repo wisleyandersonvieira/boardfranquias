@@ -1195,9 +1195,7 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
         />
       )}
       {nfeImportOpen && (
-        <div
-          className="fixed left-1/2 top-1/2 z-[60] -translate-x-1/2 -translate-y-1/2 w-[95vw] h-[95vh] bg-background border rounded-lg shadow-lg flex flex-col overflow-hidden"
-        >
+        <div className="fixed left-1/2 top-1/2 z-[60] -translate-x-1/2 -translate-y-1/2 w-[95vw] h-[95vh] bg-background border rounded-lg shadow-lg flex flex-col overflow-hidden pointer-events-auto">
           <div className="flex items-center justify-between px-6 py-3 border-b">
             <h2 className="text-lg font-semibold">Importar NF-e</h2>
             <Button
@@ -1212,25 +1210,24 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
               <X className="h-4 w-4" />
             </Button>
           </div>
-          <div className="flex-1 overflow-hidden" id="nfe-iframe-slot" />
         </div>
       )}
       {nfePreloaded && (
         <iframe
           src={`/nfe-import?embedded=1${expenseToLink ? `&linkExpenseId=${expenseToLink.id}&storeId=${storeId}` : ''}`}
           title="Importar NF-e"
-          ref={(el) => {
-            if (!el) return;
-            const slot = document.getElementById('nfe-iframe-slot');
-            if (nfeImportOpen && slot && el.parentElement !== slot) {
-              slot.appendChild(el);
-            } else if (!nfeImportOpen && el.parentElement?.id === 'nfe-iframe-slot') {
-              document.body.appendChild(el);
-            }
-          }}
           style={
             nfeImportOpen
-              ? { width: '100%', height: '100%', border: 0, display: 'block' }
+              ? {
+                  position: 'fixed',
+                  top: 'calc(50% - 47.5vh + 49px)',
+                  left: 'calc(50% - 47.5vw)',
+                  width: '95vw',
+                  height: 'calc(95vh - 49px)',
+                  border: 0,
+                  zIndex: 61,
+                  background: 'hsl(var(--background))',
+                }
               : {
                   position: 'fixed',
                   width: 1,
@@ -1240,6 +1237,7 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
                   border: 0,
                   left: -9999,
                   top: -9999,
+                  zIndex: -1,
                 }
           }
         />
