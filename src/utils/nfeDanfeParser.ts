@@ -64,6 +64,16 @@ const FISCAL_LINE_REGEX_C = new RegExp(
   "gi",
 );
 
+// Pattern D: FPDF-style DANFE (TGA-FPDF) — same column order as C, but:
+//  - CST is rendered as "Origem/CST" (e.g. "0/00", "0/060")
+//  - VALOR_IPI and ALIQ_IPI columns may be empty/absent (only 9 numbers after UN)
+// Layout: NCM (O/CST) CFOP UN QTD VU VT DESC BC VICMS ALIQ_ICMS [VIPI] [AIPI]
+// e.g. "48119019 0/00 5102 UN 30,0000 3,7500 112,50 0,00 112,50 19,13 17,00"
+const FISCAL_LINE_REGEX_D = new RegExp(
+  `(\\d{8})\\s+(\\d\\/\\d{2,3})\\s+(\\d{4})\\s+([A-Z]{1,6})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})(?:\\s+(${BR_NUMBER}))?(?:\\s+(${BR_NUMBER}))?`,
+  "gi",
+);
+
 export function parseBrazilianNumber(valor?: string | number | null): number {
   if (typeof valor === "number") return valor;
   if (!valor) return 0;
