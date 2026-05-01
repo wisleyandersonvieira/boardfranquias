@@ -384,7 +384,6 @@ export default function NfeImport() {
     if (!fornecedor?.id) return "Fornecedor da nota não localizado no cadastro.";
     if (!storeId) return "Selecione a loja/empresa da importação.";
     if (itens.some((item) => !item.produto_id)) return "Todos os itens precisam estar vinculados a um produto.";
-    if (Math.abs(diferenca) > 0.05) return "A soma dos itens diverge do total de produtos da nota.";
     return "";
   };
 
@@ -393,6 +392,14 @@ export default function NfeImport() {
     if (validation) {
       toast({ variant: "destructive", title: "Revise a importação", description: validation });
       return null;
+    }
+
+    if (Math.abs(diferenca) > 0.05) {
+      const totalNota = cabecalho?.valor_total_produtos || cabecalho?.valor_total_nota || 0;
+      const confirmar = window.confirm(
+        `Atenção: a soma dos itens (${formatCurrency(totalProdutos)}) diverge do total da nota (${formatCurrency(totalNota)}) em ${formatCurrency(diferenca)}.\n\nDeseja continuar a importação mesmo assim?`,
+      );
+      if (!confirmar) return null;
     }
 
     setSaving(true);
