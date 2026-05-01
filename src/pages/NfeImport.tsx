@@ -494,7 +494,7 @@ export default function NfeImport() {
     setGenerating(true);
     try {
       const { data: userData } = await supabase.auth.getUser();
-      const totalAmount = cabecalho.valor_total_nota || totalProdutos;
+      const totalAmount = totalProdutos || cabecalho.valor_total_nota || 0;
       const { data: payable, error } = await supabase.from("accounts_payable").insert({
         store_id: storeId,
         supplier_id: fornecedor.id,
