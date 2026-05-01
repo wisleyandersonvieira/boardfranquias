@@ -1166,21 +1166,55 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
       {/* Modal NF-e Import (iframe) */}
       <Dialog open={nfeImportOpen} onOpenChange={(open) => {
         setNfeImportOpen(open);
-        if (!open) fetchExpenses();
+        if (!open) {
+          fetchExpenses();
+          // mantém o preload por mais alguns segundos caso reabra rápido
+          setTimeout(() => setNfePreloaded(false), 5000);
+        }
       }}>
         <DialogContent className="max-w-[95vw] w-full h-[95vh] p-0 flex flex-col">
           <DialogHeader className="px-6 pt-6 pb-2">
             <DialogTitle>Importar NF-e</DialogTitle>
           </DialogHeader>
-          <div className="flex-1 overflow-hidden">
-            <iframe
-              src="/nfe-import"
-              title="Importar NF-e"
-              className="w-full h-full border-0"
-            />
-          </div>
+          <div className="flex-1 overflow-hidden" />
         </DialogContent>
       </Dialog>
+
+      {/*
+        Iframe pré-carregado: monta assim que a modal de escolha abre,
+        ficando invisível até o usuário clicar em "Importar via NF-e".
+        Isso elimina a espera de carregamento inicial da página NF-e.
+      */}
+      {nfePreloaded && (
+        <iframe
+          src={`/nfe-import?embedded=1${expenseToLink ? `&linkExpenseId=${expenseToLink.id}&storeId=${storeId}` : ''}`}
+          title="Importar NF-e (preload)"
+          style={
+            nfeImportOpen
+              ? {
+                  position: 'fixed',
+                  top: '5vh',
+                  left: '2.5vw',
+                  width: '95vw',
+                  height: '85vh',
+                  border: 0,
+                  zIndex: 60,
+                  background: 'hsl(var(--background))',
+                  borderRadius: 8,
+                }
+              : {
+                  position: 'fixed',
+                  width: 1,
+                  height: 1,
+                  opacity: 0,
+                  pointerEvents: 'none',
+                  border: 0,
+                  left: -9999,
+                  top: -9999,
+                }
+          }
+        />
+      )}
 
       {/* Expanded View Modal */}
       <Dialog open={expandedView} onOpenChange={setExpandedView}>
