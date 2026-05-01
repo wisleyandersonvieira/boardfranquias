@@ -521,6 +521,31 @@ export default function NfeImport() {
     try {
       const { data: userData } = await supabase.auth.getUser();
       const totalAmount = totalProdutos || cabecalho.valor_total_nota || 0;
+      // Recupera o caminho do PDF salvo (se houver) para anexar no contas a pagar
+      let pdfAttachmentPath: string | null = null;
+      let pdfAttachmentName: string | null = null;
+      let pdfAttachmentSize: number | null = null;
+      try {
+        const { data: impRow } = await supabaseAny
+          .from("nfe_importacoes")
+          .select("arquivo_path, arquivo_nome")
+          .eq("id", id)
+          .maybeSingle();
+        pdfAttachmentPath = impRow?.arquivo_path || null;
+        pdfAttachmentName = impRow?.arquivo_nome || (cabecalho.numero_nfe ? `NFe-${cabecalho.numero_nfe}.pdf` : "NFe.pdf");
+        pdfAttachmentSize = file?.size || null;
+      } catch {}
+
+      const initialAttachments = pdfAttachmentPath
+        ? [{
+            name: pdfAttachmentName || "NFe.pdf",
+            url: pdfAttachmentPath,
+            path: pdfAttachmentPath,
+            size: pdfAttachmentSize || undefined,
+            type: "application/pdf",
+          }]
+        : [];
+
       const { data: payable, error } = await supabase.from("accounts_payable").insert({
         store_id: storeId,
         supplier_id: fornecedor.id,
@@ -535,6 +560,7 @@ export default function NfeImport() {
         status: "pending",
         created_by: userData.user?.id,
         notes: `Importação NF-e: ${id}`,
+        attachments: initialAttachments,
       } as any).select("id").single();
       if (error) throw error;
 
