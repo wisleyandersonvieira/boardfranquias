@@ -16,7 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, CheckCircle2, FileText, History, Loader2, Plus, Save, Search, Trash2, Upload, WalletCards } from "lucide-react";
+import { ArrowLeft, CheckCircle2, FileText, History, Loader2, Plus, Save, Search, Trash2, Upload, WalletCards, RefreshCw } from "lucide-react";
 
 type Produto = { id: string; code: string | null; name: string; unit_id?: string | null };
 type Fornecedor = { id: string; name: string; cnpj_cpf?: string | null };
