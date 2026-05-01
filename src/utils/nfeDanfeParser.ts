@@ -136,9 +136,14 @@ function parseCabecalho(text: string): NfeCabecalho {
   const chave = firstMatch(text, /(?:CHAVE\s+DE\s+ACESSO|Chave\s+de\s+acesso)\s*[:\n ]+((?:\d[\s.]*){44})/i)
     ?.replace(/\D/g, "");
   const cnpjs = [...text.matchAll(/\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/g)].map((m) => m[0]);
-  const numeroNfe =
-    firstMatch(text, /NF-?e\s*(?:N[º°o.]*)?\s*(\d{1,12})/i) ||
-    firstMatch(text, /N[º°]\s*([\d.]{1,15})/i)?.replace(/\D/g, "");
+  // Aceita formatos como "NF-e Nº. 000.082.766", "Nº 82766", "Nº.000082766" (com ou sem pontos como separadores).
+  // Remove pontos/zeros à esquerda no resultado.
+  const rawNumero =
+    firstMatch(text, /NF-?e\s*N[º°o.]*\s*([\d.]{1,15})/i) ||
+    firstMatch(text, /N[º°o]\.?\s*([\d.]{1,15})/i) ||
+    firstMatch(text, /NF-?e\s*(\d{1,12})/i);
+  const numeroNfeDigits = rawNumero?.replace(/\D/g, "")?.replace(/^0+/, "");
+  const numeroNfe = numeroNfeDigits || undefined;
   const serie = firstMatch(text, /S[ÉE]RIE\s*(?:[:\n ]+)?(\d{1,4})/i);
 
   return {
