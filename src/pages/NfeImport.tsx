@@ -238,7 +238,22 @@ export default function NfeImport() {
         pages.push(content.items.map((item: any) => item.str).join("\n"));
       }
 
-      const parsed = parseNfePdf(pages.join("\n\n---PAGINA---\n\n"));
+      const fullText = pages.join("\n\n---PAGINA---\n\n");
+      const parsed = parseNfePdf(fullText);
+
+      // Quality check: PDFs gerados por foto/scan (mlkit, scanners) não trazem camada de texto.
+      // Se o parser não extraiu nenhum item, avisar e abortar.
+      if (parsed.itens.length === 0) {
+        const lettersCount = (fullText.match(/[A-Za-zÀ-ÿ]/g) || []).length;
+        const looksScanned = fullText.trim().length < 500 || lettersCount < 100;
+        const description = looksScanned
+          ? "Este PDF parece ser uma imagem digitalizada (foto/scan), sem texto pesquisável. Por favor, importe o PDF original da NF-e (gerado pelo emissor ou baixado da SEFAZ) com melhor qualidade."
+          : "Não foi possível identificar os itens nesta NF-e. Por favor, importe um PDF com melhor qualidade ou o arquivo original da NF-e.";
+        setStatus("PDF sem itens reconhecíveis.");
+        toast({ variant: "destructive", title: "Não foi possível ler os itens", description });
+        return;
+      }
+
       if (parsed.cabecalho.chave_acesso) {
         const { data: existing } = await supabaseAny
           .from("nfe_importacoes")
