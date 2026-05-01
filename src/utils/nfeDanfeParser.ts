@@ -128,7 +128,7 @@ function parseCabecalho(text: string): NfeCabecalho {
   const cnpjs = [...text.matchAll(/\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/g)].map((m) => m[0]);
   const numeroNfe =
     firstMatch(text, /NF-?e\s*(?:N[º°o.]*)?\s*(\d{1,12})/i) ||
-    firstMatch(text, /N[º°]\s*(\d{1,12})/i);
+    firstMatch(text, /N[º°]\s*([\d.]{1,15})/i)?.replace(/\D/g, "");
   const serie = firstMatch(text, /S[ÉE]RIE\s*(?:[:\n ]+)?(\d{1,4})/i);
 
   return {
@@ -204,6 +204,39 @@ function parseItensFromBlock(block: string): NfeItemImportado[] {
     return items;
   }
 
+  // Try Pattern C (TGA-style 15-column table with DESCONTO column)
+  const matchesC = [...cleaned.matchAll(FISCAL_LINE_REGEX_C)];
+  if (matchesC.length > 0) {
+    let cursor = 0;
+    for (const match of matchesC) {
+      const segment = cleaned.slice(cursor, match.index!).trim();
+      cursor = match.index! + match[0].length;
+      const codeMatch = segment.match(/^(\d{1,8})\s+([\s\S]+)$/);
+      if (!codeMatch) continue;
+      const code = codeMatch[1];
+      const description = codeMatch[2];
+      // Pattern C groups: 1=NCM 2=CST 3=CFOP 4=UN 5=QTD 6=VU 7=VT 8=DESC 9=BC 10=VICMS 11=VIPI 12=AICMS 13=AIPI
+      // Map to buildItem expected: NCM, CST, CFOP, UN, qty, vu, vt, bc, vicms, vipi, aIcms, aIpi (drop DESC)
+      const reordered = [
+        match[0],
+        match[1], // NCM
+        match[2], // CST
+        match[3], // CFOP
+        match[4], // UN
+        match[5], // QTD
+        match[6], // VU
+        match[7], // VT
+        match[9], // BC (skip DESC at index 8)
+        match[10], // V_ICMS
+        match[11], // V_IPI
+        match[12], // ALIQ_ICMS
+        match[13], // ALIQ_IPI
+      ] as unknown as RegExpMatchArray;
+      items.push(buildItem(code, description, reordered));
+    }
+    return items;
+  }
+
   // Fallback: Pattern A (line-based)
   const lines = block.split("\n").map((l) => l.trim()).filter(Boolean).filter((l) => !isRepeatedProductHeader(l));
   let currentCode = "";
@@ -233,7 +266,8 @@ function parseItensFromBlock(block: string): NfeItemImportado[] {
 
 function extractAllProdutosBlocks(text: string): string[] {
   const blocks: string[] = [];
-  const startRegex = /DADOS\s+DOS\s+PRODUTOS\s*\/\s*SERVI[ÇC]OS/gi;
+  // Match both "DADOS DOS PRODUTOS / SERVIÇOS" and TGA-style "DADOS DO PRODUTO / SERVIÇOS" (singular)
+  const startRegex = /DADOS\s+(?:DOS\s+PRODUTOS|DO\s+PRODUTO)\s*\/\s*SERVI[ÇC]OS/gi;
   const endRegex = /(?:C[ÁA]LCULO\s+DO\s+ISSQN|DADOS\s+ADICIONAIS|INFORMA[ÇC][ÕO]ES\s+COMPLEMENTARES|RESERVADO\s+AO\s+FISCO|---PAGINA---)/i;
   let m;
   while ((m = startRegex.exec(text)) !== null) {
@@ -304,8 +338,25 @@ function parseTotalProdutos(text: string): number | undefined {
 }
 
 function parseDuplicatas(text: string): NfeDuplicata[] {
-  const block = firstMatch(text, /FATURA\s*\/\s*DUPLICATA([\s\S]{0,900}?)(?:C[ÁA]LCULO|DADOS\s+DOS\s+PRODUTOS|TRANSPORTADOR)/i) || text;
-  return [...block.matchAll(/(\d{3})\s+Ve\.?\s*(\d{2}\/\d{2}\/\d{4})\s+R?\$?\s*([\d.]+,\d{2})/gi)].map((match) => ({
+  // Existing format: "FATURA / DUPLICATA ... 001 Ve.25/03/2025 R$79.006,50"
+  const block =
+    firstMatch(text, /FATURA\s*\/\s*DUPLICATA([\s\S]{0,900}?)(?:C[ÁA]LCULO|DADOS\s+(?:DOS\s+PRODUTOS|DO\s+PRODUTO)|TRANSPORTADOR)/i) ||
+    text;
+  const result = [...block.matchAll(/(\d{3})\s+Ve\.?\s*(\d{2}\/\d{2}\/\d{4})\s+R?\$?\s*([\d.]+,\d{2})/gi)].map((match) => ({
+    parcela: match[1],
+    vencimento: match[2],
+    valor: parseBrazilianNumber(match[3]),
+    valorOriginal: match[3],
+  }));
+  if (result.length > 0) return result;
+
+  // Fallback: TGA-style table format ("DUPLICATAS ... 001 25/05/2026 169,10 ... CÁLCULO DO IMPOSTO")
+  const tableBlock = firstMatch(
+    text,
+    /DUPLICATAS([\s\S]{0,1500}?)(?:C[ÁA]LCULO\s+DO\s+IMPOSTO|TRANSPORTADOR|DADOS\s+(?:DOS\s+PRODUTOS|DO\s+PRODUTO))/i,
+  );
+  if (!tableBlock) return [];
+  return [...tableBlock.matchAll(/(\d{3})\s+(\d{2}\/\d{2}\/\d{4})\s+([\d.]+,\d{2})/g)].map((match) => ({
     parcela: match[1],
     vencimento: match[2],
     valor: parseBrazilianNumber(match[3]),
