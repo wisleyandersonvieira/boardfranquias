@@ -1178,45 +1178,59 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
         </DialogContent>
       </Dialog>
 
-      {/* Modal NF-e Import (iframe) */}
-      <Dialog open={nfeImportOpen} onOpenChange={(open) => {
-        setNfeImportOpen(open);
-        if (!open) {
-          fetchExpenses();
-          // mantém o preload por mais alguns segundos caso reabra rápido
-          setTimeout(() => setNfePreloaded(false), 5000);
-        }
-      }}>
-        <DialogContent className="max-w-[95vw] w-full h-[95vh] p-0 flex flex-col">
-          <DialogHeader className="px-6 pt-6 pb-2">
-            <DialogTitle>Importar NF-e</DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 overflow-hidden" />
-        </DialogContent>
-      </Dialog>
-
       {/*
-        Iframe pré-carregado: monta assim que a modal de escolha abre,
-        ficando invisível até o usuário clicar em "Importar via NF-e".
-        Isso elimina a espera de carregamento inicial da página NF-e.
+        Modal NF-e Import — implementação manual (sem Radix Dialog) para evitar
+        que o focus-trap do Radix interfira no foco/cliques dentro do iframe.
+        O iframe é pré-carregado escondido assim que a modal de escolha abre,
+        e revelado quando o usuário clica em "Importar via NF-e".
       */}
+      {nfeImportOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60"
+          onClick={() => {
+            setNfeImportOpen(false);
+            fetchExpenses();
+            setTimeout(() => setNfePreloaded(false), 5000);
+          }}
+        />
+      )}
+      {nfeImportOpen && (
+        <div
+          className="fixed left-1/2 top-1/2 z-[60] -translate-x-1/2 -translate-y-1/2 w-[95vw] h-[95vh] bg-background border rounded-lg shadow-lg flex flex-col overflow-hidden"
+        >
+          <div className="flex items-center justify-between px-6 py-3 border-b">
+            <h2 className="text-lg font-semibold">Importar NF-e</h2>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setNfeImportOpen(false);
+                fetchExpenses();
+                setTimeout(() => setNfePreloaded(false), 5000);
+              }}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="flex-1 overflow-hidden" id="nfe-iframe-slot" />
+        </div>
+      )}
       {nfePreloaded && (
         <iframe
           src={`/nfe-import?embedded=1${expenseToLink ? `&linkExpenseId=${expenseToLink.id}&storeId=${storeId}` : ''}`}
-          title="Importar NF-e (preload)"
+          title="Importar NF-e"
+          ref={(el) => {
+            if (!el) return;
+            const slot = document.getElementById('nfe-iframe-slot');
+            if (nfeImportOpen && slot && el.parentElement !== slot) {
+              slot.appendChild(el);
+            } else if (!nfeImportOpen && el.parentElement?.id === 'nfe-iframe-slot') {
+              document.body.appendChild(el);
+            }
+          }}
           style={
             nfeImportOpen
-              ? {
-                  position: 'fixed',
-                  top: '5vh',
-                  left: '2.5vw',
-                  width: '95vw',
-                  height: '85vh',
-                  border: 0,
-                  zIndex: 60,
-                  background: 'hsl(var(--background))',
-                  borderRadius: 8,
-                }
+              ? { width: '100%', height: '100%', border: 0, display: 'block' }
               : {
                   position: 'fixed',
                   width: 1,
