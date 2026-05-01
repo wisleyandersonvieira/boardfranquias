@@ -80,6 +80,10 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
   // Link to accounts payable modal
   const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [expenseToLink, setExpenseToLink] = useState<Expense | null>(null);
+
+  // Choice modal (Importar via NF-e ou Importar)
+  const [linkChoiceOpen, setLinkChoiceOpen] = useState(false);
+  const [nfeImportOpen, setNfeImportOpen] = useState(false);
   
   // Form fields
   const [issueDate, setIssueDate] = useState("");
@@ -96,7 +100,7 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
 
   const handleOpenLinkModal = (expense: Expense) => {
     setExpenseToLink(expense);
-    setLinkModalOpen(true);
+    setLinkChoiceOpen(true);
   };
 
   useEffect(() => {
