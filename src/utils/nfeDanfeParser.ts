@@ -247,6 +247,42 @@ function parseItensFromBlock(block: string): NfeItemImportado[] {
     return items;
   }
 
+  // Try Pattern D (TGA-FPDF style: CST as "Origem/CST", VIPI/AIPI optional)
+  const matchesD = [...cleaned.matchAll(FISCAL_LINE_REGEX_D)];
+  if (matchesD.length > 0) {
+    let cursor = 0;
+    for (const match of matchesD) {
+      const segment = cleaned.slice(cursor, match.index!).trim();
+      cursor = match.index! + match[0].length;
+      const codeMatch = segment.match(/^(\d{1,8})\s+([\s\S]+)$/);
+      if (!codeMatch) continue;
+      const code = codeMatch[1];
+      const description = codeMatch[2];
+      // Pattern D groups: 1=NCM 2="O/CST" 3=CFOP 4=UN 5=QTD 6=VU 7=VT 8=DESC 9=BC 10=VICMS 11=AICMS 12=VIPI? 13=AIPI?
+      // Extract just CST from "Origem/CST" (e.g. "0/00" -> "00")
+      const cstParts = match[2].split("/");
+      const cstOnly = cstParts[1] || cstParts[0];
+      // Map to buildItem expected: NCM, CST, CFOP, UN, qty, vu, vt, bc, vicms, vipi, aIcms, aIpi (drop DESC)
+      const reordered = [
+        match[0],
+        match[1], // NCM
+        cstOnly, // CST (stripped from "O/CST")
+        match[3], // CFOP
+        match[4], // UN
+        match[5], // QTD
+        match[6], // VU
+        match[7], // VT
+        match[9], // BC (skip DESC at index 8)
+        match[10], // V_ICMS
+        match[12], // V_IPI (optional)
+        match[11], // ALIQ_ICMS
+        match[13], // ALIQ_IPI (optional)
+      ] as unknown as RegExpMatchArray;
+      items.push(buildItem(code, description, reordered));
+    }
+    return items;
+  }
+
   // Fallback: Pattern A (line-based)
   const lines = block.split("\n").map((l) => l.trim()).filter(Boolean).filter((l) => !isRepeatedProductHeader(l));
   let currentCode = "";
