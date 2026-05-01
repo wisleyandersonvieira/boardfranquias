@@ -434,14 +434,37 @@ export default function NfeImport() {
       } as any).select("id").single();
       if (error) throw error;
 
-      await supabase.from("accounts_payable_items").insert(itens.map((item) => ({
-        account_payable_id: payable.id,
-        product_id: item.produto_id,
-        quantity: item.quantidade,
-        unit_price: item.valor_unitario,
-        total_price: item.valor_total,
-        store_id: storeId,
-      })) as any);
+      // Carrega itens persistidos da importação (já têm produto_id confirmado)
+      const { data: importedItems, error: importedItemsError } = await supabaseAny
+        .from("nfe_importacao_itens")
+        .select("produto_id, quantidade, valor_unitario, valor_total")
+        .eq("importacao_id", id);
+      if (importedItemsError) throw importedItemsError;
+
+      const itemsToInsert = (importedItems || [])
+        .filter((it: any) => !!it.produto_id)
+        .map((it: any) => ({
+          account_payable_id: payable.id,
+          product_id: it.produto_id,
+          quantity: it.quantidade,
+          unit_price: it.valor_unitario,
+          total_price: it.valor_total,
+          store_id: storeId,
+        }));
+
+      if (itemsToInsert.length === 0) {
+        // Rollback: a conta sem itens não faz sentido para uma NF-e
+        await supabase.from("accounts_payable").delete().eq("id", payable.id);
+        throw new Error("Nenhum item vinculado a produto foi encontrado para esta importação. Vincule os produtos antes de gerar o Contas a Pagar.");
+      }
+
+      const { error: insertItemsError } = await supabase
+        .from("accounts_payable_items")
+        .insert(itemsToInsert as any);
+      if (insertItemsError) {
+        await supabase.from("accounts_payable").delete().eq("id", payable.id);
+        throw insertItemsError;
+      }
 
       await supabaseAny.from("nfe_importacoes").update({ status: "contas_pagar_gerado", contas_pagar_id: payable.id }).eq("id", id);
 
