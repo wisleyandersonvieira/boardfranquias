@@ -491,7 +491,7 @@ export default function NfeImport() {
       const { data: payable, error } = await supabase.from("accounts_payable").insert({
         store_id: storeId,
         supplier_id: fornecedor.id,
-        description: `NF-e nº ${cabecalho.numero_nfe || ""} - ${fornecedor.name}`,
+        description: `${apDocType} ${cabecalho.numero_nfe || ""}`.trim(),
         document_number: cabecalho.numero_nfe,
         document_type: apDocType,
         issue_date: apIssueDate,
