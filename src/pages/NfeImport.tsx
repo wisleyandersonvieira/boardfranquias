@@ -111,6 +111,12 @@ export default function NfeImport() {
     })();
   }, []);
 
+  // Pré-seleciona a loja quando recebida via query (modo embedded)
+  useEffect(() => {
+    if (presetStoreId && !storeId) setStoreId(presetStoreId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presetStoreId]);
+
   useEffect(() => { fetchHistorico(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [histLoja, histDataIni, histDataFim]);
 
   const fetchHistorico = async () => {
