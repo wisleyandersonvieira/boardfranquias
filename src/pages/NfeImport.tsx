@@ -146,6 +146,77 @@ export default function NfeImport() {
     fetchHistorico();
   };
 
+  const reloadImportacaoForRegenerate = async (imp: ImportacaoHistorico) => {
+    try {
+      // Carrega cabeçalho da importação
+      const { data: importData, error: impErr } = await supabaseAny
+        .from("nfe_importacoes")
+        .select("*, suppliers:fornecedor_id(id, name, cnpj_cpf)")
+        .eq("id", imp.id)
+        .single();
+      if (impErr) throw impErr;
+
+      // Carrega itens da importação
+      const { data: itemsData, error: itemsErr } = await supabaseAny
+        .from("nfe_importacao_itens")
+        .select("*, products:produto_id(name)")
+        .eq("importacao_id", imp.id);
+      if (itemsErr) throw itemsErr;
+
+      const cab: NfeCabecalho = {
+        numero_nfe: importData.numero_nfe,
+        serie: importData.serie,
+        chave_acesso: importData.chave_acesso,
+        fornecedor: importData.suppliers?.name,
+        cnpj_fornecedor: importData.suppliers?.cnpj_cpf,
+        data_emissao: importData.data_emissao
+          ? new Date(importData.data_emissao + "T12:00:00").toLocaleDateString("pt-BR")
+          : undefined,
+        valor_total_nota: Number(importData.valor_total_nota || 0),
+        valor_total_produtos: Number(importData.valor_total_produtos || 0),
+        duplicatas: Array.isArray(importData.vencimentos) ? importData.vencimentos : [],
+      };
+
+      const itensCarregados: ItemConferencia[] = (itemsData || []).map((it: any) => ({
+        codigo_fornecedor: it.codigo_fornecedor || "",
+        descricao_original_pdf: it.descricao_original_pdf || "",
+        descricao_limpa: it.descricao_limpa || "",
+        ncm: it.ncm || "",
+        cst: it.cst || "",
+        cfop: it.cfop || "",
+        unidade: it.unidade || "",
+        quantidade: Number(it.quantidade || 0),
+        valor_unitario: Number(it.valor_unitario || 0),
+        valor_total: Number(it.valor_total || 0),
+        valor_icms: it.valor_icms != null ? Number(it.valor_icms) : undefined,
+        valor_ipi: it.valor_ipi != null ? Number(it.valor_ipi) : undefined,
+        aliquota_icms: it.aliquota_icms != null ? Number(it.aliquota_icms) : undefined,
+        aliquota_ipi: it.aliquota_ipi != null ? Number(it.aliquota_ipi) : undefined,
+        produto_id: it.produto_id,
+        produto_nome: it.products?.name || "",
+        status_vinculo: it.produto_id ? "vinculado" : "nao_vinculado",
+      }));
+
+      setStoreId(importData.store_id);
+      setFornecedor(importData.suppliers ? { id: importData.suppliers.id, name: importData.suppliers.name, cnpj_cpf: importData.suppliers.cnpj_cpf } : null);
+      setCabecalho(cab);
+      setItens(itensCarregados);
+      setImportacaoId(imp.id);
+      setStatus("Importação carregada. Confirme os dados e clique em Gerar Contas a Pagar.");
+      // Abre o modal de geração diretamente
+      const issue = importData.data_emissao || "";
+      const firstDue = cab.duplicatas[0]?.vencimento;
+      setApIssueDate(issue);
+      setApCompetenceDate(issue ? issue.slice(0, 7) + "-01" : "");
+      setApDueDate(toIsoDate(firstDue) || issue);
+      setApDocType(docTypes.find((d) => /nfe|nf-?e|nota/i.test(d.name))?.code || "");
+      setShowApDialog(true);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Erro ao recarregar importação", description: e.message });
+    }
+  };
+
   const handleReadPdf = async () => {
     if (!file) {
       toast({ variant: "destructive", title: "Selecione um PDF", description: "Envie o arquivo da NF-e antes de ler." });
