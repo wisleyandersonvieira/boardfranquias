@@ -56,6 +56,14 @@ const FISCAL_LINE_REGEX_B = new RegExp(
   "gi",
 );
 
+// Pattern C: TGA-style DANFE — 15-column table with DESCONTO between Valor Total and Base ICMS
+// Layout: NCM CST CFOP UN QTD VU VT DESC BC VICMS VIPI ALIQ_ICMS ALIQ_IPI
+// e.g. "48119019 000 5102 UN 30,00 3,7500 112,50 0,00 112,50 19,13 0,00 17,00 0,00"
+const FISCAL_LINE_REGEX_C = new RegExp(
+  `(\\d{8})\\s+(\\d{2,3})\\s+(\\d{4})\\s+([A-Z]{1,6})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})`,
+  "gi",
+);
+
 export function parseBrazilianNumber(valor?: string | number | null): number {
   if (typeof valor === "number") return valor;
   if (!valor) return 0;
