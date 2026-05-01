@@ -111,6 +111,21 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
     fetchExpenses();
   }, [storeId, expenseType, referenceMonth, referenceYear]);
 
+  // Escuta o iframe NF-e para fechar e atualizar quando o vínculo for concluído
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      const data = event.data;
+      if (data && typeof data === "object" && data.type === "nfe-import-done") {
+        setNfeImportOpen(false);
+        setNfePreloaded(false);
+        setExpenseToLink(null);
+        fetchExpenses();
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
+
   const fetchExpenses = async () => {
     setLoading(true);
     try {
