@@ -64,6 +64,16 @@ const FISCAL_LINE_REGEX_C = new RegExp(
   "gi",
 );
 
+// Pattern D: FPDF-style DANFE (TGA-FPDF) — same column order as C, but:
+//  - CST is rendered as "Origem/CST" (e.g. "0/00", "0/060")
+//  - VALOR_IPI and ALIQ_IPI columns may be empty/absent (only 9 numbers after UN)
+// Layout: NCM (O/CST) CFOP UN QTD VU VT DESC BC VICMS ALIQ_ICMS [VIPI] [AIPI]
+// e.g. "48119019 0/00 5102 UN 30,0000 3,7500 112,50 0,00 112,50 19,13 17,00"
+const FISCAL_LINE_REGEX_D = new RegExp(
+  `(\\d{8})\\s+(\\d\\/\\d{2,3})\\s+(\\d{4})\\s+([A-Z]{1,6})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})\\s+(${BR_NUMBER})(?:\\s+(${BR_NUMBER}))?(?:\\s+(${BR_NUMBER}))?`,
+  "gi",
+);
+
 export function parseBrazilianNumber(valor?: string | number | null): number {
   if (typeof valor === "number") return valor;
   if (!valor) return 0;
@@ -231,6 +241,42 @@ function parseItensFromBlock(block: string): NfeItemImportado[] {
         match[11], // V_IPI
         match[12], // ALIQ_ICMS
         match[13], // ALIQ_IPI
+      ] as unknown as RegExpMatchArray;
+      items.push(buildItem(code, description, reordered));
+    }
+    return items;
+  }
+
+  // Try Pattern D (TGA-FPDF style: CST as "Origem/CST", VIPI/AIPI optional)
+  const matchesD = [...cleaned.matchAll(FISCAL_LINE_REGEX_D)];
+  if (matchesD.length > 0) {
+    let cursor = 0;
+    for (const match of matchesD) {
+      const segment = cleaned.slice(cursor, match.index!).trim();
+      cursor = match.index! + match[0].length;
+      const codeMatch = segment.match(/^(\d{1,8})\s+([\s\S]+)$/);
+      if (!codeMatch) continue;
+      const code = codeMatch[1];
+      const description = codeMatch[2];
+      // Pattern D groups: 1=NCM 2="O/CST" 3=CFOP 4=UN 5=QTD 6=VU 7=VT 8=DESC 9=BC 10=VICMS 11=AICMS 12=VIPI? 13=AIPI?
+      // Extract just CST from "Origem/CST" (e.g. "0/00" -> "00")
+      const cstParts = match[2].split("/");
+      const cstOnly = cstParts[1] || cstParts[0];
+      // Map to buildItem expected: NCM, CST, CFOP, UN, qty, vu, vt, bc, vicms, vipi, aIcms, aIpi (drop DESC)
+      const reordered = [
+        match[0],
+        match[1], // NCM
+        cstOnly, // CST (stripped from "O/CST")
+        match[3], // CFOP
+        match[4], // UN
+        match[5], // QTD
+        match[6], // VU
+        match[7], // VT
+        match[9], // BC (skip DESC at index 8)
+        match[10], // V_ICMS
+        match[12], // V_IPI (optional)
+        match[11], // ALIQ_ICMS
+        match[13], // ALIQ_IPI (optional)
       ] as unknown as RegExpMatchArray;
       items.push(buildItem(code, description, reordered));
     }
