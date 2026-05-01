@@ -873,15 +873,27 @@ export default function NfeImport() {
                           : <Badge variant="secondary">{imp.status}</Badge>}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => deleteImportacao(imp)}
-                          disabled={!!imp.contas_pagar_id}
-                          title={imp.contas_pagar_id ? "Possui Contas a Pagar vinculado" : "Excluir importação"}
-                        >
-                          <Trash2 className="h-4 w-4 text-red-600" />
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          {!imp.contas_pagar_id && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => reloadImportacaoForRegenerate(imp)}
+                              title="Gerar Contas a Pagar novamente"
+                            >
+                              <RefreshCw className="h-4 w-4 text-primary" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => deleteImportacao(imp)}
+                            disabled={!!imp.contas_pagar_id}
+                            title={imp.contas_pagar_id ? "Possui Contas a Pagar vinculado" : "Excluir importação"}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-600" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
