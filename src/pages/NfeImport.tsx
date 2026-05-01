@@ -16,7 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, CheckCircle2, FileText, History, Loader2, Plus, Save, Search, Trash2, Upload, WalletCards } from "lucide-react";
+import { ArrowLeft, CheckCircle2, FileText, History, Loader2, Plus, Save, Search, Trash2, Upload, WalletCards, RefreshCw } from "lucide-react";
 
 type Produto = { id: string; code: string | null; name: string; unit_id?: string | null };
 type Fornecedor = { id: string; name: string; cnpj_cpf?: string | null };
@@ -144,6 +144,77 @@ export default function NfeImport() {
     if (error) { toast({ variant: "destructive", title: "Erro", description: error.message }); return; }
     toast({ title: "Importação excluída" });
     fetchHistorico();
+  };
+
+  const reloadImportacaoForRegenerate = async (imp: ImportacaoHistorico) => {
+    try {
+      // Carrega cabeçalho da importação
+      const { data: importData, error: impErr } = await supabaseAny
+        .from("nfe_importacoes")
+        .select("*, suppliers:fornecedor_id(id, name, cnpj_cpf)")
+        .eq("id", imp.id)
+        .single();
+      if (impErr) throw impErr;
+
+      // Carrega itens da importação
+      const { data: itemsData, error: itemsErr } = await supabaseAny
+        .from("nfe_importacao_itens")
+        .select("*, products:produto_id(name)")
+        .eq("importacao_id", imp.id);
+      if (itemsErr) throw itemsErr;
+
+      const cab: NfeCabecalho = {
+        numero_nfe: importData.numero_nfe,
+        serie: importData.serie,
+        chave_acesso: importData.chave_acesso,
+        fornecedor: importData.suppliers?.name,
+        cnpj_fornecedor: importData.suppliers?.cnpj_cpf,
+        data_emissao: importData.data_emissao
+          ? new Date(importData.data_emissao + "T12:00:00").toLocaleDateString("pt-BR")
+          : undefined,
+        valor_total_nota: Number(importData.valor_total_nota || 0),
+        valor_total_produtos: Number(importData.valor_total_produtos || 0),
+        duplicatas: Array.isArray(importData.vencimentos) ? importData.vencimentos : [],
+      };
+
+      const itensCarregados: ItemConferencia[] = (itemsData || []).map((it: any) => ({
+        codigo_fornecedor: it.codigo_fornecedor || "",
+        descricao_original_pdf: it.descricao_original_pdf || "",
+        descricao_limpa: it.descricao_limpa || "",
+        ncm: it.ncm || "",
+        cst: it.cst || "",
+        cfop: it.cfop || "",
+        unidade: it.unidade || "",
+        quantidade: Number(it.quantidade || 0),
+        valor_unitario: Number(it.valor_unitario || 0),
+        valor_total: Number(it.valor_total || 0),
+        valor_icms: it.valor_icms != null ? Number(it.valor_icms) : undefined,
+        valor_ipi: it.valor_ipi != null ? Number(it.valor_ipi) : undefined,
+        aliquota_icms: it.aliquota_icms != null ? Number(it.aliquota_icms) : undefined,
+        aliquota_ipi: it.aliquota_ipi != null ? Number(it.aliquota_ipi) : undefined,
+        produto_id: it.produto_id,
+        produto_nome: it.products?.name || "",
+        status_vinculo: it.produto_id ? "vinculado" : "nao_vinculado",
+      }));
+
+      setStoreId(importData.store_id);
+      setFornecedor(importData.suppliers ? { id: importData.suppliers.id, name: importData.suppliers.name, cnpj_cpf: importData.suppliers.cnpj_cpf } : null);
+      setCabecalho(cab);
+      setItens(itensCarregados);
+      setImportacaoId(imp.id);
+      setStatus("Importação carregada. Confirme os dados e clique em Gerar Contas a Pagar.");
+      // Abre o modal de geração diretamente
+      const issue = importData.data_emissao || "";
+      const firstDue = cab.duplicatas[0]?.vencimento;
+      setApIssueDate(issue);
+      setApCompetenceDate(issue ? issue.slice(0, 7) + "-01" : "");
+      setApDueDate(toIsoDate(firstDue) || issue);
+      setApDocType(docTypes.find((d) => /nfe|nf-?e|nota/i.test(d.name))?.code || "");
+      setShowApDialog(true);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Erro ao recarregar importação", description: e.message });
+    }
   };
 
   const handleReadPdf = async () => {
@@ -434,14 +505,37 @@ export default function NfeImport() {
       } as any).select("id").single();
       if (error) throw error;
 
-      await supabase.from("accounts_payable_items").insert(itens.map((item) => ({
-        account_payable_id: payable.id,
-        product_id: item.produto_id,
-        quantity: item.quantidade,
-        unit_price: item.valor_unitario,
-        total_price: item.valor_total,
-        store_id: storeId,
-      })) as any);
+      // Carrega itens persistidos da importação (já têm produto_id confirmado)
+      const { data: importedItems, error: importedItemsError } = await supabaseAny
+        .from("nfe_importacao_itens")
+        .select("produto_id, quantidade, valor_unitario, valor_total")
+        .eq("importacao_id", id);
+      if (importedItemsError) throw importedItemsError;
+
+      const itemsToInsert = (importedItems || [])
+        .filter((it: any) => !!it.produto_id)
+        .map((it: any) => ({
+          account_payable_id: payable.id,
+          product_id: it.produto_id,
+          quantity: it.quantidade,
+          unit_price: it.valor_unitario,
+          total_price: it.valor_total,
+          store_id: storeId,
+        }));
+
+      if (itemsToInsert.length === 0) {
+        // Rollback: a conta sem itens não faz sentido para uma NF-e
+        await supabase.from("accounts_payable").delete().eq("id", payable.id);
+        throw new Error("Nenhum item vinculado a produto foi encontrado para esta importação. Vincule os produtos antes de gerar o Contas a Pagar.");
+      }
+
+      const { error: insertItemsError } = await supabase
+        .from("accounts_payable_items")
+        .insert(itemsToInsert as any);
+      if (insertItemsError) {
+        await supabase.from("accounts_payable").delete().eq("id", payable.id);
+        throw insertItemsError;
+      }
 
       await supabaseAny.from("nfe_importacoes").update({ status: "contas_pagar_gerado", contas_pagar_id: payable.id }).eq("id", id);
 
@@ -779,15 +873,27 @@ export default function NfeImport() {
                           : <Badge variant="secondary">{imp.status}</Badge>}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => deleteImportacao(imp)}
-                          disabled={!!imp.contas_pagar_id}
-                          title={imp.contas_pagar_id ? "Possui Contas a Pagar vinculado" : "Excluir importação"}
-                        >
-                          <Trash2 className="h-4 w-4 text-red-600" />
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          {!imp.contas_pagar_id && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => reloadImportacaoForRegenerate(imp)}
+                              title="Gerar Contas a Pagar novamente"
+                            >
+                              <RefreshCw className="h-4 w-4 text-primary" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => deleteImportacao(imp)}
+                            disabled={!!imp.contas_pagar_id}
+                            title={imp.contas_pagar_id ? "Possui Contas a Pagar vinculado" : "Excluir importação"}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-600" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
