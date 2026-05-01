@@ -84,6 +84,9 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
   // Choice modal (Importar via NF-e ou Importar)
   const [linkChoiceOpen, setLinkChoiceOpen] = useState(false);
   const [nfeImportOpen, setNfeImportOpen] = useState(false);
+  // Pré-carrega o iframe assim que o usuário abre a modal de escolha,
+  // para que a página NF-e já esteja pronta quando ele clicar em "Importar via NF-e".
+  const [nfePreloaded, setNfePreloaded] = useState(false);
   
   // Form fields
   const [issueDate, setIssueDate] = useState("");
@@ -101,6 +104,7 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
   const handleOpenLinkModal = (expense: Expense) => {
     setExpenseToLink(expense);
     setLinkChoiceOpen(true);
+    setNfePreloaded(true);
   };
 
   useEffect(() => {
