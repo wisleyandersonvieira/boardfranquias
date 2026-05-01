@@ -52,6 +52,11 @@ export default function NfeImport() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { matrixId } = useUserMatrix();
+  // Modo embedded (aberto via iframe a partir do Controle de Caixa)
+  const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  const embedded = urlParams?.get("embedded") === "1";
+  const linkExpenseId = urlParams?.get("linkExpenseId") || null;
+  const presetStoreId = urlParams?.get("storeId") || null;
   const [file, setFile] = useState<File | null>(null);
   const [reading, setReading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -105,6 +110,12 @@ export default function NfeImport() {
       setDocTypes((docs.data || []) as DocType[]);
     })();
   }, []);
+
+  // Pré-seleciona a loja quando recebida via query (modo embedded)
+  useEffect(() => {
+    if (presetStoreId && !storeId) setStoreId(presetStoreId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presetStoreId]);
 
   useEffect(() => { fetchHistorico(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [histLoja, histDataIni, histDataFim]);
 
@@ -619,11 +630,34 @@ export default function NfeImport() {
       }));
       const { error } = await supabase.from("accounts_payable_installments").insert(rows);
       if (error) throw error;
-      toast({ title: "Parcelas salvas" });
+      // Se aberto via Controle de Caixa (modo embedded com despesa), vincula a despesa
+      // ao Contas a Pagar gerado e notifica o pai para fechar o iframe.
+      if (linkExpenseId && createdPayableId) {
+        const { error: linkError } = await supabase
+          .from("cash_control_expenses")
+          .update({ linked_account_payable_id: createdPayableId })
+          .eq("id", linkExpenseId);
+        if (linkError) {
+          console.error("Erro ao vincular despesa ao Contas a Pagar:", linkError);
+          toast({ variant: "destructive", title: "Vínculo não realizado", description: linkError.message });
+        } else {
+          toast({ title: "Despesa vinculada ao Contas a Pagar" });
+        }
+      } else {
+        toast({ title: "Parcelas salvas" });
+      }
       setShowInstallmentsModal(false);
       // Limpar tela após sucesso
       setCabecalho(null); setItens([]); setFile(null); setImportacaoId(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
+      // No modo embedded, avisa o pai para fechar o modal/iframe
+      if (embedded && typeof window !== "undefined" && window.parent !== window) {
+        try {
+          window.parent.postMessage({ type: "nfe-import-done", linkExpenseId, payableId: createdPayableId }, "*");
+        } catch (e) {
+          console.error("postMessage falhou", e);
+        }
+      }
     } catch (e: any) {
       toast({ variant: "destructive", title: "Erro ao salvar parcelas", description: e.message });
     }
