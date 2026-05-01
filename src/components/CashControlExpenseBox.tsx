@@ -1127,6 +1127,57 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
         expenseType={expenseType}
       />
 
+      {/* Modal de escolha: Importar via NF-e ou Importar */}
+      <Dialog open={linkChoiceOpen} onOpenChange={setLinkChoiceOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Vincular ao Contas a Pagar</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 py-2">
+            <Button
+              variant="outline"
+              className="h-24 flex flex-col gap-2"
+              onClick={() => {
+                setLinkChoiceOpen(false);
+                setNfeImportOpen(true);
+              }}
+            >
+              <FileText className="h-6 w-6" />
+              <span>Importar via NF-e</span>
+            </Button>
+            <Button
+              className="h-24 flex flex-col gap-2"
+              onClick={() => {
+                setLinkChoiceOpen(false);
+                setLinkModalOpen(true);
+              }}
+            >
+              <Link2 className="h-6 w-6" />
+              <span>Importar</span>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal NF-e Import (iframe) */}
+      <Dialog open={nfeImportOpen} onOpenChange={(open) => {
+        setNfeImportOpen(open);
+        if (!open) fetchExpenses();
+      }}>
+        <DialogContent className="max-w-[95vw] w-full h-[95vh] p-0 flex flex-col">
+          <DialogHeader className="px-6 pt-6 pb-2">
+            <DialogTitle>Importar NF-e</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden">
+            <iframe
+              src="/nfe-import"
+              title="Importar NF-e"
+              className="w-full h-full border-0"
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Expanded View Modal */}
       <Dialog open={expandedView} onOpenChange={setExpandedView}>
         <DialogContent className="max-w-[95vw] max-h-[90vh] flex flex-col">
