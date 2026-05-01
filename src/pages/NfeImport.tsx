@@ -52,6 +52,11 @@ export default function NfeImport() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { matrixId } = useUserMatrix();
+  // Modo embedded (aberto via iframe a partir do Controle de Caixa)
+  const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  const embedded = urlParams?.get("embedded") === "1";
+  const linkExpenseId = urlParams?.get("linkExpenseId") || null;
+  const presetStoreId = urlParams?.get("storeId") || null;
   const [file, setFile] = useState<File | null>(null);
   const [reading, setReading] = useState(false);
   const [saving, setSaving] = useState(false);
