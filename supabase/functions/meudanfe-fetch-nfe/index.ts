@@ -76,6 +76,10 @@ serve(async (req: Request): Promise<Response> => {
     const cachedPdf = await downloadDanfe(accessKey, apiKey);
     const cachedXml = await downloadXml(accessKey, apiKey);
     if (cachedXml.ok || cachedPdf.ok) {
+      const xmlText = cachedXml.ok ? decodeXmlData(cachedXml.data) : null;
+      const ownershipError = await verifyNfeOwnership(supabaseUser, xmlText, accessKey);
+      if (ownershipError) return ownershipError;
+
       return json({
         accessKey,
         xml: cachedXml.ok ? (cachedXml.data?.data ?? null) : null,
@@ -100,6 +104,11 @@ serve(async (req: Request): Promise<Response> => {
         if (!pdf.ok && !xml.ok) {
           throw new Error(pdf.message || xml.message || "NF-e localizada, mas nem o XML nem o PDF foram retornados");
         }
+
+        const xmlText = xml.ok ? decodeXmlData(xml.data) : null;
+        const ownershipError = await verifyNfeOwnership(supabaseUser, xmlText, accessKey);
+        if (ownershipError) return ownershipError;
+
         return json({
           accessKey,
           xml: xml.ok ? (xml.data?.data ?? null) : null,
@@ -128,6 +137,72 @@ serve(async (req: Request): Promise<Response> => {
     return json({ error: "Erro ao buscar NF-e no Meu Danfe" }, 500);
   }
 });
+
+// Verifica se a NF-e pertence a alguma loja acessível pelo usuário, comparando
+// o CNPJ do destinatário (extraído do XML) com os CNPJs dos stores do usuário.
+async function verifyNfeOwnership(
+  supabase: ReturnType<typeof createClient>,
+  xmlText: string | null,
+  accessKey: string,
+): Promise<Response | null> {
+  // Extrai o CNPJ do destinatário do XML da NF-e
+  const destCnpj = xmlText ? extractDestCnpj(xmlText) : null;
+
+  if (!destCnpj) {
+    // XML não disponível ou sem CNPJ do destinatário: bloqueia por segurança
+    return json({ error: "Nao foi possivel verificar o destinatario da NF-e" }, 422);
+  }
+
+  const cnpjNormalized = destCnpj.replace(/\D/g, "");
+
+  // Busca stores do usuário cujo CNPJ bate com o destinatário da NF-e
+  const { data: stores, error } = await supabase
+    .from("stores")
+    .select("id, cnpj")
+    .not("cnpj", "is", null);
+
+  if (error) {
+    return json({ error: "Erro ao verificar permissao de acesso a NF-e" }, 500);
+  }
+
+  const hasMatchingStore = (stores ?? []).some(
+    (s) => s.cnpj && s.cnpj.replace(/\D/g, "") === cnpjNormalized,
+  );
+
+  if (!hasMatchingStore) {
+    return json({ error: "NF-e nao pertence a nenhuma loja do usuario" }, 403);
+  }
+
+  return null; // ownership confirmado
+}
+
+// Extrai o CNPJ do destinatário do XML da NF-e.
+// Suporta tanto nfeProc/NFe/infNFe/dest/CNPJ quanto NFe direta.
+function extractDestCnpj(xmlText: string): string | null {
+  const match = xmlText.match(/<dest>[\s\S]*?<CNPJ>(\d{14})<\/CNPJ>[\s\S]*?<\/dest>/);
+  if (match?.[1]) return match[1];
+  // fallback: tag isolada
+  const fallback = xmlText.match(/<CNPJ>(\d{14})<\/CNPJ>/g);
+  if (fallback && fallback.length >= 2) {
+    // Primeiro CNPJ é o emitente, segundo é o destinatário
+    const second = fallback[1].match(/<CNPJ>(\d{14})<\/CNPJ>/);
+    return second?.[1] ?? null;
+  }
+  return null;
+}
+
+// Decodifica o XML do formato retornado pelo Meu Danfe (base64 ou texto puro).
+function decodeXmlData(data: MeuDanfeDownloadResponse | undefined): string | null {
+  if (!data?.data) return null;
+  if (data.format === "BASE64") {
+    try {
+      return atob(data.data);
+    } catch {
+      return null;
+    }
+  }
+  return data.data;
+}
 
 async function addOrPollAccessKey(accessKey: string, apiKey: string): Promise<MeuDanfeAddResponse> {
   const response = await fetch(`${MEUDANFE_API_URL}/fd/add/${accessKey}`, {
