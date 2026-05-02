@@ -7,7 +7,7 @@ export interface PaginatedQueryResult<T> {
 }
 
 export async function fetchAllPages<T>(
-  buildQuery: (from: number, to: number) => Promise<{ data: T[] | null; error: any }>,
+  buildQuery: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: any }>,
   pageSize = 1000,
 ): Promise<PaginatedQueryResult<T>> {
   const rows: T[] = [];
@@ -40,7 +40,7 @@ export async function fetchAllPages<T>(
   };
 }
 
-export async function safeMaybeSingle<T>(promise: Promise<{ data: T | null; error: any }>): Promise<T | null> {
+export async function safeMaybeSingle<T>(promise: PromiseLike<{ data: T | null; error: any }>): Promise<T | null> {
   const { data, error } = await promise;
   if (error) {
     return null;
