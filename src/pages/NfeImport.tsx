@@ -271,11 +271,12 @@ export default function NfeImport() {
       setStatus("PDF baixado do Meu Danfe. Lendo páginas do PDF...");
       await processPdfFile(pdfFile);
     } catch (error: unknown) {
+      const friendlyMessage = getEdgeFunctionErrorMessage(error);
       setStatus("Erro ao consultar a NF-e pela chave de acesso.");
       toast({
         variant: "destructive",
         title: "Erro ao consultar NF-e",
-        description: error instanceof Error ? error.message : "Não foi possível buscar a NF-e no Meu Danfe.",
+        description: friendlyMessage,
       });
     } finally {
       setFetchingAccessKey(false);
@@ -1291,4 +1292,22 @@ function isNfeAccessKeyValid(accessKey: string) {
   const mod = sum % 11;
   const expected = mod === 0 || mod === 1 ? 0 : 11 - mod;
   return digit === expected;
+}
+
+function getEdgeFunctionErrorMessage(error: unknown) {
+  if (!(error instanceof Error)) {
+    return "Nao foi possivel buscar a NF-e no Meu Danfe.";
+  }
+
+  const message = error.message || "";
+
+  if (message.includes("Failed to send a request to edge function")) {
+    return "A integracao de consulta ainda nao esta disponivel no Supabase deste ambiente. Publique a Edge Function `meudanfe-fetch-nfe` e configure o secret `MEUDANFE_API_KEY`.";
+  }
+
+  if (message.includes("FunctionsFetchError")) {
+    return "Nao foi possivel acessar a Edge Function de consulta. Verifique se ela foi publicada no projeto Supabase.";
+  }
+
+  return message;
 }
