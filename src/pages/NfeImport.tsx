@@ -838,13 +838,13 @@ export default function NfeImport() {
 
             <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
               <div className="space-y-2">
-                <Label>DANFE em PDF</Label>
-                <Input ref={fileInputRef} type="file" accept="application/pdf" onChange={(event) => setFile(event.target.files?.[0] || null)} />
+                <Label>XML ou DANFE em PDF</Label>
+                <Input ref={fileInputRef} type="file" accept=".xml,application/xml,text/xml,application/pdf" onChange={(event) => setFile(event.target.files?.[0] || null)} />
               </div>
               <div className="flex items-end">
                 <Button onClick={handleReadPdf} disabled={reading || fetchingAccessKey} variant="outline" className="w-full lg:w-auto">
                   {reading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
-                  Ler PDF
+                  Ler arquivo
                 </Button>
               </div>
             </div>
