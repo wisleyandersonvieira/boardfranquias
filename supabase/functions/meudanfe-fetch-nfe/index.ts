@@ -4,6 +4,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "X-Content-Type-Options": "nosniff",
+  "Cache-Control": "no-store",
 };
 
 const MEUDANFE_API_URL = "https://api.meudanfe.com.br/v2";
@@ -38,7 +40,7 @@ serve(async (req: Request): Promise<Response> => {
 
     const apiKey = Deno.env.get("MEUDANFE_API_KEY");
     if (!apiKey) {
-      return json({ error: "MEUDANFE_API_KEY nao configurada na Edge Function" }, 500);
+      return json({ error: "Servico de NF-e nao configurado" }, 500);
     }
 
     const authHeader = req.headers.get("Authorization");
@@ -123,8 +125,7 @@ serve(async (req: Request): Promise<Response> => {
       error: `Consulta ainda em processamento no Meu Danfe (${lastStatus || "sem status"}). Tente novamente em alguns instantes.`,
     }, 504);
   } catch (error: unknown) {
-    console.error("meudanfe-fetch-nfe error:", error);
-    return json({ error: error instanceof Error ? error.message : "Erro ao buscar NF-e no Meu Danfe" }, 500);
+    return json({ error: "Erro ao buscar NF-e no Meu Danfe" }, 500);
   }
 });
 

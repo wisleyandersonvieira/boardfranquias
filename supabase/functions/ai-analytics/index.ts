@@ -27,10 +27,7 @@ async function getFaturamentoParameterGroups(supabase: any): Promise<string[]> {
     .select('group_id, subgroup_id')
     .eq('parameter_key', 'faturamento');
   
-  if (error) {
-    console.error('Error fetching faturamento parameter:', error);
-    return [];
-  }
+  if (error) return [];
   
   const groupIds: string[] = [];
   data?.forEach((param: any) => {
@@ -66,7 +63,9 @@ async function getFaturamentoCompleto(
     .lte('date', targetEndDate)
     .order('date', { ascending: false });
 
-  if (cashError) console.error('Error fetching cash control:', cashError);
+  if (cashError) {
+    // Keep partial analytics available without logging tenant financial context.
+  }
 
   const cashControlTotal = cashControlData?.reduce((sum: number, c: any) => sum + (c.faturamento_total || 0), 0) || 0;
   const cashControlDinheiro = cashControlData?.reduce((sum: number, c: any) => sum + (c.faturamento_dinheiro || 0), 0) || 0;
@@ -85,7 +84,9 @@ async function getFaturamentoCompleto(
       .select('id, name, group_id, subgroup_id')
       .or(`group_id.in.(${faturamentoGroupIds.join(',')}),subgroup_id.in.(${faturamentoGroupIds.join(',')})`);
 
-    if (prodError) console.error('Error fetching faturamento products:', prodError);
+    if (prodError) {
+      // Continue with the other summaries when parameter products cannot be loaded.
+    }
 
     const productIds = faturamentoProducts?.map((p: any) => p.id) || [];
 
@@ -111,7 +112,9 @@ async function getFaturamentoCompleto(
         .gte('data_competencia', targetStartDate)
         .lte('data_competencia', targetEndDate);
 
-      if (arError) console.error('Error fetching accounts receivable:', arError);
+      if (arError) {
+        // Continue with cash-control faturamento only.
+      }
 
       // Filtra apenas os itens com produtos de faturamento
       arData?.forEach((ar: any) => {
@@ -233,7 +236,7 @@ async function getAccountsPayableByDueDate(supabase: any, storeIds: string[]) {
     .limit(100);
 
   if (accountsError) {
-    console.error('Error fetching accounts payable by due date:', accountsError);
+    // Continue with installments only.
   }
 
   // Buscar parcelas pendentes
@@ -262,7 +265,7 @@ async function getAccountsPayableByDueDate(supabase: any, storeIds: string[]) {
     .limit(100);
 
   if (installmentsError) {
-    console.error('Error fetching installments:', installmentsError);
+    // Continue with main accounts only.
   }
 
   // Filtrar parcelas por lojas acessíveis
@@ -364,7 +367,7 @@ async function getAccountsReceivableByDueDate(supabase: any, storeIds: string[])
     .limit(100);
 
   if (error) {
-    console.error('Error fetching accounts receivable by due date:', error);
+    // Continue with receivable installments only.
   }
 
   // Buscar parcelas de contas a receber
@@ -393,7 +396,7 @@ async function getAccountsReceivableByDueDate(supabase: any, storeIds: string[])
     .limit(100);
 
   if (installmentsError) {
-    console.error('Error fetching receivable installments:', installmentsError);
+    // Continue with main receivable accounts only.
   }
 
   const filteredInstallments = installmentsData?.filter((inst: any) => 

@@ -114,8 +114,8 @@ const Tasks = () => {
     setLoading(true);
     try {
       await Promise.all([fetchColumns(), fetchTasks()]);
-    } catch (error) {
-      console.error("Error fetching data:", error);
+    } catch {
+      toast.error("Erro ao carregar dados");
     } finally {
       setLoading(false);
     }
@@ -131,7 +131,7 @@ const Tasks = () => {
       .order("position_order", { ascending: true });
 
     if (error) {
-      console.error("Error fetching columns:", error);
+      toast.error("Erro ao carregar colunas");
       return;
     }
 
@@ -149,7 +149,7 @@ const Tasks = () => {
     const { data: tasksData, error: tasksError } = await query;
 
     if (tasksError) {
-      console.error("Error fetching tasks:", tasksError);
+      toast.error("Erro ao carregar tarefas");
       return;
     }
 
@@ -226,7 +226,6 @@ const Tasks = () => {
 
     if (error) {
       toast.error("Erro ao criar coluna");
-      console.error(error);
       return;
     }
 
@@ -281,15 +280,9 @@ const Tasks = () => {
     }
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    console.log("=== DEBUG CREATE TASK ===");
-    console.log("User:", user);
-    console.log("Auth Error:", authError);
-    console.log("Selected Column ID:", selectedColumnId);
-    
-    if (!user) {
+
+    if (authError || !user) {
       toast.error("Usuário não autenticado");
-      console.error("No user found");
       return;
     }
 
@@ -302,19 +295,14 @@ const Tasks = () => {
       position_order: maxOrder,
       created_by: user.id
     };
-    
-    console.log("Insert Data:", insertData);
 
     // Inserir sem SELECT para evitar conflito com RLS
     const { error: taskError } = await supabase
       .from("tasks")
       .insert(insertData);
 
-    console.log("Task Error:", taskError);
-
     if (taskError) {
-      toast.error("Erro ao criar tarefa: " + taskError.message);
-      console.error("Full error:", taskError);
+      toast.error("Erro ao criar tarefa.");
       return;
     }
 
@@ -364,7 +352,6 @@ const Tasks = () => {
 
     if (updateError) {
       toast.error("Erro ao mover tarefa");
-      console.error(updateError);
       setDraggedTask(null);
       return;
     }
