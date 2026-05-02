@@ -5,6 +5,8 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
+  "X-Content-Type-Options": "nosniff",
+  "Cache-Control": "no-store",
 };
 
 interface ResetPasswordRequest {
@@ -26,9 +28,8 @@ serve(async (req: Request): Promise<Response> => {
     // Get the authorization header from the request
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      console.log("No authorization header provided");
       return new Response(
-        JSON.stringify({ error: "No authorization header" }),
+        JSON.stringify({ error: "Unauthorized" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -41,7 +42,6 @@ serve(async (req: Request): Promise<Response> => {
     // Get the current user
     const { data: { user }, error: userError } = await supabaseUser.auth.getUser();
     if (userError || !user) {
-      console.log("User authentication failed:", userError);
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -56,7 +56,6 @@ serve(async (req: Request): Promise<Response> => {
       .single();
 
     if (profileError || profile?.role !== "admin") {
-      console.log("User is not admin:", profile?.role);
       return new Response(
         JSON.stringify({ error: "Somente administradores podem redefinir senhas" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -91,23 +90,19 @@ serve(async (req: Request): Promise<Response> => {
     });
 
     if (error) {
-      console.error("Error updating password:", error);
       return new Response(
-        JSON.stringify({ error: error.message }),
+        JSON.stringify({ error: "Não foi possível atualizar a senha" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    console.log("Password updated successfully for user:", userId);
 
     return new Response(
       JSON.stringify({ success: true, message: "Senha atualizada com sucesso" }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: any) {
-    console.error("Error in reset-user-password function:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: "Erro interno ao redefinir senha" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

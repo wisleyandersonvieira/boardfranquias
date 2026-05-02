@@ -43,6 +43,7 @@ import BankReconciliation from "./pages/BankReconciliation";
 import OFXManagement from "./pages/OFXManagement";
 import EmployeeReport from "./pages/EmployeeReport";
 import PurchasesReport from "./pages/PurchasesReport";
+import ProtectedRoute from "./components/ProtectedRoute";
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -53,6 +54,10 @@ const queryClient = new QueryClient({
   }
 });
 function App() {
+  const protect = (element: React.ReactElement) => (
+    <ProtectedRoute>{element}</ProtectedRoute>
+  );
+
   return <React.StrictMode>
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
@@ -61,41 +66,41 @@ function App() {
               <Route path="/" element={<Index />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/reset-password" element={<ResetPassword />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/cash-control/:storeId" element={<CashControl />} />
-              <Route path="/cadastros" element={<Cadastros />} />
-              <Route path="/suppliers" element={<Suppliers />} />
-              <Route path="/products" element={<Products />} />
-              <Route path="/stores" element={<Stores />} />
-              <Route path="/users" element={<Users />} />
-              <Route path="/profiles" element={<Profiles />} />
-              <Route path="/dre" element={<DRE />} />
-              <Route path="/dre/competencia" element={<DRECompetencia />} />
-              <Route path="/dre/caixa" element={<DRECaixa />} />
-              <Route path="/dre/confiavel" element={<DREConfiavel />} />
-              <Route path="/reports" element={<Reports />} />
-              <Route path="/stock" element={<StockModule />} />
-              <Route path="/stock/:storeId" element={<StockControl />} />
-              <Route path="/reports/accounts-payable" element={<AccountsPayableModule />} />
-              <Route path="/reports/accounts-payable/pending" element={<AccountsPayableReport />} />
-              <Route path="/reports/accounts-payable/paid" element={<PaidAccountsReport />} />
-              <Route path="/reports/accounts-receivable" element={<AccountsReceivableModule />} />
-              <Route path="/reports/accounts-receivable/pending" element={<AccountsReceivableReport />} />
-              <Route path="/reports/accounts-receivable/received" element={<ReceivedAccountsReport />} />
-              <Route path="/reports/turnover" element={<TurnoverReport />} />
-              <Route path="/reports/turnover-chart" element={<TurnoverChartReport />} />
-              <Route path="/reports/extratos" element={<Extratos />} />
-              <Route path="/reports/income-expense" element={<IncomeExpenseReport />} />
-              <Route path="/reports/balance-position" element={<BalancePositionReport />} />
-              <Route path="/reports/accounting-export" element={<AccountingExportReport />} />
-              <Route path="/tasks" element={<Tasks />} />
-              <Route path="/goals" element={<Goals />} />
-              <Route path="/my-account" element={<MyAccount />} />
-              <Route path="/ai-assistant" element={<AIAssistant />} />
-              <Route path="/bank-reconciliation" element={<BankReconciliation />} />
-              <Route path="/ofx-management" element={<OFXManagement />} />
-              <Route path="/reports/employees" element={<EmployeeReport />} />
-              <Route path="/reports/purchases" element={<PurchasesReport />} />
+              <Route path="/dashboard" element={protect(<Dashboard />)} />
+              <Route path="/cash-control/:storeId" element={protect(<CashControl />)} />
+              <Route path="/cadastros" element={protect(<Cadastros />)} />
+              <Route path="/suppliers" element={protect(<Suppliers />)} />
+              <Route path="/products" element={protect(<Products />)} />
+              <Route path="/stores" element={protect(<Stores />)} />
+              <Route path="/users" element={protect(<Users />)} />
+              <Route path="/profiles" element={protect(<Profiles />)} />
+              <Route path="/dre" element={protect(<DRE />)} />
+              <Route path="/dre/competencia" element={protect(<DRECompetencia />)} />
+              <Route path="/dre/caixa" element={protect(<DRECaixa />)} />
+              <Route path="/dre/confiavel" element={protect(<DREConfiavel />)} />
+              <Route path="/reports" element={protect(<Reports />)} />
+              <Route path="/stock" element={protect(<StockModule />)} />
+              <Route path="/stock/:storeId" element={protect(<StockControl />)} />
+              <Route path="/reports/accounts-payable" element={protect(<AccountsPayableModule />)} />
+              <Route path="/reports/accounts-payable/pending" element={protect(<AccountsPayableReport />)} />
+              <Route path="/reports/accounts-payable/paid" element={protect(<PaidAccountsReport />)} />
+              <Route path="/reports/accounts-receivable" element={protect(<AccountsReceivableModule />)} />
+              <Route path="/reports/accounts-receivable/pending" element={protect(<AccountsReceivableReport />)} />
+              <Route path="/reports/accounts-receivable/received" element={protect(<ReceivedAccountsReport />)} />
+              <Route path="/reports/turnover" element={protect(<TurnoverReport />)} />
+              <Route path="/reports/turnover-chart" element={protect(<TurnoverChartReport />)} />
+              <Route path="/reports/extratos" element={protect(<Extratos />)} />
+              <Route path="/reports/income-expense" element={protect(<IncomeExpenseReport />)} />
+              <Route path="/reports/balance-position" element={protect(<BalancePositionReport />)} />
+              <Route path="/reports/accounting-export" element={protect(<AccountingExportReport />)} />
+              <Route path="/tasks" element={protect(<Tasks />)} />
+              <Route path="/goals" element={protect(<Goals />)} />
+              <Route path="/my-account" element={protect(<MyAccount />)} />
+              <Route path="/ai-assistant" element={protect(<AIAssistant />)} />
+              <Route path="/bank-reconciliation" element={protect(<BankReconciliation />)} />
+              <Route path="/ofx-management" element={protect(<OFXManagement />)} />
+              <Route path="/reports/employees" element={protect(<EmployeeReport />)} />
+              <Route path="/reports/purchases" element={protect(<PurchasesReport />)} />
               <Route path="*" element={<NotFound />} />
             </Routes>
             <Toaster />
