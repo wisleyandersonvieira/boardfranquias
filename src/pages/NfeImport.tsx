@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import * as pdfjsLib from "pdfjs-dist";
 import { supabase } from "@/integrations/supabase/client";
-import { parseNfePdf, NfeCabecalho, NfeItemImportado } from "@/utils/nfeDanfeParser";
+import { parseNfePdf, NfeCabecalho, NfeItemImportado, NfeParseResult } from "@/utils/nfeDanfeParser";
+import { parseNfeXml, decodeBase64Xml, looksLikeXml } from "@/utils/nfeXmlParser";
 import { useUserMatrix } from "@/hooks/useUserMatrix";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -232,11 +233,15 @@ export default function NfeImport() {
 
   const handleReadPdf = async () => {
     if (!file) {
-      toast({ variant: "destructive", title: "Selecione um PDF", description: "Envie o arquivo da NF-e antes de ler." });
+      toast({ variant: "destructive", title: "Selecione um arquivo", description: "Envie o XML ou o PDF da NF-e antes de ler." });
       return;
     }
 
-    await processPdfFile(file);
+    if (isXmlFile(file)) {
+      await processXmlFile(file);
+    } else {
+      await processPdfFile(file);
+    }
   };
 
   const handleFetchByAccessKey = async () => {
@@ -263,13 +268,24 @@ export default function NfeImport() {
         throw new Error(errorBody?.error || functionError.message || "Erro ao consultar a Edge Function");
       }
       if (data?.error) throw new Error(data.error);
-      if (!data?.data) throw new Error("O Meu Danfe não retornou o PDF da NF-e.");
 
-      const pdfFile = base64ToPdfFile(data.data, data.name || `NFe-${cleanAccessKey}.pdf`);
-      setFile(pdfFile);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      setStatus("PDF baixado do Meu Danfe. Lendo páginas do PDF...");
-      await processPdfFile(pdfFile);
+      // Preferência: XML estruturado. Fallback: PDF DANFE.
+      if (data?.xml) {
+        setStatus("XML baixado do Meu Danfe. Processando dados estruturados...");
+        const xmlText = looksLikeXml(data.xml) ? data.xml : decodeBase64Xml(data.xml);
+        const xmlFile = new File([xmlText], data.xmlName || `NFe-${cleanAccessKey}.xml`, { type: "application/xml" });
+        setFile(xmlFile);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        await processXmlContent(xmlText);
+      } else if (data?.data) {
+        setStatus("PDF baixado do Meu Danfe. Lendo páginas do PDF...");
+        const pdfFile = base64ToPdfFile(data.data, data.name || `NFe-${cleanAccessKey}.pdf`);
+        setFile(pdfFile);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        await processPdfFile(pdfFile);
+      } else {
+        throw new Error("O Meu Danfe não retornou o XML nem o PDF da NF-e.");
+      }
     } catch (error: unknown) {
       const friendlyMessage = getEdgeFunctionErrorMessage(error);
       setStatus("Erro ao consultar a NF-e pela chave de acesso.");
@@ -280,6 +296,39 @@ export default function NfeImport() {
       });
     } finally {
       setFetchingAccessKey(false);
+    }
+  };
+
+  const processXmlFile = async (xmlFile: File) => {
+    setReading(true);
+    setStatus("Lendo XML da NF-e...");
+    try {
+      const text = await xmlFile.text();
+      await processXmlContent(text);
+    } catch (error: any) {
+      setStatus("Erro ao ler o XML.");
+      toast({ variant: "destructive", title: "Erro ao ler XML", description: error.message || "Não foi possível processar o XML." });
+    } finally {
+      setReading(false);
+    }
+  };
+
+  const processXmlContent = async (xmlText: string) => {
+    setReading(true);
+    setStatus("Processando dados estruturados do XML...");
+    try {
+      const parsed = parseNfeXml(xmlText);
+      if (parsed.itens.length === 0) {
+        setStatus("XML sem itens.");
+        toast({ variant: "destructive", title: "XML sem itens", description: "Nenhum item foi encontrado no XML da NF-e." });
+        return;
+      }
+      await applyParsedNfe(parsed);
+    } catch (error: any) {
+      setStatus("Erro ao processar o XML.");
+      toast({ variant: "destructive", title: "Erro ao processar XML", description: error.message || "Não foi possível interpretar o XML da NF-e." });
+    } finally {
+      setReading(false);
     }
   };
 
@@ -315,43 +364,47 @@ export default function NfeImport() {
         return;
       }
 
-      if (parsed.cabecalho.chave_acesso) {
-        const { data: existing } = await supabaseAny
-          .from("nfe_importacoes")
-          .select("id")
-          .eq("chave_acesso", parsed.cabecalho.chave_acesso)
-          .maybeSingle();
-        if (existing) {
-          setStatus("Esta NF-e já foi importada anteriormente.");
-          toast({ variant: "destructive", title: "NF-e duplicada", description: "Esta NF-e já foi importada anteriormente." });
-          return;
-        }
-      }
-
-      const [supplierFound, productsData, storesData, unitsData] = await Promise.all([
-        findSupplier(parsed.cabecalho.cnpj_fornecedor, parsed.cabecalho.fornecedor),
-        supabase.from("products").select("id, code, name, unit_id").eq("is_active", true).order("name"),
-        supabase.from("stores").select("id, name, code").order("name"),
-        supabase.from("units_of_measure").select("id, symbol, name").eq("is_active", true).order("name"),
-      ]);
-
-      setFornecedor(supplierFound);
-      setProdutos(productsData.data || []);
-      setLojas(storesData.data || []);
-      setUnidades(unitsData.data || []);
-      if (!storeId && storesData.data?.length === 1) setStoreId(storesData.data[0].id);
-
-      const correlated = await correlateItems(parsed.itens, supplierFound?.id, productsData.data || []);
-      setCabecalho(parsed.cabecalho);
-      setItens(correlated);
-      setImportacaoId(null);
-      setStatus(`NF-e lida com sucesso. ${correlated.length} itens encontrados. ${correlated.filter((i) => i.status_vinculo === "vinculado").length} vinculados automaticamente. ${correlated.filter((i) => i.status_vinculo !== "vinculado").length} aguardando correlação.`);
+      await applyParsedNfe(parsed);
     } catch (error: any) {
       setStatus("Erro ao ler o PDF.");
       toast({ variant: "destructive", title: "Erro ao ler NF-e", description: error.message || "Não foi possível processar o PDF." });
     } finally {
       setReading(false);
     }
+  };
+
+  const applyParsedNfe = async (parsed: NfeParseResult) => {
+    if (parsed.cabecalho.chave_acesso) {
+      const { data: existing } = await supabaseAny
+        .from("nfe_importacoes")
+        .select("id")
+        .eq("chave_acesso", parsed.cabecalho.chave_acesso)
+        .maybeSingle();
+      if (existing) {
+        setStatus("Esta NF-e já foi importada anteriormente.");
+        toast({ variant: "destructive", title: "NF-e duplicada", description: "Esta NF-e já foi importada anteriormente." });
+        return;
+      }
+    }
+
+    const [supplierFound, productsData, storesData, unitsData] = await Promise.all([
+      findSupplier(parsed.cabecalho.cnpj_fornecedor, parsed.cabecalho.fornecedor),
+      supabase.from("products").select("id, code, name, unit_id").eq("is_active", true).order("name"),
+      supabase.from("stores").select("id, name, code").order("name"),
+      supabase.from("units_of_measure").select("id, symbol, name").eq("is_active", true).order("name"),
+    ]);
+
+    setFornecedor(supplierFound);
+    setProdutos(productsData.data || []);
+    setLojas(storesData.data || []);
+    setUnidades(unitsData.data || []);
+    if (!storeId && storesData.data?.length === 1) setStoreId(storesData.data[0].id);
+
+    const correlated = await correlateItems(parsed.itens, supplierFound?.id, productsData.data || []);
+    setCabecalho(parsed.cabecalho);
+    setItens(correlated);
+    setImportacaoId(null);
+    setStatus(`NF-e lida com sucesso. ${correlated.length} itens encontrados. ${correlated.filter((i) => i.status_vinculo === "vinculado").length} vinculados automaticamente. ${correlated.filter((i) => i.status_vinculo !== "vinculado").length} aguardando correlação.`);
   };
 
   const handleProductChange = (index: number, productId: string) => {
@@ -785,13 +838,13 @@ export default function NfeImport() {
 
             <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
               <div className="space-y-2">
-                <Label>DANFE em PDF</Label>
-                <Input ref={fileInputRef} type="file" accept="application/pdf" onChange={(event) => setFile(event.target.files?.[0] || null)} />
+                <Label>XML ou DANFE em PDF</Label>
+                <Input ref={fileInputRef} type="file" accept=".xml,application/xml,text/xml,application/pdf" onChange={(event) => setFile(event.target.files?.[0] || null)} />
               </div>
               <div className="flex items-end">
                 <Button onClick={handleReadPdf} disabled={reading || fetchingAccessKey} variant="outline" className="w-full lg:w-auto">
                   {reading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
-                  Ler PDF
+                  Ler arquivo
                 </Button>
               </div>
             </div>
@@ -1257,12 +1310,22 @@ function competenceFromDate(value?: string) {
 
 async function uploadPdfIfPossible(file: File | null, storeId: string, chave?: string) {
   if (!file || !chave) return null;
-  const filePath = `${storeId}/nfe/${chave}.pdf`;
+  const isXml = isXmlFile(file);
+  const ext = isXml ? "xml" : "pdf";
+  const contentType = isXml ? "application/xml" : "application/pdf";
+  const filePath = `${storeId}/nfe/${chave}.${ext}`;
   const { error } = await supabase.storage.from("account-documents").upload(filePath, file, {
-    contentType: "application/pdf",
+    contentType,
     upsert: true,
   });
   return error ? null : filePath;
+}
+
+function isXmlFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".xml")) return true;
+  const type = (file.type || "").toLowerCase();
+  return type.includes("xml");
 }
 
 function base64ToPdfFile(base64: string, fileName: string) {

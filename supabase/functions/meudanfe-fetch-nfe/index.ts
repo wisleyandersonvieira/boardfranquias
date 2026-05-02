@@ -72,11 +72,17 @@ serve(async (req: Request): Promise<Response> => {
     }
 
     const cachedPdf = await downloadDanfe(accessKey, apiKey);
-    if (cachedPdf.ok) {
-      return json({ ...cachedPdf.data, accessKey });
+    const cachedXml = await downloadXml(accessKey, apiKey);
+    if (cachedXml.ok || cachedPdf.ok) {
+      return json({
+        accessKey,
+        xml: cachedXml.ok ? (cachedXml.data?.data ?? null) : null,
+        xmlName: cachedXml.ok ? (cachedXml.data?.name ?? null) : null,
+        ...(cachedPdf.ok ? cachedPdf.data : {}),
+      });
     }
-    if (cachedPdf.status !== 404) {
-      throw new Error(cachedPdf.message || "Falha ao consultar DANFE no Meu Danfe");
+    if (cachedPdf.status !== 404 && cachedXml.status !== 404) {
+      throw new Error(cachedPdf.message || cachedXml.message || "Falha ao consultar NF-e no Meu Danfe");
     }
 
     let lastStatus = "";
@@ -85,11 +91,19 @@ serve(async (req: Request): Promise<Response> => {
       lastStatus = addResult.status || "";
 
       if (addResult.status === "OK") {
-        const pdf = await downloadDanfe(accessKey, apiKey);
-        if (!pdf.ok) {
-          throw new Error(pdf.message || "NF-e localizada, mas o PDF nao foi retornado");
+        const [pdf, xml] = await Promise.all([
+          downloadDanfe(accessKey, apiKey),
+          downloadXml(accessKey, apiKey),
+        ]);
+        if (!pdf.ok && !xml.ok) {
+          throw new Error(pdf.message || xml.message || "NF-e localizada, mas nem o XML nem o PDF foram retornados");
         }
-        return json({ ...pdf.data, accessKey });
+        return json({
+          accessKey,
+          xml: xml.ok ? (xml.data?.data ?? null) : null,
+          xmlName: xml.ok ? (xml.data?.name ?? null) : null,
+          ...(pdf.ok ? pdf.data : {}),
+        });
       }
 
       if (addResult.status === "NOT_FOUND") {
@@ -147,6 +161,28 @@ async function downloadDanfe(accessKey: string, apiKey: string) {
   }
 
   return { ok: true, status: response.status, data };
+}
+
+async function downloadXml(accessKey: string, apiKey: string) {
+  const response = await fetch(`${MEUDANFE_API_URL}/fd/get/xml/${accessKey}`, {
+    method: "GET",
+    headers: { "Api-Key": apiKey },
+  });
+
+  if (response.status === 404) {
+    return { ok: false as const, status: response.status };
+  }
+
+  if (!response.ok) {
+    return { ok: false as const, status: response.status, message: await meudanfeErrorMessage(response) };
+  }
+
+  const data = await response.json() as MeuDanfeDownloadResponse;
+  if (!data.data) {
+    return { ok: false as const, status: 500, message: "Resposta do Meu Danfe sem XML" };
+  }
+
+  return { ok: true as const, status: response.status, data };
 }
 
 async function meudanfeErrorMessage(response: Response) {
