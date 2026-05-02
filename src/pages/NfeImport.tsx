@@ -1310,12 +1310,22 @@ function competenceFromDate(value?: string) {
 
 async function uploadPdfIfPossible(file: File | null, storeId: string, chave?: string) {
   if (!file || !chave) return null;
-  const filePath = `${storeId}/nfe/${chave}.pdf`;
+  const isXml = isXmlFile(file);
+  const ext = isXml ? "xml" : "pdf";
+  const contentType = isXml ? "application/xml" : "application/pdf";
+  const filePath = `${storeId}/nfe/${chave}.${ext}`;
   const { error } = await supabase.storage.from("account-documents").upload(filePath, file, {
-    contentType: "application/pdf",
+    contentType,
     upsert: true,
   });
   return error ? null : filePath;
+}
+
+function isXmlFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".xml")) return true;
+  const type = (file.type || "").toLowerCase();
+  return type.includes("xml");
 }
 
 function base64ToPdfFile(base64: string, fileName: string) {
