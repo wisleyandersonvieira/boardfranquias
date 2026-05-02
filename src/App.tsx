@@ -44,6 +44,7 @@ import OFXManagement from "./pages/OFXManagement";
 import EmployeeReport from "./pages/EmployeeReport";
 import PurchasesReport from "./pages/PurchasesReport";
 import ProtectedRoute from "./components/ProtectedRoute";
+import NfeImport from "./pages/NfeImport";
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -101,6 +102,7 @@ function App() {
               <Route path="/ofx-management" element={protect(<OFXManagement />)} />
               <Route path="/reports/employees" element={protect(<EmployeeReport />)} />
               <Route path="/reports/purchases" element={protect(<PurchasesReport />)} />
+              <Route path="/nfe-import" element={protect(<NfeImport />)} />
               <Route path="*" element={<NotFound />} />
             </Routes>
             <Toaster />

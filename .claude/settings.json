@@ -7,7 +7,9 @@
       "Bash(npm install *)",
       "Bash(bun install *)",
       "Bash(grep -iE 'service_role|anon|eyJ[A-Za-z0-9]|sk_live|sk_test|re_[A-Za-z0-9]{20,}|password\\\\s*=|secret\\\\s*=')",
-      "Bash(grep -iE 'service_role|eyJ[A-Za-z0-9]{50,}|sk_live|sk_test|re_[A-Za-z0-9]{20,}|SUPABASE_SERVICE|anon_key')"
+      "Bash(grep -iE 'service_role|eyJ[A-Za-z0-9]{50,}|sk_live|sk_test|re_[A-Za-z0-9]{20,}|SUPABASE_SERVICE|anon_key')",
+      "Bash(git add *)",
+      "Bash(git rm *)"
     ]
   }
 }

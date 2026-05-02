@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Eye, Pencil, Ban, Upload, X, FileText, ArrowUp, ArrowDown, Link2, Download, Maximize2 } from "lucide-react";
+import { Plus, Eye, Pencil, Ban, Upload, X, FileText, ArrowUp, ArrowDown, Link2, Download, Maximize2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { format, isValid } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -80,6 +80,11 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
   // Link to accounts payable modal
   const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [expenseToLink, setExpenseToLink] = useState<Expense | null>(null);
+
+  // Choice modal (Importar via NF-e ou Importar)
+  const [linkChoiceOpen, setLinkChoiceOpen] = useState(false);
+  const [nfeImportOpen, setNfeImportOpen] = useState(false);
+  const [nfeImportLoading, setNfeImportLoading] = useState(false);
   
   // Form fields
   const [issueDate, setIssueDate] = useState("");
@@ -96,12 +101,34 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
 
   const handleOpenLinkModal = (expense: Expense) => {
     setExpenseToLink(expense);
-    setLinkModalOpen(true);
+    setLinkChoiceOpen(true);
   };
 
   useEffect(() => {
     fetchExpenses();
   }, [storeId, expenseType, referenceMonth, referenceYear]);
+
+  // Escuta o iframe NF-e para fechar e atualizar quando o vínculo for concluído
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      const data = event.data;
+      if (data && typeof data === "object" && data.type === "nfe-import-done") {
+        setNfeImportOpen(false);
+        setNfeImportLoading(false);
+        setExpenseToLink(null);
+        fetchExpenses();
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
+
+  const closeNfeImport = () => {
+    setNfeImportOpen(false);
+    setNfeImportLoading(false);
+    setExpenseToLink(null);
+    fetchExpenses();
+  };
 
   const fetchExpenses = async () => {
     setLoading(true);
@@ -1123,6 +1150,78 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
         expenseType={expenseType}
       />
 
+      {/* Modal de escolha: Importar via NF-e ou Importar */}
+      <Dialog open={linkChoiceOpen} onOpenChange={setLinkChoiceOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Vincular ao Contas a Pagar</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 py-2">
+            <Button
+              variant="outline"
+              className="h-24 flex flex-col gap-2"
+              onClick={() => {
+                setLinkChoiceOpen(false);
+                setNfeImportLoading(true);
+                setNfeImportOpen(true);
+              }}
+            >
+              <FileText className="h-6 w-6" />
+              <span>Importar via NF-e</span>
+            </Button>
+            <Button
+              className="h-24 flex flex-col gap-2"
+              onClick={() => {
+                setLinkChoiceOpen(false);
+                setLinkModalOpen(true);
+              }}
+            >
+              <Link2 className="h-6 w-6" />
+              <span>Importar</span>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/*
+        Modal NF-e Import — implementação manual (sem Radix Dialog) para evitar
+        que o focus-trap do Radix interfira no foco/cliques dentro do iframe.
+      */}
+      {nfeImportOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60"
+          onClick={closeNfeImport}
+        />
+      )}
+      {nfeImportOpen && (
+        <div className="fixed left-1/2 top-1/2 z-[60] -translate-x-1/2 -translate-y-1/2 w-[95vw] h-[95vh] bg-background border rounded-lg shadow-lg flex flex-col overflow-hidden pointer-events-auto">
+          <div className="flex items-center justify-between px-6 py-3 border-b">
+            <h2 className="text-lg font-semibold">Importar NF-e</h2>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={closeNfeImport}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          {nfeImportLoading && (
+            <div className="flex flex-1 items-center justify-center bg-background">
+              <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Carregando importacao de NF-e...
+              </div>
+            </div>
+          )}
+          <iframe
+            src={`/nfe-import?embedded=1${expenseToLink ? `&linkExpenseId=${expenseToLink.id}&storeId=${storeId}` : ''}`}
+            title="Importar NF-e"
+            onLoad={() => setNfeImportLoading(false)}
+            className={`flex-1 border-0 bg-background ${nfeImportLoading ? "hidden" : "block"}`}
+          />
+        </div>
+      )}
+
       {/* Expanded View Modal */}
       <Dialog open={expandedView} onOpenChange={setExpandedView}>
         <DialogContent className="max-w-[95vw] max-h-[90vh] flex flex-col">
@@ -1297,4 +1396,3 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
     </Card>
   );
 };
-

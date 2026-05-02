@@ -237,6 +237,7 @@ const AppSidebar = ({
       icon: DollarSign,
       subMenus: [
         { id: "contas-pagar", label: "Contas a Pagar", action: "openAccountsPayable" },
+        { id: "importar-nfe", label: "Importar NF-e", route: "/nfe-import" },
         { id: "contas-receber", label: "Contas a Receber", action: "openAccountsReceivable" },
         { id: "transferencias", label: "Transferências", action: "openTransfers" },
         { id: "aportes-retiradas", label: "Aportes e Retiradas", action: "openPartnerTransactions" },
