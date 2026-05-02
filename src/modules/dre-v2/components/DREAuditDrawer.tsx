@@ -25,6 +25,8 @@ import {
 } from "@/modules/dre-v2/utils";
 import { getPdfLogoCache, warmPdfLogoCache } from "@/utils/pdfHeader";
 
+type PdfRgbColor = [number, number, number];
+
 interface DREAuditDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -122,10 +124,10 @@ async function exportDetailsPdf(entry?: DREAuditEntry): Promise<void> {
   const pageHeight = pdf.internal.pageSize.getHeight();
   const marginX = 34;
   const headerY = 26;
-  const titleColor = [15, 23, 42];
-  const subtle = [100, 116, 139];
-  const border = [226, 232, 240];
-  const accent = [30, 64, 175];
+  const titleColor: PdfRgbColor = [15, 23, 42];
+  const subtle: PdfRgbColor = [100, 116, 139];
+  const border: PdfRgbColor = [226, 232, 240];
+  const accent: PdfRgbColor = [30, 64, 175];
   const rows = buildExportRows(entry);
 
   const drawHeader = (pageNumber: number) => {
