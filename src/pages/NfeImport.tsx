@@ -16,7 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, CheckCircle2, FileText, History, Loader2, Plus, Save, Search, Trash2, Upload, WalletCards, RefreshCw } from "lucide-react";
+import { ArrowLeft, CheckCircle2, FileSearch, FileText, History, Loader2, Plus, Save, Search, Trash2, Upload, WalletCards, RefreshCw } from "lucide-react";
 
 type Produto = { id: string; code: string | null; name: string; unit_id?: string | null };
 type Fornecedor = { id: string; name: string; cnpj_cpf?: string | null };
@@ -58,7 +58,9 @@ export default function NfeImport() {
   const linkExpenseId = urlParams?.get("linkExpenseId") || null;
   const presetStoreId = urlParams?.get("storeId") || null;
   const [file, setFile] = useState<File | null>(null);
+  const [accessKey, setAccessKey] = useState("");
   const [reading, setReading] = useState(false);
+  const [fetchingAccessKey, setFetchingAccessKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [status, setStatus] = useState("Aguardando upload do PDF.");
@@ -234,12 +236,59 @@ export default function NfeImport() {
       return;
     }
 
+    await processPdfFile(file);
+  };
+
+  const handleFetchByAccessKey = async () => {
+    const cleanAccessKey = accessKey.replace(/\D/g, "");
+    setAccessKey(cleanAccessKey);
+
+    if (!isNfeAccessKeyValid(cleanAccessKey)) {
+      toast({ variant: "destructive", title: "Chave inválida", description: "Informe uma chave de acesso NF-e válida com 44 dígitos." });
+      return;
+    }
+
+    setFetchingAccessKey(true);
+    setStatus("Consultando NF-e no Meu Danfe...");
+
+    try {
+      const { data, error } = await supabase.functions.invoke("meudanfe-fetch-nfe", {
+        body: { accessKey: cleanAccessKey },
+      });
+      if (error) {
+        const functionError = error as { message?: string; context?: { json?: () => Promise<{ error?: string } | null> } };
+        const errorBody = typeof functionError.context?.json === "function"
+          ? await functionError.context.json().catch(() => null)
+          : null;
+        throw new Error(errorBody?.error || functionError.message || "Erro ao consultar a Edge Function");
+      }
+      if (data?.error) throw new Error(data.error);
+      if (!data?.data) throw new Error("O Meu Danfe não retornou o PDF da NF-e.");
+
+      const pdfFile = base64ToPdfFile(data.data, data.name || `NFe-${cleanAccessKey}.pdf`);
+      setFile(pdfFile);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      setStatus("PDF baixado do Meu Danfe. Lendo páginas do PDF...");
+      await processPdfFile(pdfFile);
+    } catch (error: unknown) {
+      setStatus("Erro ao consultar a NF-e pela chave de acesso.");
+      toast({
+        variant: "destructive",
+        title: "Erro ao consultar NF-e",
+        description: error instanceof Error ? error.message : "Não foi possível buscar a NF-e no Meu Danfe.",
+      });
+    } finally {
+      setFetchingAccessKey(false);
+    }
+  };
+
+  const processPdfFile = async (pdfFile: File) => {
     setReading(true);
     setStatus("Lendo páginas do PDF...");
 
     try {
       pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-      const buffer = await file.arrayBuffer();
+      const buffer = await pdfFile.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
       const pages: string[] = [];
 
@@ -707,16 +756,46 @@ export default function NfeImport() {
       <main className="container mx-auto px-4 py-8 space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Upload className="h-5 w-5" /> Upload</CardTitle>
-            <CardDescription>Selecione o DANFE em PDF e clique em Ler NF-e.</CardDescription>
+            <CardTitle className="flex items-center gap-2"><Upload className="h-5 w-5" /> Importar NF-e</CardTitle>
+            <CardDescription>Busque pela chave de acesso ou selecione o DANFE em PDF para leitura.</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4 lg:grid-cols-[1fr_auto]">
-            <Input ref={fileInputRef} type="file" accept="application/pdf" onChange={(event) => setFile(event.target.files?.[0] || null)} />
-            <Button onClick={handleReadPdf} disabled={reading}>
-              {reading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
-              Ler NF-e
-            </Button>
-            <div className="lg:col-span-2 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">{status}</div>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
+              <div className="space-y-2">
+                <Label>Chave de acesso da NF-e</Label>
+                <Input
+                  inputMode="numeric"
+                  maxLength={44}
+                  placeholder="Digite os 44 dígitos da chave"
+                  value={accessKey}
+                  onChange={(event) => setAccessKey(event.target.value.replace(/\D/g, "").slice(0, 44))}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") handleFetchByAccessKey();
+                  }}
+                />
+              </div>
+              <div className="flex items-end">
+                <Button onClick={handleFetchByAccessKey} disabled={fetchingAccessKey || reading} className="w-full lg:w-auto">
+                  {fetchingAccessKey ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileSearch className="h-4 w-4 mr-2" />}
+                  Buscar e importar
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
+              <div className="space-y-2">
+                <Label>DANFE em PDF</Label>
+                <Input ref={fileInputRef} type="file" accept="application/pdf" onChange={(event) => setFile(event.target.files?.[0] || null)} />
+              </div>
+              <div className="flex items-end">
+                <Button onClick={handleReadPdf} disabled={reading || fetchingAccessKey} variant="outline" className="w-full lg:w-auto">
+                  {reading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
+                  Ler PDF
+                </Button>
+              </div>
+            </div>
+
+            <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">{status}</div>
           </CardContent>
         </Card>
 
@@ -1183,4 +1262,33 @@ async function uploadPdfIfPossible(file: File | null, storeId: string, chave?: s
     upsert: true,
   });
   return error ? null : filePath;
+}
+
+function base64ToPdfFile(base64: string, fileName: string) {
+  const cleanBase64 = base64.replace(/^data:application\/pdf;base64,/, "").replace(/^"|"$/g, "");
+  const binary = atob(cleanBase64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new File([bytes], fileName.endsWith(".pdf") ? fileName : `${fileName}.pdf`, {
+    type: "application/pdf",
+  });
+}
+
+function isNfeAccessKeyValid(accessKey: string) {
+  if (!/^\d{44}$/.test(accessKey)) return false;
+  if (accessKey.slice(20, 22) !== "55") return false;
+
+  const body = accessKey.slice(0, 43);
+  const digit = Number(accessKey.slice(43));
+  let weight = 2;
+  let sum = 0;
+  for (let i = body.length - 1; i >= 0; i--) {
+    sum += Number(body[i]) * weight;
+    weight = weight === 9 ? 2 : weight + 1;
+  }
+  const mod = sum % 11;
+  const expected = mod === 0 || mod === 1 ? 0 : 11 - mod;
+  return digit === expected;
 }
