@@ -1179,6 +1179,35 @@ export default function NfeImport() {
                 <SelectContent>{unidades.map((u) => <SelectItem key={u.id} value={u.id}>{u.symbol} - {u.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Grupo</Label>
+                <Select
+                  value={quickData.group_id}
+                  onValueChange={(group_id) => setQuickData({ ...quickData, group_id, subgroup_id: "" })}
+                >
+                  <SelectTrigger><SelectValue placeholder="Selecione o grupo" /></SelectTrigger>
+                  <SelectContent>
+                    {quickGroups.map((g) => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Subgrupo</Label>
+                <Select
+                  value={quickData.subgroup_id}
+                  onValueChange={(subgroup_id) => setQuickData({ ...quickData, subgroup_id })}
+                  disabled={!quickData.group_id}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={!quickData.group_id ? "Selecione um grupo primeiro" : "Selecione o subgrupo"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {quickSubgroups.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
             {quickIndex !== null && <p className="text-sm text-muted-foreground">Fornecedor: {fornecedor?.name || "não localizado"} | Código: {itens[quickIndex]?.codigo_fornecedor} | Último valor: {formatCurrency(itens[quickIndex]?.valor_unitario, 4)}</p>}
           </div>
           <DialogFooter>
