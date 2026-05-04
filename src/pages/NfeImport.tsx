@@ -1485,6 +1485,15 @@ function isXmlFile(file: File): boolean {
   return type.includes("xml");
 }
 
+function sanitizeFileName(fileName: string): string {
+  return fileName
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]/g, "_")
+    .replace(/_{2,}/g, "_")
+    .replace(/^_|_$/g, "");
+}
+
 function base64ToPdfFile(base64: string, fileName: string) {
   const cleanBase64 = base64.replace(/^data:application\/pdf;base64,/, "").replace(/^"|"$/g, "");
   const binary = atob(cleanBase64);
