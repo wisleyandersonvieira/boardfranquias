@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -62,6 +62,10 @@ interface StorePerformance {
   lastCashDate: string | null;
 }
 
+interface DashboardIndicatorsProps {
+  userId?: string | null;
+}
+
 const MONTHS = [
   { value: 1, label: "Janeiro", short: "Jan" },
   { value: 2, label: "Fevereiro", short: "Fev" },
@@ -123,7 +127,7 @@ const statusLabels: Record<StorePerformance["status"], string> = {
   "no-goal": "Sem meta",
 };
 
-const DashboardIndicators = () => {
+const DashboardIndicators = ({ userId }: DashboardIndicatorsProps) => {
   const [selectedStores, setSelectedStores] = useState<string[]>([]);
   const [selectedYear, setSelectedYear] = useState<number>(today.getFullYear());
   const [selectedMonths, setSelectedMonths] = useState<number[]>([today.getMonth() + 1]);
@@ -138,16 +142,13 @@ const DashboardIndicators = () => {
   const debouncedYear = useDebounce(selectedYear, 400);
 
   const { data: stores = [], isLoading: storesLoading } = useQuery({
-    queryKey: ["dashboard-stores"],
+    queryKey: ["dashboard-stores", userId],
     queryFn: async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return [];
+      if (!userId) return [];
 
       const [profileResult, userStoresResult] = await Promise.all([
-        supabase.from("profiles").select("store_id").eq("id", user.id).single(),
-        supabase.from("user_stores").select("store_id").eq("user_id", user.id),
+        supabase.from("profiles").select("store_id").eq("id", userId).single(),
+        supabase.from("user_stores").select("store_id").eq("user_id", userId),
       ]);
 
       const authorizedStoreIds = new Set<string>();
@@ -164,10 +165,18 @@ const DashboardIndicators = () => {
 
       return data || [];
     },
+    enabled: Boolean(userId),
     staleTime: 10 * 60 * 1000,
   });
 
   const authorizedStoreIds = useMemo(() => new Set(stores.map((store) => store.id)), [stores]);
+
+  useEffect(() => {
+    setSelectedStores((currentStores) => {
+      const filteredStores = currentStores.filter((storeId) => authorizedStoreIds.has(storeId));
+      return filteredStores.length === currentStores.length ? currentStores : filteredStores;
+    });
+  }, [authorizedStoreIds, userId]);
 
   const storeIdsToFilter = useMemo(() => {
     const selectedAuthorizedStores = debouncedStores.filter((storeId) => authorizedStoreIds.has(storeId));
