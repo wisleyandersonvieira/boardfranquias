@@ -76,6 +76,10 @@ export default function NfeImport() {
   const [quickIndex, setQuickIndex] = useState<number | null>(null);
   const [quickData, setQuickData] = useState({ name: "", unit_id: "", group_id: "", subgroup_id: "" });
   const [productPopoverOpen, setProductPopoverOpen] = useState<number | null>(null);
+  const [pdfFileExtra, setPdfFileExtra] = useState<File | null>(null);
+  const [userBrandId, setUserBrandId] = useState<string | null>(null);
+  const [quickGroups, setQuickGroups] = useState<{ id: string; name: string }[]>([]);
+  const [quickSubgroups, setQuickSubgroups] = useState<{ id: string; name: string }[]>([]);
 
   // Modal pré-geração do Contas a Pagar
   const [docTypes, setDocTypes] = useState<DocType[]>([]);
@@ -121,6 +125,45 @@ export default function NfeImport() {
   }, [presetStoreId]);
 
   useEffect(() => { fetchHistorico(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [histLoja, histDataIni, histDataFim]);
+
+  // Carrega brand_id da matriz e os grupos disponíveis para o cadastro rápido
+  useEffect(() => {
+    (async () => {
+      if (!matrixId) return;
+      const { data: matrixData } = await supabase
+        .from("matrices")
+        .select("brand_id")
+        .eq("id", matrixId)
+        .maybeSingle();
+      const brandId = (matrixData as any)?.brand_id || null;
+      setUserBrandId(brandId);
+
+      let groupsQuery = supabase
+        .from("account_groups")
+        .select("id, name")
+        .is("parent_id", null)
+        .order("name");
+      if (brandId) groupsQuery = groupsQuery.eq("brand_id", brandId);
+      const { data: groupsData } = await groupsQuery;
+      setQuickGroups((groupsData || []) as any);
+    })();
+  }, [matrixId]);
+
+  // Carrega subgrupos quando o grupo do cadastro rápido muda
+  useEffect(() => {
+    (async () => {
+      if (!quickData.group_id) {
+        setQuickSubgroups([]);
+        return;
+      }
+      const { data } = await supabase
+        .from("account_groups")
+        .select("id, name")
+        .eq("parent_id", quickData.group_id)
+        .order("name");
+      setQuickSubgroups((data || []) as any);
+    })();
+  }, [quickData.group_id]);
 
   const fetchHistorico = async () => {
     setLoadingHistorico(true);
@@ -275,12 +318,21 @@ export default function NfeImport() {
         const xmlText = looksLikeXml(data.xml) ? data.xml : decodeBase64Xml(data.xml);
         const xmlFile = new File([xmlText], data.xmlName || `NFe-${cleanAccessKey}.xml`, { type: "application/xml" });
         setFile(xmlFile);
+        // Se o Meu Danfe também devolveu o PDF (DANFE), guarda para ser anexado
+        // junto com o XML no Contas a Pagar.
+        if (data?.data) {
+          const pdfFile = base64ToPdfFile(data.data, data.name || `NFe-${cleanAccessKey}.pdf`);
+          setPdfFileExtra(pdfFile);
+        } else {
+          setPdfFileExtra(null);
+        }
         if (fileInputRef.current) fileInputRef.current.value = "";
         await processXmlContent(xmlText);
       } else if (data?.data) {
         setStatus("PDF baixado do Meu Danfe. Lendo páginas do PDF...");
         const pdfFile = base64ToPdfFile(data.data, data.name || `NFe-${cleanAccessKey}.pdf`);
         setFile(pdfFile);
+        setPdfFileExtra(null);
         if (fileInputRef.current) fileInputRef.current.value = "";
         await processPdfFile(pdfFile);
       } else {
@@ -481,6 +533,8 @@ export default function NfeImport() {
         name: quickData.name.trim(),
         description: item.descricao_original_pdf,
         unit_id: quickData.unit_id || null,
+        group_id: quickData.group_id || null,
+        subgroup_id: quickData.subgroup_id || null,
         cost_price: item.valor_unitario,
         product_type: "product",
         function_type: "debit",
@@ -535,6 +589,11 @@ export default function NfeImport() {
     try {
       const { data: userData } = await supabase.auth.getUser();
       const arquivoPath = await uploadPdfIfPossible(file, storeId, cabecalho?.chave_acesso);
+      // Quando o arquivo principal é o XML mas também temos o PDF da DANFE
+      // (vindo da consulta por chave no Meu Danfe), faz upload separado do PDF.
+      const arquivoPdfPath = pdfFileExtra && cabecalho?.chave_acesso
+        ? await uploadPdfIfPossible(pdfFileExtra, storeId, cabecalho.chave_acesso)
+        : null;
       const { data: importacao, error } = await supabaseAny
         .from("nfe_importacoes")
         .insert({
@@ -551,6 +610,7 @@ export default function NfeImport() {
           vencimentos: cabecalho?.duplicatas || [],
           arquivo_nome: file?.name,
           arquivo_path: arquivoPath,
+          arquivo_pdf_path: arquivoPdfPath,
           status: "conferida",
         })
         .select("id")
@@ -624,30 +684,42 @@ export default function NfeImport() {
     try {
       const { data: userData } = await supabase.auth.getUser();
       const totalAmount = totalProdutos || cabecalho.valor_total_nota || 0;
-      // Recupera o caminho do PDF salvo (se houver) para anexar no contas a pagar
-      let pdfAttachmentPath: string | null = null;
-      let pdfAttachmentName: string | null = null;
-      let pdfAttachmentSize: number | null = null;
+      // Recupera os caminhos do XML/PDF salvos para anexar no contas a pagar
+      let mainPath: string | null = null;
+      let mainName: string | null = null;
+      let pdfPath: string | null = null;
       try {
         const { data: impRow } = await supabaseAny
           .from("nfe_importacoes")
-          .select("arquivo_path, arquivo_nome")
+          .select("arquivo_path, arquivo_nome, arquivo_pdf_path")
           .eq("id", id)
           .maybeSingle();
-        pdfAttachmentPath = impRow?.arquivo_path || null;
-        pdfAttachmentName = impRow?.arquivo_nome || (cabecalho.numero_nfe ? `NFe-${cabecalho.numero_nfe}.pdf` : "NFe.pdf");
-        pdfAttachmentSize = file?.size || null;
+        mainPath = impRow?.arquivo_path || null;
+        mainName = impRow?.arquivo_nome || (cabecalho.numero_nfe ? `NFe-${cabecalho.numero_nfe}` : "NFe");
+        pdfPath = impRow?.arquivo_pdf_path || null;
       } catch {}
 
-      const initialAttachments = pdfAttachmentPath
-        ? [{
-            name: pdfAttachmentName || "NFe.pdf",
-            url: pdfAttachmentPath,
-            path: pdfAttachmentPath,
-            size: pdfAttachmentSize || undefined,
-            type: "application/pdf",
-          }]
-        : [];
+      const initialAttachments: any[] = [];
+      if (mainPath) {
+        const isXml = mainPath.toLowerCase().endsWith(".xml") || (mainName || "").toLowerCase().endsWith(".xml");
+        initialAttachments.push({
+          name: mainName || (isXml ? "NFe.xml" : "NFe.pdf"),
+          url: mainPath,
+          path: mainPath,
+          size: file?.size || undefined,
+          type: isXml ? "application/xml" : "application/pdf",
+        });
+      }
+      if (pdfPath && pdfPath !== mainPath) {
+        const pdfName = cabecalho.numero_nfe ? `NFe-${cabecalho.numero_nfe}.pdf` : "NFe.pdf";
+        initialAttachments.push({
+          name: pdfName,
+          url: pdfPath,
+          path: pdfPath,
+          size: pdfFileExtra?.size || undefined,
+          type: "application/pdf",
+        });
+      }
 
       const { data: payable, error } = await supabase.from("accounts_payable").insert({
         store_id: storeId,
@@ -839,7 +911,7 @@ export default function NfeImport() {
             <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
               <div className="space-y-2">
                 <Label>XML ou DANFE em PDF</Label>
-                <Input ref={fileInputRef} type="file" accept=".xml,application/xml,text/xml,application/pdf" onChange={(event) => setFile(event.target.files?.[0] || null)} />
+                <Input ref={fileInputRef} type="file" accept=".xml,application/xml,text/xml,application/pdf" onChange={(event) => { setFile(event.target.files?.[0] || null); setPdfFileExtra(null); }} />
               </div>
               <div className="flex items-end">
                 <Button onClick={handleReadPdf} disabled={reading || fetchingAccessKey} variant="outline" className="w-full lg:w-auto">
@@ -1133,6 +1205,35 @@ export default function NfeImport() {
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>{unidades.map((u) => <SelectItem key={u.id} value={u.id}>{u.symbol} - {u.name}</SelectItem>)}</SelectContent>
               </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Grupo</Label>
+                <Select
+                  value={quickData.group_id}
+                  onValueChange={(group_id) => setQuickData({ ...quickData, group_id, subgroup_id: "" })}
+                >
+                  <SelectTrigger><SelectValue placeholder="Selecione o grupo" /></SelectTrigger>
+                  <SelectContent>
+                    {quickGroups.map((g) => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Subgrupo</Label>
+                <Select
+                  value={quickData.subgroup_id}
+                  onValueChange={(subgroup_id) => setQuickData({ ...quickData, subgroup_id })}
+                  disabled={!quickData.group_id}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={!quickData.group_id ? "Selecione um grupo primeiro" : "Selecione o subgrupo"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {quickSubgroups.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             {quickIndex !== null && <p className="text-sm text-muted-foreground">Fornecedor: {fornecedor?.name || "não localizado"} | Código: {itens[quickIndex]?.codigo_fornecedor} | Último valor: {formatCurrency(itens[quickIndex]?.valor_unitario, 4)}</p>}
           </div>
