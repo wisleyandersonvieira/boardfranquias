@@ -524,6 +524,8 @@ export default function NfeImport() {
         name: quickData.name.trim(),
         description: item.descricao_original_pdf,
         unit_id: quickData.unit_id || null,
+        group_id: quickData.group_id || null,
+        subgroup_id: quickData.subgroup_id || null,
         cost_price: item.valor_unitario,
         product_type: "product",
         function_type: "debit",
