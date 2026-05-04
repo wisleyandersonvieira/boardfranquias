@@ -739,6 +739,62 @@ export default function NfeImport() {
       } as any).select("id").single();
       if (error) throw error;
 
+      // Quando a importação é feita a partir do Controle de Caixa (vínculo),
+      // copia também os anexos originais da despesa para o Contas a Pagar,
+      // mesmo comportamento do vínculo sem NF-e.
+      if (linkExpenseId) {
+        try {
+          const { data: expense } = await supabaseAny
+            .from("cash_control_expenses")
+            .select("attachments")
+            .eq("id", linkExpenseId)
+            .maybeSingle();
+          const rawAttachments = (expense?.attachments as any[]) || [];
+          const normalized = rawAttachments
+            .map((att: any) => {
+              if (typeof att === "string") {
+                const parts = att.split("/");
+                return { path: att, originalName: parts[parts.length - 1] };
+              }
+              return att;
+            })
+            .filter((att: any) => att?.path);
+
+          const copiedAttachments: Array<{ name: string; path: string; size?: number }> = [];
+          for (const att of normalized) {
+            try {
+              const { data: fileData, error: downloadError } = await supabase.storage
+                .from("account-documents")
+                .download(att.path);
+              if (downloadError || !fileData) continue;
+              const safeName = sanitizeFileName(att.originalName || "anexo");
+              const newFileName = `${storeId}/${payable.id}/${Date.now()}_${safeName}`;
+              const { error: uploadError } = await supabase.storage
+                .from("account-documents")
+                .upload(newFileName, fileData);
+              if (uploadError) continue;
+              copiedAttachments.push({
+                name: att.originalName || safeName,
+                path: newFileName,
+                size: fileData.size,
+              });
+            } catch (e) {
+              console.error("Erro ao copiar anexo do controle de caixa:", e);
+            }
+          }
+
+          if (copiedAttachments.length > 0) {
+            const merged = [...initialAttachments, ...copiedAttachments];
+            await supabase
+              .from("accounts_payable")
+              .update({ attachments: merged as any })
+              .eq("id", payable.id);
+          }
+        } catch (e) {
+          console.error("Falha ao copiar anexos do controle de caixa:", e);
+        }
+      }
+
       // Carrega itens persistidos da importação (já têm produto_id confirmado)
       const { data: importedItems, error: importedItemsError } = await supabaseAny
         .from("nfe_importacao_itens")
