@@ -13,8 +13,11 @@ dist-ssr
 *.local
 
 # Environment and credentials
-.env
-.env.*
+# NOTE: .env is intentionally tracked because it only contains Vite public vars
+# (VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY) which are anon/publishable
+# keys safe to expose in the client bundle. Production builds need them committed.
+.env.local
+.env.*.local
 !.env.example
 *.pem
 *.key
