@@ -1456,10 +1456,23 @@ const PurchasesReport = () => {
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
-                  <Button onClick={exportToExcel} variant="outline" size="sm">
-                    <Download className="h-4 w-4 mr-2" />
-                    Excel
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        <Download className="h-4 w-4 mr-2" />
+                        Excel
+                        <ChevronDown className="h-4 w-4 ml-2" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuItem onClick={exportToExcel}>
+                        Relatório Padrão
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={exportToExcelPorSubgrupo}>
+                        Relatório por Subgrupo
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
             </CardHeader>
