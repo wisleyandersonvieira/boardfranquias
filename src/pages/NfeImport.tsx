@@ -684,30 +684,42 @@ export default function NfeImport() {
     try {
       const { data: userData } = await supabase.auth.getUser();
       const totalAmount = totalProdutos || cabecalho.valor_total_nota || 0;
-      // Recupera o caminho do PDF salvo (se houver) para anexar no contas a pagar
-      let pdfAttachmentPath: string | null = null;
-      let pdfAttachmentName: string | null = null;
-      let pdfAttachmentSize: number | null = null;
+      // Recupera os caminhos do XML/PDF salvos para anexar no contas a pagar
+      let mainPath: string | null = null;
+      let mainName: string | null = null;
+      let pdfPath: string | null = null;
       try {
         const { data: impRow } = await supabaseAny
           .from("nfe_importacoes")
-          .select("arquivo_path, arquivo_nome")
+          .select("arquivo_path, arquivo_nome, arquivo_pdf_path")
           .eq("id", id)
           .maybeSingle();
-        pdfAttachmentPath = impRow?.arquivo_path || null;
-        pdfAttachmentName = impRow?.arquivo_nome || (cabecalho.numero_nfe ? `NFe-${cabecalho.numero_nfe}.pdf` : "NFe.pdf");
-        pdfAttachmentSize = file?.size || null;
+        mainPath = impRow?.arquivo_path || null;
+        mainName = impRow?.arquivo_nome || (cabecalho.numero_nfe ? `NFe-${cabecalho.numero_nfe}` : "NFe");
+        pdfPath = impRow?.arquivo_pdf_path || null;
       } catch {}
 
-      const initialAttachments = pdfAttachmentPath
-        ? [{
-            name: pdfAttachmentName || "NFe.pdf",
-            url: pdfAttachmentPath,
-            path: pdfAttachmentPath,
-            size: pdfAttachmentSize || undefined,
-            type: "application/pdf",
-          }]
-        : [];
+      const initialAttachments: any[] = [];
+      if (mainPath) {
+        const isXml = mainPath.toLowerCase().endsWith(".xml") || (mainName || "").toLowerCase().endsWith(".xml");
+        initialAttachments.push({
+          name: mainName || (isXml ? "NFe.xml" : "NFe.pdf"),
+          url: mainPath,
+          path: mainPath,
+          size: file?.size || undefined,
+          type: isXml ? "application/xml" : "application/pdf",
+        });
+      }
+      if (pdfPath && pdfPath !== mainPath) {
+        const pdfName = cabecalho.numero_nfe ? `NFe-${cabecalho.numero_nfe}.pdf` : "NFe.pdf";
+        initialAttachments.push({
+          name: pdfName,
+          url: pdfPath,
+          path: pdfPath,
+          size: pdfFileExtra?.size || undefined,
+          type: "application/pdf",
+        });
+      }
 
       const { data: payable, error } = await supabase.from("accounts_payable").insert({
         store_id: storeId,
