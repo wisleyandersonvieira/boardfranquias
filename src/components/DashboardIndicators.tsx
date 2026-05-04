@@ -93,6 +93,9 @@ const formatPercent = (value: number) =>
 
 const daysInMonth = (year: number, month: number) => new Date(year, month, 0).getDate();
 
+const dateFromParts = (year: number, month: number, day: number) =>
+  `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+
 const diffInDays = (date: string) => {
   const start = new Date(`${date}T00:00:00`);
   const end = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -182,6 +185,17 @@ const DashboardIndicators = () => {
     return `${first} a ${last} (${ordered.length} meses)`;
   }, [debouncedMonths]);
 
+  const selectedPeriodRange = useMemo(() => {
+    const orderedMonths = [...debouncedMonths].sort((a, b) => a - b);
+    const firstMonth = orderedMonths[0];
+    const lastMonth = orderedMonths[orderedMonths.length - 1];
+
+    return {
+      start: dateFromParts(debouncedYear, firstMonth, 1),
+      end: dateFromParts(debouncedYear, lastMonth, daysInMonth(debouncedYear, lastMonth)),
+    };
+  }, [debouncedMonths, debouncedYear]);
+
   const { data: employeesData, isLoading: employeesLoading } = useQuery({
     queryKey: ["dashboard-employees", storeIdsToFilter],
     queryFn: async () => {
@@ -259,6 +273,45 @@ const DashboardIndicators = () => {
     staleTime: 5 * 60 * 1000,
   });
 
+  const { data: performanceRevenueData = [], isLoading: performanceRevenueLoading } = useQuery({
+    queryKey: ["dashboard-store-performance-revenue", storeIdsToFilter, debouncedYear, debouncedMonths],
+    queryFn: async () => {
+      if (storeIdsToFilter.length === 0) return [];
+
+      const selectedMonthSet = new Set(debouncedMonths);
+      const { data } = await supabase
+        .from("cash_control")
+        .select("store_id, date, faturamento_total")
+        .gte("date", selectedPeriodRange.start)
+        .lte("date", selectedPeriodRange.end)
+        .in("store_id", storeIdsToFilter);
+
+      return ((data || []) as RevenueRow[]).filter((item) =>
+        selectedMonthSet.has(Number(item.date.split("-")[1])),
+      );
+    },
+    enabled: storeIdsToFilter.length > 0,
+    staleTime: 2 * 60 * 1000,
+  });
+
+  const { data: performanceGoalsData = [], isLoading: performanceGoalsLoading } = useQuery({
+    queryKey: ["dashboard-store-performance-goals", storeIdsToFilter, debouncedYear, debouncedMonths],
+    queryFn: async () => {
+      if (storeIdsToFilter.length === 0) return [];
+
+      const { data } = await supabase
+        .from("store_goals")
+        .select("store_id, goal_value, month")
+        .eq("year", debouncedYear)
+        .in("month", debouncedMonths)
+        .in("store_id", storeIdsToFilter);
+
+      return (data || []) as GoalRow[];
+    },
+    enabled: storeIdsToFilter.length > 0,
+    staleTime: 2 * 60 * 1000,
+  });
+
   const { data: lastCashByStore = {}, isLoading: lastCashLoading } = useQuery({
     queryKey: ["dashboard-last-cash-by-store", storeIdsToFilter],
     queryFn: async () => {
@@ -283,8 +336,6 @@ const DashboardIndicators = () => {
     const selectedMonthSet = new Set(debouncedMonths);
     const currentYearMonthly: Record<number, number> = {};
     const previousYearMonthly: Record<number, number> = {};
-    const selectedRevenueByStore: Record<string, number> = {};
-    const selectedGoalByStore: Record<string, number> = {};
 
     let totalRevenue = 0;
     let previousPeriodRevenue = 0;
@@ -298,7 +349,6 @@ const DashboardIndicators = () => {
 
       if (selectedMonthSet.has(month)) {
         totalRevenue += value;
-        selectedRevenueByStore[item.store_id] = (selectedRevenueByStore[item.store_id] || 0) + value;
       }
     });
 
@@ -320,7 +370,6 @@ const DashboardIndicators = () => {
 
       if (selectedMonthSet.has(item.month)) {
         totalGoal += value;
-        selectedGoalByStore[item.store_id] = (selectedGoalByStore[item.store_id] || 0) + value;
       }
     });
 
@@ -339,7 +388,52 @@ const DashboardIndicators = () => {
       };
     });
 
-    const storePerformance = stores
+    return {
+      totalRevenue,
+      previousPeriodRevenue,
+      totalGoal,
+      yearlyRevenue,
+      yearlyGoal,
+      chartData,
+    };
+  }, [
+    currentMonth,
+    currentYear,
+    debouncedMonths,
+    debouncedYear,
+    goalsData,
+    revenueData,
+  ]);
+
+  const loading =
+    storesLoading ||
+    employeesLoading ||
+    revenueLoading ||
+    goalsLoading ||
+    lastCashLoading ||
+    performanceRevenueLoading ||
+    performanceGoalsLoading;
+  const {
+    totalRevenue,
+    previousPeriodRevenue,
+    totalGoal,
+    yearlyRevenue,
+    yearlyGoal,
+    chartData,
+  } = computedValues;
+
+  const storePerformance = useMemo(() => {
+    const selectedRevenueByStore = performanceRevenueData.reduce<Record<string, number>>((acc, item) => {
+      acc[item.store_id] = (acc[item.store_id] || 0) + Number(item.faturamento_total || 0);
+      return acc;
+    }, {});
+
+    const selectedGoalByStore = performanceGoalsData.reduce<Record<string, number>>((acc, item) => {
+      acc[item.store_id] = (acc[item.store_id] || 0) + Number(item.goal_value || 0);
+      return acc;
+    }, {});
+
+    return stores
       .filter((store) => storeIdsToFilter.includes(store.id))
       .map<StorePerformance>((store) => {
         const revenue = selectedRevenueByStore[store.id] || 0;
@@ -359,38 +453,7 @@ const DashboardIndicators = () => {
         };
       })
       .sort((left, right) => right.percentage - left.percentage || right.revenue - left.revenue);
-
-    return {
-      totalRevenue,
-      previousPeriodRevenue,
-      totalGoal,
-      yearlyRevenue,
-      yearlyGoal,
-      chartData,
-      storePerformance,
-    };
-  }, [
-    currentMonth,
-    currentYear,
-    debouncedMonths,
-    debouncedYear,
-    goalsData,
-    lastCashByStore,
-    revenueData,
-    storeIdsToFilter,
-    stores,
-  ]);
-
-  const loading = storesLoading || employeesLoading || revenueLoading || goalsLoading || lastCashLoading;
-  const {
-    totalRevenue,
-    previousPeriodRevenue,
-    totalGoal,
-    yearlyRevenue,
-    yearlyGoal,
-    chartData,
-    storePerformance,
-  } = computedValues;
+  }, [lastCashByStore, performanceGoalsData, performanceRevenueData, storeIdsToFilter, stores]);
 
   const goalPercentage = totalGoal > 0 ? (totalRevenue / totalGoal) * 100 : 0;
   const goalDifference = totalRevenue - totalGoal;
