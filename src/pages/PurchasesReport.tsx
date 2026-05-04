@@ -985,6 +985,155 @@ const PurchasesReport = () => {
     XLSX.writeFile(wb, "compras.xlsx");
   };
 
+  const exportToExcelPorSubgrupo = () => {
+    const accountsBySubgroup: { [key: string]: { subgroupName: string; items: any[] } } = {};
+
+    accounts.forEach(account => {
+      if (account.accounts_payable_items && account.accounts_payable_items.length > 0) {
+        const totalItemsValue = account.accounts_payable_items.reduce((sum: number, it: any) => sum + (it.total_price || 0), 0);
+        const baseAmount = account.amount ?? 0;
+        const proportion = totalItemsValue > 0 ? baseAmount / totalItemsValue : 1;
+
+        const itemsBySubgroup: { [key: string]: { subgroupId: string; subgroupName: string; totalAmount: number } } = {};
+        account.accounts_payable_items.forEach((item: any) => {
+          const subgroupId = item.products?.subgroup_id || 'sem-subgrupo';
+          const subgroupName = item.products?.account_groups?.name || 'Sem Subgrupo';
+          const proportionalAmount = (item.total_price || 0) * proportion;
+
+          if (!itemsBySubgroup[subgroupId]) {
+            itemsBySubgroup[subgroupId] = { subgroupId, subgroupName, totalAmount: 0 };
+          }
+          itemsBySubgroup[subgroupId].totalAmount += proportionalAmount;
+        });
+
+        Object.values(itemsBySubgroup).forEach(({ subgroupId, subgroupName, totalAmount }) => {
+          if (!accountsBySubgroup[subgroupId]) {
+            accountsBySubgroup[subgroupId] = { subgroupName, items: [] };
+          }
+          accountsBySubgroup[subgroupId].items.push({
+            description: account.description,
+            supplierName: getSupplierOrEmployeeName(account),
+            storeName: account.stores?.name || "N/A",
+            paymentDate: account.payment_date,
+            status: getStatusLabel(account.display_status),
+            amount: totalAmount,
+            installmentNumber: account.installment_number,
+            totalInstallments: account.total_installments,
+          });
+        });
+      }
+
+      if (account.interest_amount && account.interest_amount > 0 && account.interest_product) {
+        const subgroupId = account.interest_product.subgroup_id || 'sem-subgrupo';
+        const subgroupName = account.interest_product.account_groups?.name || 'Sem Subgrupo';
+        if (!accountsBySubgroup[subgroupId]) {
+          accountsBySubgroup[subgroupId] = { subgroupName, items: [] };
+        }
+        accountsBySubgroup[subgroupId].items.push({
+          description: `${account.description} (Juros)`,
+          supplierName: getSupplierOrEmployeeName(account),
+          storeName: account.stores?.name || "N/A",
+          paymentDate: account.payment_date,
+          status: getStatusLabel(account.display_status),
+          amount: account.interest_amount,
+          installmentNumber: account.installment_number,
+          totalInstallments: account.total_installments,
+        });
+      }
+
+      if (account.discount_amount && account.discount_amount > 0 && account.discount_product) {
+        const subgroupId = account.discount_product.subgroup_id || 'sem-subgrupo';
+        const subgroupName = account.discount_product.account_groups?.name || 'Sem Subgrupo';
+        if (!accountsBySubgroup[subgroupId]) {
+          accountsBySubgroup[subgroupId] = { subgroupName, items: [] };
+        }
+        accountsBySubgroup[subgroupId].items.push({
+          description: `${account.description} (Desconto)`,
+          supplierName: getSupplierOrEmployeeName(account),
+          storeName: account.stores?.name || "N/A",
+          paymentDate: account.payment_date,
+          status: getStatusLabel(account.display_status),
+          amount: -account.discount_amount,
+          installmentNumber: account.installment_number,
+          totalInstallments: account.total_installments,
+        });
+      }
+
+      if ((!account.accounts_payable_items || account.accounts_payable_items.length === 0) &&
+          !account.interest_amount && !account.discount_amount) {
+        if (!accountsBySubgroup['sem-subgrupo']) {
+          accountsBySubgroup['sem-subgrupo'] = { subgroupName: 'Sem Subgrupo', items: [] };
+        }
+        accountsBySubgroup['sem-subgrupo'].items.push({
+          description: account.description,
+          supplierName: getSupplierOrEmployeeName(account),
+          storeName: account.stores?.name || "N/A",
+          paymentDate: account.payment_date,
+          status: getStatusLabel(account.display_status),
+          amount: account.amount || 0,
+          installmentNumber: account.installment_number,
+          totalInstallments: account.total_installments,
+        });
+      }
+    });
+
+    const rows: any[] = [];
+    rows.push(["Subgrupo", "Título", "Fornecedor", "Loja", "Pagamento", "Status", "Valor", "Parcelas"]);
+
+    let grandTotal = 0;
+    let totalItems = 0;
+
+    Object.values(accountsBySubgroup).forEach(group => {
+      rows.push([group.subgroupName, "", "", "", "", "", "", ""]);
+      let subgroupTotal = 0;
+      group.items.forEach(item => {
+        rows.push([
+          "",
+          item.description,
+          item.supplierName,
+          item.storeName,
+          item.paymentDate ? new Date(item.paymentDate + 'T00:00:00').toLocaleDateString("pt-BR") : "-",
+          item.status,
+          item.amount ?? 0,
+          item.totalInstallments > 1 ? `${item.installmentNumber}/${item.totalInstallments}` : "À vista",
+        ]);
+        subgroupTotal += item.amount || 0;
+        totalItems++;
+      });
+      rows.push([
+        `Subtotal ${group.subgroupName}`,
+        "",
+        "",
+        "",
+        "",
+        `${group.items.length} item(s)`,
+        subgroupTotal,
+        "",
+      ]);
+      grandTotal += subgroupTotal;
+    });
+
+    rows.push([
+      "TOTAL GERAL",
+      "",
+      "",
+      "",
+      "",
+      `${totalItems} item(s)`,
+      grandTotal,
+      "",
+    ]);
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [
+      { wch: 30 }, { wch: 35 }, { wch: 25 }, { wch: 20 },
+      { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Compras por Subgrupo");
+    XLSX.writeFile(wb, "compras-por-subgrupo.xlsx");
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card">
@@ -1307,10 +1456,23 @@ const PurchasesReport = () => {
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
-                  <Button onClick={exportToExcel} variant="outline" size="sm">
-                    <Download className="h-4 w-4 mr-2" />
-                    Excel
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        <Download className="h-4 w-4 mr-2" />
+                        Excel
+                        <ChevronDown className="h-4 w-4 ml-2" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuItem onClick={exportToExcel}>
+                        Relatório Padrão
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={exportToExcelPorSubgrupo}>
+                        Relatório por Subgrupo
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
             </CardHeader>
