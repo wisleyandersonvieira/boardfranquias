@@ -2717,6 +2717,7 @@ export type Database = {
         Row: {
           arquivo_nome: string | null
           arquivo_path: string | null
+          arquivo_pdf_path: string | null
           chave_acesso: string | null
           contas_pagar_id: string | null
           created_at: string
@@ -2737,6 +2738,7 @@ export type Database = {
         Insert: {
           arquivo_nome?: string | null
           arquivo_path?: string | null
+          arquivo_pdf_path?: string | null
           chave_acesso?: string | null
           contas_pagar_id?: string | null
           created_at?: string
@@ -2757,6 +2759,7 @@ export type Database = {
         Update: {
           arquivo_nome?: string | null
           arquivo_path?: string | null
+          arquivo_pdf_path?: string | null
           chave_acesso?: string | null
           contas_pagar_id?: string | null
           created_at?: string

@@ -76,6 +76,10 @@ export default function NfeImport() {
   const [quickIndex, setQuickIndex] = useState<number | null>(null);
   const [quickData, setQuickData] = useState({ name: "", unit_id: "", group_id: "", subgroup_id: "" });
   const [productPopoverOpen, setProductPopoverOpen] = useState<number | null>(null);
+  const [pdfFileExtra, setPdfFileExtra] = useState<File | null>(null);
+  const [userBrandId, setUserBrandId] = useState<string | null>(null);
+  const [quickGroups, setQuickGroups] = useState<{ id: string; name: string }[]>([]);
+  const [quickSubgroups, setQuickSubgroups] = useState<{ id: string; name: string }[]>([]);
 
   // Modal pré-geração do Contas a Pagar
   const [docTypes, setDocTypes] = useState<DocType[]>([]);
