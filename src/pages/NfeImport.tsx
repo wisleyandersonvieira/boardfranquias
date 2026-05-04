@@ -318,12 +318,21 @@ export default function NfeImport() {
         const xmlText = looksLikeXml(data.xml) ? data.xml : decodeBase64Xml(data.xml);
         const xmlFile = new File([xmlText], data.xmlName || `NFe-${cleanAccessKey}.xml`, { type: "application/xml" });
         setFile(xmlFile);
+        // Se o Meu Danfe também devolveu o PDF (DANFE), guarda para ser anexado
+        // junto com o XML no Contas a Pagar.
+        if (data?.data) {
+          const pdfFile = base64ToPdfFile(data.data, data.name || `NFe-${cleanAccessKey}.pdf`);
+          setPdfFileExtra(pdfFile);
+        } else {
+          setPdfFileExtra(null);
+        }
         if (fileInputRef.current) fileInputRef.current.value = "";
         await processXmlContent(xmlText);
       } else if (data?.data) {
         setStatus("PDF baixado do Meu Danfe. Lendo páginas do PDF...");
         const pdfFile = base64ToPdfFile(data.data, data.name || `NFe-${cleanAccessKey}.pdf`);
         setFile(pdfFile);
+        setPdfFileExtra(null);
         if (fileInputRef.current) fileInputRef.current.value = "";
         await processPdfFile(pdfFile);
       } else {
