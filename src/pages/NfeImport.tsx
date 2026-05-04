@@ -589,6 +589,11 @@ export default function NfeImport() {
     try {
       const { data: userData } = await supabase.auth.getUser();
       const arquivoPath = await uploadPdfIfPossible(file, storeId, cabecalho?.chave_acesso);
+      // Quando o arquivo principal é o XML mas também temos o PDF da DANFE
+      // (vindo da consulta por chave no Meu Danfe), faz upload separado do PDF.
+      const arquivoPdfPath = pdfFileExtra && cabecalho?.chave_acesso
+        ? await uploadPdfIfPossible(pdfFileExtra, storeId, cabecalho.chave_acesso)
+        : null;
       const { data: importacao, error } = await supabaseAny
         .from("nfe_importacoes")
         .insert({
@@ -605,6 +610,7 @@ export default function NfeImport() {
           vencimentos: cabecalho?.duplicatas || [],
           arquivo_nome: file?.name,
           arquivo_path: arquivoPath,
+          arquivo_pdf_path: arquivoPdfPath,
           status: "conferida",
         })
         .select("id")
