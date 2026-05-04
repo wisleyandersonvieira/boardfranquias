@@ -126,6 +126,45 @@ export default function NfeImport() {
 
   useEffect(() => { fetchHistorico(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [histLoja, histDataIni, histDataFim]);
 
+  // Carrega brand_id da matriz e os grupos disponíveis para o cadastro rápido
+  useEffect(() => {
+    (async () => {
+      if (!matrixId) return;
+      const { data: matrixData } = await supabase
+        .from("matrices")
+        .select("brand_id")
+        .eq("id", matrixId)
+        .maybeSingle();
+      const brandId = (matrixData as any)?.brand_id || null;
+      setUserBrandId(brandId);
+
+      let groupsQuery = supabase
+        .from("account_groups")
+        .select("id, name")
+        .is("parent_id", null)
+        .order("name");
+      if (brandId) groupsQuery = groupsQuery.eq("brand_id", brandId);
+      const { data: groupsData } = await groupsQuery;
+      setQuickGroups((groupsData || []) as any);
+    })();
+  }, [matrixId]);
+
+  // Carrega subgrupos quando o grupo do cadastro rápido muda
+  useEffect(() => {
+    (async () => {
+      if (!quickData.group_id) {
+        setQuickSubgroups([]);
+        return;
+      }
+      const { data } = await supabase
+        .from("account_groups")
+        .select("id, name")
+        .eq("parent_id", quickData.group_id)
+        .order("name");
+      setQuickSubgroups((data || []) as any);
+    })();
+  }, [quickData.group_id]);
+
   const fetchHistorico = async () => {
     setLoadingHistorico(true);
     try {
