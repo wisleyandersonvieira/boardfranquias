@@ -1090,7 +1090,20 @@ export default function NfeImport() {
               <CardDescription>Confira o cabeçalho extraído do PDF.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <Info label="Fornecedor" value={fornecedor?.name || cabecalho.fornecedor || "Não localizado"} />
+              <div className="space-y-1">
+                <p className="text-xs uppercase text-muted-foreground">Fornecedor</p>
+                <div className="flex items-center gap-2">
+                  <p className={`text-sm font-medium flex-1 truncate ${!fornecedor ? "text-amber-600" : ""}`}>
+                    {fornecedor?.name || cabecalho.fornecedor || "Não localizado"}
+                  </p>
+                  <Button type="button" size="icon" variant="outline" className="h-7 w-7" onClick={() => setSupplierSearchOpen(true)} title="Selecionar fornecedor existente">
+                    <Search className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button type="button" size="icon" variant="outline" className="h-7 w-7" onClick={openQuickSupplier} title="Cadastrar novo fornecedor">
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
               <Info label="CNPJ" value={cabecalho.cnpj_fornecedor} />
               <Info label="NF-e" value={cabecalho.numero_nfe} />
               <Info label="Série" value={cabecalho.serie} />
