@@ -522,6 +522,98 @@ export default function NfeImport() {
     setQuickData({ name: item.descricao_limpa, unit_id: unit?.id || "", group_id: "", subgroup_id: "" });
   };
 
+  const handleSupplierChosen = async (supplier: Fornecedor) => {
+    setFornecedor(supplier);
+    // Re-correlaciona itens com base no novo fornecedor (vínculo por código de fornecedor)
+    if (itens.length > 0) {
+      const recorrelated = await correlateItems(
+        itens.map((it) => ({
+          codigo_fornecedor: it.codigo_fornecedor,
+          descricao_original_pdf: it.descricao_original_pdf,
+          descricao_limpa: it.descricao_limpa,
+          unidade: it.unidade,
+          quantidade: it.quantidade,
+          valor_unitario: it.valor_unitario,
+          valor_total: it.valor_total,
+          ncm: it.ncm,
+          cst: it.cst,
+          cfop: it.cfop,
+          valor_icms: it.valor_icms,
+          valor_ipi: it.valor_ipi,
+          aliquota_icms: it.aliquota_icms,
+          aliquota_ipi: it.aliquota_ipi,
+        })),
+        supplier.id,
+        produtos
+      );
+      // Preserva produto manual já escolhido pelo usuário
+      setItens((current) => current.map((item, i) => {
+        if (item.produto_id && item.status_vinculo === "vinculado" && !recorrelated[i].produto_id) {
+          return item;
+        }
+        return { ...item, produto_id: recorrelated[i].produto_id, produto_nome: recorrelated[i].produto_nome, status_vinculo: recorrelated[i].status_vinculo };
+      }));
+    }
+    toast({ title: "Fornecedor selecionado", description: supplier.name });
+  };
+
+  const openQuickSupplier = () => {
+    setQuickSupplierData({
+      name: cabecalho?.fornecedor || "",
+      cnpj_cpf: cabecalho?.cnpj_fornecedor || "",
+    });
+    setQuickSupplierOpen(true);
+  };
+
+  const saveQuickSupplier = async () => {
+    if (!quickSupplierData.name.trim()) {
+      toast({ variant: "destructive", title: "Nome obrigatório", description: "Informe o nome do fornecedor." });
+      return;
+    }
+    if (!matrixId) {
+      toast({ variant: "destructive", title: "Erro", description: "Matriz do usuário não encontrada." });
+      return;
+    }
+    setSavingQuickSupplier(true);
+    try {
+      // Verifica duplicidade por CNPJ/CPF
+      const cnpj = quickSupplierData.cnpj_cpf.trim();
+      if (cnpj) {
+        const digits = cnpj.replace(/\D/g, "");
+        const { data: existing } = await supabase
+          .from("suppliers")
+          .select("id, name, cnpj_cpf")
+          .or(`cnpj_cpf.eq.${cnpj},cnpj_cpf.eq.${digits}`)
+          .maybeSingle();
+        if (existing) {
+          await handleSupplierChosen(existing as Fornecedor);
+          toast({ title: "Fornecedor já existia", description: "Vinculado o cadastro existente." });
+          setQuickSupplierOpen(false);
+          return;
+        }
+      }
+      const userId = (await supabase.auth.getUser()).data.user?.id;
+      const { data, error } = await supabase
+        .from("suppliers")
+        .insert([{
+          name: quickSupplierData.name.trim(),
+          cnpj_cpf: cnpj || null,
+          matrix_id: matrixId,
+          created_by: userId,
+        } as any])
+        .select("id, name, cnpj_cpf")
+        .single();
+      if (error) throw error;
+      await handleSupplierChosen(data as Fornecedor);
+      toast({ title: "Fornecedor cadastrado", description: data.name });
+      setQuickSupplierOpen(false);
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Erro ao cadastrar", description: err.message });
+    } finally {
+      setSavingQuickSupplier(false);
+    }
+  };
+
   const saveQuickProduct = async () => {
     if (quickIndex === null || !quickData.name.trim()) return;
     if (!fornecedor?.id) {
