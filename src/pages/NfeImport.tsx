@@ -82,6 +82,12 @@ export default function NfeImport() {
   const [quickGroups, setQuickGroups] = useState<{ id: string; name: string }[]>([]);
   const [quickSubgroups, setQuickSubgroups] = useState<{ id: string; name: string }[]>([]);
 
+  // Cadastro / busca de fornecedor durante a importação
+  const [supplierSearchOpen, setSupplierSearchOpen] = useState(false);
+  const [quickSupplierOpen, setQuickSupplierOpen] = useState(false);
+  const [quickSupplierData, setQuickSupplierData] = useState({ name: "", cnpj_cpf: "" });
+  const [savingQuickSupplier, setSavingQuickSupplier] = useState(false);
+
   // Modal pré-geração do Contas a Pagar
   const [docTypes, setDocTypes] = useState<DocType[]>([]);
   const [showApDialog, setShowApDialog] = useState(false);
