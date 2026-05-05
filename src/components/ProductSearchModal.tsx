@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Search, Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { fetchAllPaginated } from "@/utils/supabasePagination";
 
 interface Product {
   id: string;
@@ -48,11 +49,7 @@ export function ProductSearchModal({
   const fetchProducts = async () => {
     setLoading(true);
     try {
-      let query = supabase
-        .from("products")
-        .select("id, name, code")
-        .eq("is_active", true)
-        .eq("function_type", functionType);
+      let employeeGroupId: string | null = null;
 
       // Se estiver no modo funcionário, filtrar por grupo do parâmetro FUNCIONÁRIOS
       if (isEmployeeMode) {
@@ -65,14 +62,20 @@ export function ProductSearchModal({
         if (paramError) {
           console.warn("Error fetching FUNCIONÁRIOS parameter:", paramError);
         } else if (paramData?.group_id) {
-          query = query.eq("group_id", paramData.group_id);
+          employeeGroupId = paramData.group_id;
         }
       }
 
-      const { data, error } = await query.order("name");
-
-      if (error) throw error;
-      setProducts(data || []);
+      const data = await fetchAllPaginated<Product>((from, to) => {
+        let q = supabase
+          .from("products")
+          .select("id, name, code")
+          .eq("is_active", true)
+          .eq("function_type", functionType);
+        if (employeeGroupId) q = q.eq("group_id", employeeGroupId);
+        return q.order("name").range(from, to);
+      });
+      setProducts(data);
     } catch (error) {
       console.error("Error fetching products:", error);
       toast({

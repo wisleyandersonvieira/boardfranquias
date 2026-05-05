@@ -272,11 +272,8 @@ export function LinkToAccountsPayableModal({
 
   const fetchProducts = async () => {
     try {
-      let query = supabase
-        .from("products")
-        .select("id, name, code")
-        .eq("is_active", true)
-        .eq("function_type", "debit");
+      const { fetchAllPaginated } = await import("@/utils/supabasePagination");
+      let employeeGroupId: string | null = null;
 
       // Se estiver no modo funcionário, filtrar por grupo do parâmetro FUNCIONÁRIOS
       if (isEmployeeMode) {
@@ -289,14 +286,20 @@ export function LinkToAccountsPayableModal({
         if (paramError) {
           console.warn("Error fetching FUNCIONÁRIOS parameter:", paramError);
         } else if (paramData?.group_id) {
-          query = query.eq("group_id", paramData.group_id);
+          employeeGroupId = paramData.group_id;
         }
       }
 
-      const { data, error } = await query.order("name");
-
-      if (error) throw error;
-      setProducts(data || []);
+      const data = await fetchAllPaginated<any>((from, to) => {
+        let q = supabase
+          .from("products")
+          .select("id, name, code")
+          .eq("is_active", true)
+          .eq("function_type", "debit");
+        if (employeeGroupId) q = q.eq("group_id", employeeGroupId);
+        return q.order("name").range(from, to);
+      });
+      setProducts(data);
     } catch (error) {
       console.error("Error fetching products:", error);
     }
