@@ -18,6 +18,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, CheckCircle2, FileSearch, FileText, History, Loader2, Plus, Save, Search, Trash2, Upload, WalletCards, RefreshCw } from "lucide-react";
+import { SupplierSearchModal } from "@/components/SupplierSearchModal";
 
 type Produto = { id: string; code: string | null; name: string; unit_id?: string | null };
 type Fornecedor = { id: string; name: string; cnpj_cpf?: string | null };
@@ -80,6 +81,12 @@ export default function NfeImport() {
   const [userBrandId, setUserBrandId] = useState<string | null>(null);
   const [quickGroups, setQuickGroups] = useState<{ id: string; name: string }[]>([]);
   const [quickSubgroups, setQuickSubgroups] = useState<{ id: string; name: string }[]>([]);
+
+  // Cadastro / busca de fornecedor durante a importação
+  const [supplierSearchOpen, setSupplierSearchOpen] = useState(false);
+  const [quickSupplierOpen, setQuickSupplierOpen] = useState(false);
+  const [quickSupplierData, setQuickSupplierData] = useState({ name: "", cnpj_cpf: "" });
+  const [savingQuickSupplier, setSavingQuickSupplier] = useState(false);
 
   // Modal pré-geração do Contas a Pagar
   const [docTypes, setDocTypes] = useState<DocType[]>([]);
@@ -513,6 +520,98 @@ export default function NfeImport() {
     const unit = unidades.find((u) => u.symbol.toUpperCase() === item.unidade.toUpperCase());
     setQuickIndex(index);
     setQuickData({ name: item.descricao_limpa, unit_id: unit?.id || "", group_id: "", subgroup_id: "" });
+  };
+
+  const handleSupplierChosen = async (supplier: Fornecedor) => {
+    setFornecedor(supplier);
+    // Re-correlaciona itens com base no novo fornecedor (vínculo por código de fornecedor)
+    if (itens.length > 0) {
+      const recorrelated = await correlateItems(
+        itens.map((it) => ({
+          codigo_fornecedor: it.codigo_fornecedor,
+          descricao_original_pdf: it.descricao_original_pdf,
+          descricao_limpa: it.descricao_limpa,
+          unidade: it.unidade,
+          quantidade: it.quantidade,
+          valor_unitario: it.valor_unitario,
+          valor_total: it.valor_total,
+          ncm: it.ncm,
+          cst: it.cst,
+          cfop: it.cfop,
+          valor_icms: it.valor_icms,
+          valor_ipi: it.valor_ipi,
+          aliquota_icms: it.aliquota_icms,
+          aliquota_ipi: it.aliquota_ipi,
+        })),
+        supplier.id,
+        produtos
+      );
+      // Preserva produto manual já escolhido pelo usuário
+      setItens((current) => current.map((item, i) => {
+        if (item.produto_id && item.status_vinculo === "vinculado" && !recorrelated[i].produto_id) {
+          return item;
+        }
+        return { ...item, produto_id: recorrelated[i].produto_id, produto_nome: recorrelated[i].produto_nome, status_vinculo: recorrelated[i].status_vinculo };
+      }));
+    }
+    toast({ title: "Fornecedor selecionado", description: supplier.name });
+  };
+
+  const openQuickSupplier = () => {
+    setQuickSupplierData({
+      name: cabecalho?.fornecedor || "",
+      cnpj_cpf: cabecalho?.cnpj_fornecedor || "",
+    });
+    setQuickSupplierOpen(true);
+  };
+
+  const saveQuickSupplier = async () => {
+    if (!quickSupplierData.name.trim()) {
+      toast({ variant: "destructive", title: "Nome obrigatório", description: "Informe o nome do fornecedor." });
+      return;
+    }
+    if (!matrixId) {
+      toast({ variant: "destructive", title: "Erro", description: "Matriz do usuário não encontrada." });
+      return;
+    }
+    setSavingQuickSupplier(true);
+    try {
+      // Verifica duplicidade por CNPJ/CPF
+      const cnpj = quickSupplierData.cnpj_cpf.trim();
+      if (cnpj) {
+        const digits = cnpj.replace(/\D/g, "");
+        const { data: existing } = await supabase
+          .from("suppliers")
+          .select("id, name, cnpj_cpf")
+          .or(`cnpj_cpf.eq.${cnpj},cnpj_cpf.eq.${digits}`)
+          .maybeSingle();
+        if (existing) {
+          await handleSupplierChosen(existing as Fornecedor);
+          toast({ title: "Fornecedor já existia", description: "Vinculado o cadastro existente." });
+          setQuickSupplierOpen(false);
+          return;
+        }
+      }
+      const userId = (await supabase.auth.getUser()).data.user?.id;
+      const { data, error } = await supabase
+        .from("suppliers")
+        .insert([{
+          name: quickSupplierData.name.trim(),
+          cnpj_cpf: cnpj || null,
+          matrix_id: matrixId,
+          created_by: userId,
+        } as any])
+        .select("id, name, cnpj_cpf")
+        .single();
+      if (error) throw error;
+      await handleSupplierChosen(data as Fornecedor);
+      toast({ title: "Fornecedor cadastrado", description: data.name });
+      setQuickSupplierOpen(false);
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Erro ao cadastrar", description: err.message });
+    } finally {
+      setSavingQuickSupplier(false);
+    }
   };
 
   const saveQuickProduct = async () => {
@@ -991,7 +1090,20 @@ export default function NfeImport() {
               <CardDescription>Confira o cabeçalho extraído do PDF.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <Info label="Fornecedor" value={fornecedor?.name || cabecalho.fornecedor || "Não localizado"} />
+              <div className="space-y-1">
+                <p className="text-xs uppercase text-muted-foreground">Fornecedor</p>
+                <div className="flex items-center gap-2">
+                  <p className={`text-sm font-medium flex-1 truncate ${!fornecedor ? "text-amber-600" : ""}`}>
+                    {fornecedor?.name || cabecalho.fornecedor || "Não localizado"}
+                  </p>
+                  <Button type="button" size="icon" variant="outline" className="h-7 w-7" onClick={() => setSupplierSearchOpen(true)} title="Selecionar fornecedor existente">
+                    <Search className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button type="button" size="icon" variant="outline" className="h-7 w-7" onClick={openQuickSupplier} title="Cadastrar novo fornecedor">
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
               <Info label="CNPJ" value={cabecalho.cnpj_fornecedor} />
               <Info label="NF-e" value={cabecalho.numero_nfe} />
               <Info label="Série" value={cabecalho.serie} />
@@ -1299,6 +1411,48 @@ export default function NfeImport() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setQuickIndex(null)}>Cancelar</Button>
             <Button onClick={saveQuickProduct}><CheckCircle2 className="h-4 w-4 mr-2" /> Salvar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de busca de fornecedor */}
+      <SupplierSearchModal
+        open={supplierSearchOpen}
+        onOpenChange={setSupplierSearchOpen}
+        onSelectSupplier={(s) => handleSupplierChosen(s as Fornecedor)}
+      />
+
+      {/* Modal de cadastro rápido de fornecedor */}
+      <Dialog open={quickSupplierOpen} onOpenChange={setQuickSupplierOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Cadastrar Fornecedor</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Nome / Razão Social *</Label>
+              <Input
+                value={quickSupplierData.name}
+                onChange={(e) => setQuickSupplierData((d) => ({ ...d, name: e.target.value }))}
+                placeholder="Nome do fornecedor"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>CNPJ / CPF</Label>
+              <Input
+                value={quickSupplierData.cnpj_cpf}
+                onChange={(e) => setQuickSupplierData((d) => ({ ...d, cnpj_cpf: e.target.value }))}
+                placeholder="00.000.000/0000-00"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Cadastro rápido a partir da NF-e. Para preencher mais dados (endereço, contato, etc.), edite o fornecedor depois em Cadastros &gt; Fornecedores.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setQuickSupplierOpen(false)} disabled={savingQuickSupplier}>Cancelar</Button>
+            <Button onClick={saveQuickSupplier} disabled={savingQuickSupplier}>
+              {savingQuickSupplier ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
+              Salvar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
