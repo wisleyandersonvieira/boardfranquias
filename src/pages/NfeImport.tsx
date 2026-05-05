@@ -763,7 +763,14 @@ export default function NfeImport() {
       toast({ title: "Importação salva", description: "A NF-e e seus itens foram gravados para rastreabilidade." });
       return importacao.id as string;
     } catch (error: any) {
-      toast({ variant: "destructive", title: "Erro ao salvar importação", description: error.message });
+      const isDuplicate = error?.code === "23505" || /chave_acesso/i.test(error?.message || "");
+      toast({
+        variant: "destructive",
+        title: isDuplicate ? "NF-e duplicada" : "Erro ao salvar importação",
+        description: isDuplicate
+          ? "Esta NF-e já foi importada anteriormente no sistema (possivelmente por outro usuário ou em outra loja)."
+          : error.message,
+      });
       return null;
     } finally {
       setSaving(false);
