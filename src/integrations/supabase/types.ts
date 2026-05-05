@@ -4175,6 +4175,81 @@ export type Database = {
         Args: { p_matrix_id: string }
         Returns: number
       }
+      get_product_analysis_details: {
+        Args: {
+          p_end_date: string
+          p_group_id?: string
+          p_product_id: string
+          p_start_date: string
+          p_store_ids: string[]
+          p_subgroup_id?: string
+        }
+        Returns: {
+          description: string
+          document_number: string
+          group_name: string
+          item_id: string
+          launch_date: string
+          product_code: string
+          product_name: string
+          quantity: number
+          store_name: string
+          subgroup_name: string
+          supplier_name: string
+          total_price: number
+          unit_price: number
+          unit_symbol: string
+        }[]
+      }
+      get_product_analysis_export_details: {
+        Args: {
+          p_end_date: string
+          p_group_id?: string
+          p_product_ids: string[]
+          p_start_date: string
+          p_store_ids: string[]
+          p_subgroup_id?: string
+        }
+        Returns: {
+          description: string
+          document_number: string
+          group_name: string
+          item_id: string
+          launch_date: string
+          product_code: string
+          product_name: string
+          quantity: number
+          store_name: string
+          subgroup_name: string
+          supplier_name: string
+          total_price: number
+          unit_price: number
+          unit_symbol: string
+        }[]
+      }
+      get_product_analysis_report: {
+        Args: {
+          p_end_date: string
+          p_group_id?: string
+          p_start_date: string
+          p_store_ids: string[]
+          p_subgroup_id?: string
+          p_variation_limit: number
+        }
+        Returns: {
+          difference_amount: number
+          group_name: string
+          launch_count: number
+          max_unit_price: number
+          min_unit_price: number
+          product_code: string
+          product_id: string
+          product_name: string
+          store_names: string
+          subgroup_name: string
+          variation_percent: number
+        }[]
+      }
       get_profile_name: { Args: { p_user_id: string }; Returns: string }
       get_store_members: {
         Args: { store_ids: string[] }
@@ -4217,6 +4292,10 @@ export type Database = {
       user_in_same_matrix: {
         Args: { target_user_id: string }
         Returns: boolean
+      }
+      validate_product_analysis_store_filter: {
+        Args: { p_store_ids: string[] }
+        Returns: string[]
       }
     }
     Enums: {
