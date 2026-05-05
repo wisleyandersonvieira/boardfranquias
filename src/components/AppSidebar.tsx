@@ -293,6 +293,7 @@ const AppSidebar = ({
       subMenus: [
         { id: "rel-contas-pagar", label: "Contas a Pagar", route: "/reports/accounts-payable/pending" },
         { id: "rel-compras", label: "Compras", route: "/reports/purchases" },
+        { id: "rel-analise-produto", label: "Análise de Produto", route: "/relatorios/analise-produto" },
         { id: "rel-contas-receber", label: "Contas a Receber", route: "/reports/accounts-receivable/pending" },
         { id: "rel-contas-pagas", label: "Contas Pagas", route: "/reports/accounts-payable/paid" },
         { id: "rel-contas-recebidas", label: "Contas Recebidas", route: "/reports/accounts-receivable/received" },

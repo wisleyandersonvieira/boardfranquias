@@ -43,6 +43,7 @@ import BankReconciliation from "./pages/BankReconciliation";
 import OFXManagement from "./pages/OFXManagement";
 import EmployeeReport from "./pages/EmployeeReport";
 import PurchasesReport from "./pages/PurchasesReport";
+import ProductAnalysisReport from "./pages/ProductAnalysisReport";
 import ProtectedRoute from "./components/ProtectedRoute";
 import NfeImport from "./pages/NfeImport";
 const queryClient = new QueryClient({
@@ -102,6 +103,8 @@ function App() {
               <Route path="/ofx-management" element={protect(<OFXManagement />)} />
               <Route path="/reports/employees" element={protect(<EmployeeReport />)} />
               <Route path="/reports/purchases" element={protect(<PurchasesReport />)} />
+              <Route path="/reports/product-analysis" element={protect(<ProductAnalysisReport />)} />
+              <Route path="/relatorios/analise-produto" element={protect(<ProductAnalysisReport />)} />
               <Route path="/nfe-import" element={protect(<NfeImport />)} />
               <Route path="*" element={<NotFound />} />
             </Routes>
