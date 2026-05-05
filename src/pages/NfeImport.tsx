@@ -434,14 +434,23 @@ export default function NfeImport() {
 
   const applyParsedNfe = async (parsed: NfeParseResult) => {
     if (parsed.cabecalho.chave_acesso) {
-      const { data: existing } = await supabaseAny
-        .from("nfe_importacoes")
-        .select("id")
-        .eq("chave_acesso", parsed.cabecalho.chave_acesso)
-        .maybeSingle();
-      if (existing) {
+      // Usa RPC SECURITY DEFINER para detectar duplicidade mesmo se a NF-e foi
+      // importada por outro usuário ou para uma loja a qual o usuário não tem acesso.
+      const { data: existing } = await supabaseAny.rpc("check_nfe_chave_exists", {
+        _chave_acesso: parsed.cabecalho.chave_acesso,
+      });
+      const dup = Array.isArray(existing) ? existing[0] : existing;
+      if (dup?.found) {
+        const detalhes = [
+          dup.store_name ? `Loja: ${dup.store_name}` : null,
+          dup.numero_nfe ? `NF-e nº ${dup.numero_nfe}` : null,
+        ].filter(Boolean).join(" • ");
         setStatus("Esta NF-e já foi importada anteriormente.");
-        toast({ variant: "destructive", title: "NF-e duplicada", description: "Esta NF-e já foi importada anteriormente." });
+        toast({
+          variant: "destructive",
+          title: "NF-e duplicada",
+          description: detalhes ? `Esta NF-e já foi importada. ${detalhes}` : "Esta NF-e já foi importada anteriormente.",
+        });
         return;
       }
     }
@@ -754,7 +763,14 @@ export default function NfeImport() {
       toast({ title: "Importação salva", description: "A NF-e e seus itens foram gravados para rastreabilidade." });
       return importacao.id as string;
     } catch (error: any) {
-      toast({ variant: "destructive", title: "Erro ao salvar importação", description: error.message });
+      const isDuplicate = error?.code === "23505" || /chave_acesso/i.test(error?.message || "");
+      toast({
+        variant: "destructive",
+        title: isDuplicate ? "NF-e duplicada" : "Erro ao salvar importação",
+        description: isDuplicate
+          ? "Esta NF-e já foi importada anteriormente no sistema (possivelmente por outro usuário ou em outra loja)."
+          : error.message,
+      });
       return null;
     } finally {
       setSaving(false);

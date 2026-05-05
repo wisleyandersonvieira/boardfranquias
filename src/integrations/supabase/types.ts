@@ -4156,6 +4156,15 @@ export type Database = {
     }
     Functions: {
       can_access_task: { Args: { p_task_id: string }; Returns: boolean }
+      check_nfe_chave_exists: {
+        Args: { _chave_acesso: string }
+        Returns: {
+          data_emissao: string
+          found: boolean
+          numero_nfe: string
+          store_name: string
+        }[]
+      }
       get_brand_by_id: {
         Args: { p_brand_id: string }
         Returns: {
