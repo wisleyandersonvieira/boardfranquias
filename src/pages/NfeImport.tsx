@@ -439,20 +439,23 @@ export default function NfeImport() {
       }
     }
 
-    const [supplierFound, productsData, storesData, unitsData] = await Promise.all([
+    const { fetchAllPaginated } = await import("@/utils/supabasePagination");
+    const [supplierFound, productsAll, storesData, unitsData] = await Promise.all([
       findSupplier(parsed.cabecalho.cnpj_fornecedor, parsed.cabecalho.fornecedor),
-      supabase.from("products").select("id, code, name, unit_id").eq("is_active", true).order("name"),
+      fetchAllPaginated<any>((from, to) =>
+        supabase.from("products").select("id, code, name, unit_id").eq("is_active", true).order("name").range(from, to)
+      ),
       supabase.from("stores").select("id, name, code").order("name"),
       supabase.from("units_of_measure").select("id, symbol, name").eq("is_active", true).order("name"),
     ]);
 
     setFornecedor(supplierFound);
-    setProdutos(productsData.data || []);
+    setProdutos(productsAll);
     setLojas(storesData.data || []);
     setUnidades(unitsData.data || []);
     if (!storeId && storesData.data?.length === 1) setStoreId(storesData.data[0].id);
 
-    const correlated = await correlateItems(parsed.itens, supplierFound?.id, productsData.data || []);
+    const correlated = await correlateItems(parsed.itens, supplierFound?.id, productsAll);
     setCabecalho(parsed.cabecalho);
     setItens(correlated);
     setImportacaoId(null);

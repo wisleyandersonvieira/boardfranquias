@@ -112,20 +112,23 @@ export const ProductList = ({ canEdit = true, canDelete = true }: ProductListPro
     setLoading(true);
     try {
       // Fetch products with related data including group_id and subgroup_id
-      const { data: productsData, error: productsError } = await supabase
-        .from("products")
-        .select(`
-          id, code, name, description, is_active, is_blocked, barcode, cost_price,
-          group_id, subgroup_id, unit_id, product_type, function_type,
-          created_by, created_at, updated_by, updated_at,
-          group:account_groups!group_id(name),
-          subgroup:account_groups!subgroup_id(name),
-          unit:units_of_measure!unit_id(name, symbol),
-          matrix:matrices!matrix_id(name, code)
-        `)
-        .order("code");
-
-      if (productsError) throw productsError;
+      // Pagina para contornar o limite default de 1000 do Supabase.
+      const { fetchAllPaginated } = await import("@/utils/supabasePagination");
+      const productsData = await fetchAllPaginated<any>((from, to) =>
+        supabase
+          .from("products")
+          .select(`
+            id, code, name, description, is_active, is_blocked, barcode, cost_price,
+            group_id, subgroup_id, unit_id, product_type, function_type,
+            created_by, created_at, updated_by, updated_at,
+            group:account_groups!group_id(name),
+            subgroup:account_groups!subgroup_id(name),
+            unit:units_of_measure!unit_id(name, symbol),
+            matrix:matrices!matrix_id(name, code)
+          `)
+          .order("code")
+          .range(from, to)
+      );
       
       // Sort products by code numerically (ascending)
       const sortedProducts = (productsData || []).sort((a, b) => {
