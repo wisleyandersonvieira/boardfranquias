@@ -1415,6 +1415,48 @@ export default function NfeImport() {
         </DialogContent>
       </Dialog>
 
+      {/* Modal de busca de fornecedor */}
+      <SupplierSearchModal
+        open={supplierSearchOpen}
+        onOpenChange={setSupplierSearchOpen}
+        onSelectSupplier={(s) => handleSupplierChosen(s as Fornecedor)}
+      />
+
+      {/* Modal de cadastro rápido de fornecedor */}
+      <Dialog open={quickSupplierOpen} onOpenChange={setQuickSupplierOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Cadastrar Fornecedor</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Nome / Razão Social *</Label>
+              <Input
+                value={quickSupplierData.name}
+                onChange={(e) => setQuickSupplierData((d) => ({ ...d, name: e.target.value }))}
+                placeholder="Nome do fornecedor"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>CNPJ / CPF</Label>
+              <Input
+                value={quickSupplierData.cnpj_cpf}
+                onChange={(e) => setQuickSupplierData((d) => ({ ...d, cnpj_cpf: e.target.value }))}
+                placeholder="00.000.000/0000-00"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Cadastro rápido a partir da NF-e. Para preencher mais dados (endereço, contato, etc.), edite o fornecedor depois em Cadastros &gt; Fornecedores.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setQuickSupplierOpen(false)} disabled={savingQuickSupplier}>Cancelar</Button>
+            <Button onClick={saveQuickSupplier} disabled={savingQuickSupplier}>
+              {savingQuickSupplier ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Modal pré-Contas a Pagar */}
       <Dialog open={showApDialog} onOpenChange={setShowApDialog}>
         <DialogContent>
