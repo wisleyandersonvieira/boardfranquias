@@ -1045,24 +1045,31 @@ export function AccountsReceivableModal({ open, onOpenChange }: AccountsReceivab
 
   const fetchProducts = async () => {
     try {
-      const { data, error } = await supabase
-        .from("products")
-        .select("id, name, code")
-        .eq("is_active", true)
-        .eq("function_type", "credit")
-        .order("name");
-
-      if (error) throw error;
-      setProducts(data || []);
+      const { fetchAllPaginated } = await import("@/utils/supabasePagination");
+      const data = await fetchAllPaginated<any>((from, to) =>
+        supabase
+          .from("products")
+          .select("id, name, code")
+          .eq("is_active", true)
+          .eq("function_type", "credit")
+          .order("name")
+          .range(from, to)
+      );
+      setProducts(data);
     } catch (error) {
       console.error("Error fetching products:", error);
     }
   };
 
   // Filtered product list for combobox
-  const filteredProducts = products.filter(product =>
-    product.name.toLowerCase().includes(productSearchTerm.toLowerCase())
-  );
+  const filteredProducts = products.filter(product => {
+    const term = productSearchTerm.toLowerCase().trim();
+    if (!term) return false;
+    return (
+      product.name.toLowerCase().includes(term) ||
+      (product.code ? product.code.toString().toLowerCase().includes(term) : false)
+    );
+  });
 
   const handleProductSelect = (product: Product) => {
     setSelectedProduct(product.id);

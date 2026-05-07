@@ -796,10 +796,15 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
     supplier.name.toLowerCase().includes(supplierSearchTerm.toLowerCase())
   );
 
-  // Filtered product list for combobox
-  const filteredProducts = products.filter(product =>
-    product.name.toLowerCase().includes(productSearchTerm.toLowerCase())
-  );
+  // Filtered product list for combobox (busca por nome OU código)
+  const filteredProducts = products.filter(product => {
+    const term = productSearchTerm.toLowerCase().trim();
+    if (!term) return false;
+    return (
+      product.name.toLowerCase().includes(term) ||
+      (product.code ? product.code.toString().toLowerCase().includes(term) : false)
+    );
+  });
 
   // Filtered employee list for combobox
   const filteredEmployees = employees.filter(employee =>
