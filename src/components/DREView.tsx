@@ -18,6 +18,7 @@ import { addPdfHeaderWithLogo, renderPdfHeader } from "@/utils/pdfHeader";
 import * as XLSX from 'xlsx';
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { fetchAllPaginated } from "@/utils/supabasePagination";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { useUserMatrix } from "@/hooks/useUserMatrix";
@@ -356,41 +357,40 @@ export const DREView: React.FC<DREViewProps> = ({
         descontoReceberProductId = descontoProductId;
       }
 
-      // Buscar dados do controle de caixa
-      const {
-        data: cashControlData,
-        error: ccError
-      } = await supabase.from('cash_control').select(`
-          id,
-          store_id,
-          date,
-          faturamento_dinheiro,
-          faturamento_cartao,
-          faturamento_conta,
-          faturamento_delivery,
-          stores (name)
-        `).in('store_id', selectedStores).gte('date', `${selectedYear}-01-01`).lte('date', `${selectedYear}-12-31`);
-      if (ccError) throw ccError;
+      // Buscar dados do controle de caixa (paginado)
+      const cashControlData = await fetchAllPaginated<any>((from, to) =>
+        supabase.from('cash_control').select(`
+            id,
+            store_id,
+            date,
+            faturamento_dinheiro,
+            faturamento_cartao,
+            faturamento_conta,
+            faturamento_delivery,
+            stores (name)
+          `).in('store_id', selectedStores).gte('date', `${selectedYear}-01-01`).lte('date', `${selectedYear}-12-31`).range(from, to)
+      );
 
       // Buscar contas a pagar com produtos
       let accountsPayableData, apError;
 
-      // Buscar registros de pagamentos da nova tabela (para juros/descontos corretos)
-      const {
-        data: paymentsData,
-        error: paymentsError
-      } = await supabase.from('accounts_payable_payments').select(`
-          id,
-          installment_id,
-          account_payable_id,
-          payment_date,
-          amount_paid,
-          interest_amount,
-          discount_amount,
-          interest_product_id,
-          discount_product_id
-        `).gte('payment_date', `${selectedYear}-01-01`).lte('payment_date', `${selectedYear}-12-31`);
-      if (paymentsError) {
+      // Buscar registros de pagamentos (paginado)
+      let paymentsData: any[] = [];
+      try {
+        paymentsData = await fetchAllPaginated<any>((from, to) =>
+          supabase.from('accounts_payable_payments').select(`
+              id,
+              installment_id,
+              account_payable_id,
+              payment_date,
+              amount_paid,
+              interest_amount,
+              discount_amount,
+              interest_product_id,
+              discount_product_id
+            `).gte('payment_date', `${selectedYear}-01-01`).lte('payment_date', `${selectedYear}-12-31`).range(from, to)
+        );
+      } catch (paymentsError) {
         console.warn('Erro ao buscar payments:', paymentsError);
       }
 
@@ -402,23 +402,19 @@ export const DREView: React.FC<DREViewProps> = ({
       if (isCashRegime) {
         // Para regime de caixa: buscar contas pagas (com ou sem parcelas)
 
-        // 1. Buscar parcelas pagas no ano selecionado
-        const {
-          data: paidInstallments,
-          error: installmentsError
-        } = await supabase.from('accounts_payable_installments').select('account_payable_id, payment_date, amount, installment_number').not('payment_date', 'is', null).gte('payment_date', `${selectedYear}-01-01`).lte('payment_date', `${selectedYear}-12-31`);
-        if (installmentsError) throw installmentsError;
+        // 1. Buscar parcelas pagas no ano selecionado (paginado)
+        const paidInstallments = await fetchAllPaginated<any>((from, to) =>
+          supabase.from('accounts_payable_installments').select('account_payable_id, payment_date, amount, installment_number').not('payment_date', 'is', null).gte('payment_date', `${selectedYear}-01-01`).lte('payment_date', `${selectedYear}-12-31`).range(from, to)
+        );
 
-        // 2. Buscar contas pagas à vista (status = paid e payment_date no ano)
-        const {
-          data: paidAccounts,
-          error: paidAccountsError
-        } = await supabase.from('accounts_payable').select('id, payment_date').eq('status', 'paid').not('payment_date', 'is', null).gte('payment_date', `${selectedYear}-01-01`).lte('payment_date', `${selectedYear}-12-31`).in('store_id', selectedStores);
-        if (paidAccountsError) throw paidAccountsError;
+        // 2. Buscar contas pagas à vista (paginado)
+        const paidAccounts = await fetchAllPaginated<any>((from, to) =>
+          supabase.from('accounts_payable').select('id, payment_date').eq('status', 'paid').not('payment_date', 'is', null).gte('payment_date', `${selectedYear}-01-01`).lte('payment_date', `${selectedYear}-12-31`).in('store_id', selectedStores).range(from, to)
+        );
 
         // Combinar IDs de contas com parcelas pagas e contas pagas à vista
-        const accountPayableIdsFromInstallments = [...new Set(paidInstallments?.map(inst => inst.account_payable_id) || [])];
-        const accountPayableIdsFromDirectPayment = paidAccounts?.map(acc => acc.id) || [];
+        const accountPayableIdsFromInstallments = [...new Set(paidInstallments.map(inst => inst.account_payable_id))];
+        const accountPayableIdsFromDirectPayment = paidAccounts.map(acc => acc.id);
         const accountPayableIds = [...new Set([...accountPayableIdsFromInstallments, ...accountPayableIdsFromDirectPayment])];
         if (accountPayableIds.length > 0) {
           // Buscar as contas a pagar em lotes para evitar Bad Request (URL muito longa)
@@ -477,37 +473,40 @@ export const DREView: React.FC<DREViewProps> = ({
       } else {
         // Para regime de competência: buscar por data de competência (lógica original)
         // Incluir payment_date e accounts_payable_installments para processar juros/descontos corretamente
-        const {
-          data,
-          error
-        } = await supabase.from('accounts_payable').select(`
-            id,
-            store_id,
-            data_competencia,
-            payment_date,
-            accounts_payable_items (
-              product_id,
-              quantity,
-              unit_price,
-              total_price,
-              products (
-                id,
-                name,
-                subgroup_id,
-                function_type
-              )
-            ),
-            accounts_payable_installments (
+        try {
+          accountsPayableData = await fetchAllPaginated<any>((fromIdx, toIdx) =>
+            supabase.from('accounts_payable').select(`
               id,
-              installment_number,
-              due_date,
-              amount,
-              payment_date
-            ),
-            stores (name)
-          `).in('store_id', selectedStores).gte('data_competencia', `${selectedYear}-01-01`).lte('data_competencia', `${selectedYear}-12-31`);
-        accountsPayableData = data || [];
-        apError = error;
+              store_id,
+              data_competencia,
+              payment_date,
+              accounts_payable_items (
+                product_id,
+                quantity,
+                unit_price,
+                total_price,
+                products (
+                  id,
+                  name,
+                  subgroup_id,
+                  function_type
+                )
+              ),
+              accounts_payable_installments (
+                id,
+                installment_number,
+                due_date,
+                amount,
+                payment_date
+              ),
+              stores (name)
+            `).in('store_id', selectedStores).gte('data_competencia', `${selectedYear}-01-01`).lte('data_competencia', `${selectedYear}-12-31`).range(fromIdx, toIdx)
+          );
+          apError = null;
+        } catch (e) {
+          accountsPayableData = [];
+          apError = e;
+        }
 
         // Para competência: também precisamos buscar juros/descontos de contas cuja 
         // competência pode estar em outro ano, mas o pagamento foi feito no ano selecionado
@@ -558,22 +557,23 @@ export const DREView: React.FC<DREViewProps> = ({
         }
       }
 
-      // Buscar registros de pagamentos de contas a receber (para juros/descontos corretos)
-      const {
-        data: arPaymentsData,
-        error: arPaymentsError
-      } = await supabase.from('accounts_receivable_payments').select(`
-          id,
-          installment_id,
-          account_receivable_id,
-          payment_date,
-          amount_paid,
-          interest_amount,
-          discount_amount,
-          interest_product_id,
-          discount_product_id
-        `).gte('payment_date', `${selectedYear}-01-01`).lte('payment_date', `${selectedYear}-12-31`);
-      if (arPaymentsError) {
+      // Buscar registros de pagamentos AR (paginado)
+      let arPaymentsData: any[] = [];
+      try {
+        arPaymentsData = await fetchAllPaginated<any>((from, to) =>
+          supabase.from('accounts_receivable_payments').select(`
+              id,
+              installment_id,
+              account_receivable_id,
+              payment_date,
+              amount_paid,
+              interest_amount,
+              discount_amount,
+              interest_product_id,
+              discount_product_id
+            `).gte('payment_date', `${selectedYear}-01-01`).lte('payment_date', `${selectedYear}-12-31`).range(from, to)
+        );
+      } catch (arPaymentsError) {
         console.warn('Erro ao buscar AR payments:', arPaymentsError);
       }
 
@@ -590,23 +590,19 @@ export const DREView: React.FC<DREViewProps> = ({
       if (isCashRegime) {
         // Para regime de caixa: buscar contas recebidas (com ou sem parcelas)
 
-        // 1. Buscar parcelas recebidas no ano selecionado
-        const {
-          data: receivedInstallments,
-          error: arInstallmentsError
-        } = await supabase.from('accounts_receivable_installments').select('account_receivable_id, payment_date, amount, installment_number').not('payment_date', 'is', null).gte('payment_date', `${selectedYear}-01-01`).lte('payment_date', `${selectedYear}-12-31`);
-        if (arInstallmentsError) throw arInstallmentsError;
+        // 1. Buscar parcelas recebidas no ano selecionado (paginado)
+        const receivedInstallments = await fetchAllPaginated<any>((from, to) =>
+          supabase.from('accounts_receivable_installments').select('account_receivable_id, payment_date, amount, installment_number').not('payment_date', 'is', null).gte('payment_date', `${selectedYear}-01-01`).lte('payment_date', `${selectedYear}-12-31`).range(from, to)
+        );
 
-        // 2. Buscar contas recebidas à vista (status = paid e payment_date no ano)
-        const {
-          data: receivedAccounts,
-          error: receivedAccountsError
-        } = await supabase.from('accounts_receivable').select('id, payment_date').eq('status', 'paid').not('payment_date', 'is', null).gte('payment_date', `${selectedYear}-01-01`).lte('payment_date', `${selectedYear}-12-31`).in('store_id', selectedStores);
-        if (receivedAccountsError) throw receivedAccountsError;
+        // 2. Buscar contas recebidas à vista (paginado)
+        const receivedAccounts = await fetchAllPaginated<any>((from, to) =>
+          supabase.from('accounts_receivable').select('id, payment_date').eq('status', 'paid').not('payment_date', 'is', null).gte('payment_date', `${selectedYear}-01-01`).lte('payment_date', `${selectedYear}-12-31`).in('store_id', selectedStores).range(from, to)
+        );
 
         // Combinar IDs de contas com parcelas recebidas e contas recebidas à vista
-        const accountReceivableIdsFromInstallments = [...new Set(receivedInstallments?.map(inst => inst.account_receivable_id) || [])];
-        const accountReceivableIdsFromDirectPayment = receivedAccounts?.map(acc => acc.id) || [];
+        const accountReceivableIdsFromInstallments = [...new Set(receivedInstallments.map(inst => inst.account_receivable_id))];
+        const accountReceivableIdsFromDirectPayment = receivedAccounts.map(acc => acc.id);
         const accountReceivableIds = [...new Set([...accountReceivableIdsFromInstallments, ...accountReceivableIdsFromDirectPayment])];
 
         if (accountReceivableIds.length > 0) {
@@ -665,37 +661,40 @@ export const DREView: React.FC<DREViewProps> = ({
         }
       } else {
         // Para regime de competência: buscar por data de competência
-        const {
-          data,
-          error
-        } = await supabase.from('accounts_receivable').select(`
-            id,
-            store_id,
-            data_competencia,
-            payment_date,
-            accounts_receivable_items (
-              product_id,
-              quantity,
-              unit_price,
-              total_price,
-              products (
-                id,
-                name,
-                subgroup_id,
-                function_type
-              )
-            ),
-            accounts_receivable_installments (
+        try {
+          accountsReceivableData = await fetchAllPaginated<any>((fromIdx, toIdx) =>
+            supabase.from('accounts_receivable').select(`
               id,
-              installment_number,
-              due_date,
-              amount,
-              payment_date
-            ),
-            stores (name)
-          `).in('store_id', selectedStores).gte('data_competencia', `${selectedYear}-01-01`).lte('data_competencia', `${selectedYear}-12-31`);
-        accountsReceivableData = data || [];
-        arError = error;
+              store_id,
+              data_competencia,
+              payment_date,
+              accounts_receivable_items (
+                product_id,
+                quantity,
+                unit_price,
+                total_price,
+                products (
+                  id,
+                  name,
+                  subgroup_id,
+                  function_type
+                )
+              ),
+              accounts_receivable_installments (
+                id,
+                installment_number,
+                due_date,
+                amount,
+                payment_date
+              ),
+              stores (name)
+            `).in('store_id', selectedStores).gte('data_competencia', `${selectedYear}-01-01`).lte('data_competencia', `${selectedYear}-12-31`).range(fromIdx, toIdx)
+          );
+          arError = null;
+        } catch (e) {
+          accountsReceivableData = [];
+          arError = e;
+        }
 
         // Para competência: também precisamos buscar juros/descontos de contas cuja 
         // competência pode estar em outro ano, mas o pagamento foi feito no ano selecionado
