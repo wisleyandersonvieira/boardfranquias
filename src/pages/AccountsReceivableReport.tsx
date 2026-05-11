@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ArrowLeft, Download, Filter, FileDown, ChevronDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllPaginated as fetchAllPag } from "@/utils/supabasePagination";
 import { toast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -41,8 +42,10 @@ const AccountsReceivableReport = () => {
   }, []);
 
   const fetchCreditors = async () => {
-    const { data } = await supabase.from("creditors").select("id, name");
-    setCreditors(data || []);
+    const data = await fetchAllPag<any>((from, to) =>
+      supabase.from("creditors").select("id, name").range(from, to)
+    );
+    setCreditors(data);
   };
 
   const fetchStores = async () => {
@@ -83,8 +86,10 @@ const AccountsReceivableReport = () => {
   };
 
   const fetchProducts = async () => {
-    const { data } = await supabase.from("products").select("id, name");
-    setProducts(data || []);
+    const data = await fetchAllPag<any>((from, to) =>
+      supabase.from("products").select("id, name").range(from, to)
+    );
+    setProducts(data);
   };
 
   const handleSearch = async () => {
