@@ -3009,6 +3009,31 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
 
         if (updateError) throw updateError;
 
+        // Sincronizar due_date da parcela única (não-parcelado) quando o usuário altera
+        // o vencimento sem usar o modal de parcelas. O relatório usa installment.due_date,
+        // então sem esse sync a alteração não aparece no relatório.
+        {
+          const { data: existingInstallments } = await supabase
+            .from("accounts_payable_installments")
+            .select("id, payment_date")
+            .eq("account_payable_id", editingAccount.id);
+
+          if (
+            existingInstallments &&
+            existingInstallments.length === 1 &&
+            !existingInstallments[0].payment_date
+          ) {
+            await supabase
+              .from("accounts_payable_installments")
+              .update({
+                due_date: dueDate,
+                amount: totalAmount,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", existingInstallments[0].id);
+          }
+        }
+
         // Delete existing items
         const { error: deleteItemsError } = await supabase
           .from("accounts_payable_items")
