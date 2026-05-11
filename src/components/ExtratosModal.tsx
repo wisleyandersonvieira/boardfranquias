@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllPaginated } from "@/utils/supabasePagination";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -306,60 +307,92 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
         linkedStoreIds = [selectedStore];
       }
       
-      // Transferências - busca todas as transferências da conta (sem filtro de loja)
-      const transfersPromise = supabase
-        .from('transfers')
-        .select('*')
-        .or(`source_account_id.eq.${selectedAccount},destination_account_id.eq.${selectedAccount}`)
-        .order('transfer_date');
+      // Transferências (paginado, com filtro de data no banco)
+      const transfersPromise = fetchAllPaginated<any>((from, to) =>
+        supabase
+          .from('transfers')
+          .select('*')
+          .or(`source_account_id.eq.${selectedAccount},destination_account_id.eq.${selectedAccount}`)
+          .gte('transfer_date', startDateStr)
+          .lte('transfer_date', endDateStr)
+          .order('transfer_date')
+          .range(from, to)
+      ).then(data => ({ data }));
 
-      // Financial transactions - busca todas as transações da conta, independente da loja
-      // O filtro por account_id já é suficiente, pois a transação já referencia a conta correta
-      const financialTransPromise = supabase
-        .from('financial_transactions')
-        .select('id, amount, transaction_date, description, reference_id, reference_type, transaction_type, store_id')
-        .eq('account_id', selectedAccount);
+      // Financial transactions (paginado, com filtro de data no banco)
+      const financialTransPromise = fetchAllPaginated<any>((from, to) =>
+        supabase
+          .from('financial_transactions')
+          .select('id, amount, transaction_date, description, reference_id, reference_type, transaction_type, store_id')
+          .eq('account_id', selectedAccount)
+          .gte('transaction_date', startDateStr)
+          .lte('transaction_date', endDateStr)
+          .range(from, to)
+      ).then(data => ({ data }));
 
-      // Cash control items baseado no tipo de conta - busca com o cash_control para obter a data diretamente
-      let cashControlItemPromise;
+      // Cash control items baseado no tipo de conta (paginado)
+      let cashControlItemPromise: Promise<{ data: any[] }>;
       if (account.type === 'cash') {
-        cashControlItemPromise = supabase
-          .from('cash_control_cash_items')
-          .select('valor, cash_control_id, cash_control:cash_control_id(id, date, store_id)')
-          .eq('cash_account_id', selectedAccount);
+        cashControlItemPromise = fetchAllPaginated<any>((from, to) =>
+          supabase
+            .from('cash_control_cash_items')
+            .select('valor, cash_control_id, cash_control:cash_control_id(id, date, store_id)')
+            .eq('cash_account_id', selectedAccount)
+            .range(from, to)
+        ).then(data => ({ data }));
       } else if (account.type === 'card') {
-        cashControlItemPromise = supabase
-          .from('cash_control_card_items')
-          .select('valor, cash_control_id, cash_control:cash_control_id(id, date, store_id)')
-          .eq('card_account_id', selectedAccount);
+        cashControlItemPromise = fetchAllPaginated<any>((from, to) =>
+          supabase
+            .from('cash_control_card_items')
+            .select('valor, cash_control_id, cash_control:cash_control_id(id, date, store_id)')
+            .eq('card_account_id', selectedAccount)
+            .range(from, to)
+        ).then(data => ({ data }));
       } else if (account.type === 'delivery') {
-        cashControlItemPromise = supabase
-          .from('cash_control_delivery_items')
-          .select('valor, cash_control_id, cash_control:cash_control_id(id, date, store_id)')
-          .eq('delivery_account_id', selectedAccount);
+        cashControlItemPromise = fetchAllPaginated<any>((from, to) =>
+          supabase
+            .from('cash_control_delivery_items')
+            .select('valor, cash_control_id, cash_control:cash_control_id(id, date, store_id)')
+            .eq('delivery_account_id', selectedAccount)
+            .range(from, to)
+        ).then(data => ({ data }));
       } else if (account.type === 'current') {
-        cashControlItemPromise = supabase
-          .from('cash_control_account_items')
-          .select('valor, cash_control_id, cash_control:cash_control_id(id, date, store_id)')
-          .eq('current_account_id', selectedAccount);
+        cashControlItemPromise = fetchAllPaginated<any>((from, to) =>
+          supabase
+            .from('cash_control_account_items')
+            .select('valor, cash_control_id, cash_control:cash_control_id(id, date, store_id)')
+            .eq('current_account_id', selectedAccount)
+            .range(from, to)
+        ).then(data => ({ data }));
       } else {
-        cashControlItemPromise = Promise.resolve({ data: [] });
+        cashControlItemPromise = Promise.resolve({ data: [] as any[] });
       }
 
       // Cash controls não é mais necessário buscar separadamente - já vem no join acima
       const cashControlsPromise = Promise.resolve({ data: [] });
 
-      // Partner transactions - busca de TODAS as lojas vinculadas à conta
-      const partnerTransPromise = supabase
-        .from('partner_transactions')
-        .select('id, amount, payment_date, transaction_type, notes, partners:partner_id(name)')
-        .in('store_id', linkedStoreIds)
-        .eq('account_id', selectedAccount);
+      // Partner transactions (paginado, com filtro de data)
+      const partnerTransPromise = fetchAllPaginated<any>((from, to) =>
+        supabase
+          .from('partner_transactions')
+          .select('id, amount, payment_date, transaction_type, notes, partners:partner_id(name)')
+          .in('store_id', linkedStoreIds)
+          .eq('account_id', selectedAccount)
+          .gte('payment_date', startDateStr)
+          .lte('payment_date', endDateStr)
+          .range(from, to)
+      ).then(data => ({ data }));
 
-      // Fornecedores, credores e funcionários
-      const suppliersPromise = supabase.from('suppliers').select('id, name');
-      const creditorsPromise = supabase.from('creditors').select('id, name');
-      const employeesPromise = supabase.from('employees').select('id, name');
+      // Fornecedores, credores e funcionários (paginado)
+      const suppliersPromise = fetchAllPaginated<any>((from, to) =>
+        supabase.from('suppliers').select('id, name').range(from, to)
+      ).then(data => ({ data }));
+      const creditorsPromise = fetchAllPaginated<any>((from, to) =>
+        supabase.from('creditors').select('id, name').range(from, to)
+      ).then(data => ({ data }));
+      const employeesPromise = fetchAllPaginated<any>((from, to) =>
+        supabase.from('employees').select('id, name').range(from, to)
+      ).then(data => ({ data }));
 
       setLoadingProgress(20);
 
