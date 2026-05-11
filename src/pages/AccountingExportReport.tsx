@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowLeft, FileText, Download, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllPaginated } from "@/utils/supabasePagination";
 
 // Helper to avoid TS2589 deep type instantiation errors
 const query = (table: string) => (supabase as any).from(table);
@@ -247,26 +248,27 @@ const AccountingExportReport = () => {
     setLoading(true);
     try {
       // Buscar transações financeiras de saída (pagamentos) das contas selecionadas
-      const { data: transactions, error: transError } = await supabase
-        .from("financial_transactions")
-        .select(`
-          id,
-          amount,
-          transaction_date,
-          description,
-          reference_id,
-          reference_type,
-          account_id
-        `)
-        .eq("store_id", selectedStore)
-        .in("account_id", selectedAccounts)
-        .in("reference_type", ["accounts_payable", "accounts_payable_installments"])
-        .eq("transaction_type", "saida")
-        .gte("transaction_date", paymentStartDate)
-        .lte("transaction_date", paymentEndDate)
-        .order("transaction_date", { ascending: true });
-
-      if (transError) throw transError;
+      const transactions = await fetchAllPaginated<any>((from, to) =>
+        supabase
+          .from("financial_transactions")
+          .select(`
+            id,
+            amount,
+            transaction_date,
+            description,
+            reference_id,
+            reference_type,
+            account_id
+          `)
+          .eq("store_id", selectedStore)
+          .in("account_id", selectedAccounts)
+          .in("reference_type", ["accounts_payable", "accounts_payable_installments"])
+          .eq("transaction_type", "saida")
+          .gte("transaction_date", paymentStartDate)
+          .lte("transaction_date", paymentEndDate)
+          .order("transaction_date", { ascending: true })
+          .range(from, to)
+      );
 
       if (!transactions || transactions.length === 0) {
         setPaymentRecords([]);
@@ -297,54 +299,63 @@ const AccountingExportReport = () => {
       ] = await Promise.all([
         // Buscar parcelas e contas a pagar relacionadas
         installmentRefIds.length > 0
-          ? supabase
-              .from("accounts_payable_installments")
-              .select(`
-                id,
-                installment_number,
-                account_payable_id,
-                accounts_payable!inner (
+          ? fetchAllPaginated<any>((from, to) =>
+              supabase
+                .from("accounts_payable_installments")
+                .select(`
+                  id,
+                  installment_number,
+                  account_payable_id,
+                  accounts_payable!inner (
+                    id,
+                    document_number,
+                    description,
+                    attachments,
+                    employee_id,
+                    supplier_id
+                  )
+                `)
+                .in("id", installmentRefIds)
+                .range(from, to)
+            ).then(data => ({ data }))
+          : Promise.resolve({ data: [] as any[] }),
+        
+        accountPayableRefIds.length > 0
+          ? fetchAllPaginated<any>((from, to) =>
+              supabase
+                .from("accounts_payable")
+                .select(`
                   id,
                   document_number,
                   description,
                   attachments,
                   employee_id,
                   supplier_id
-                )
-              `)
-              .in("id", installmentRefIds)
-          : Promise.resolve({ data: [] }),
+                `)
+                .in("id", accountPayableRefIds)
+                .range(from, to)
+            ).then(data => ({ data }))
+          : Promise.resolve({ data: [] as any[] }),
         
-        // Buscar contas a pagar diretas
-        accountPayableRefIds.length > 0
-          ? supabase
-              .from("accounts_payable")
-              .select(`
-                id,
-                document_number,
-                description,
-                attachments,
-                employee_id,
-                supplier_id
-              `)
-              .in("id", accountPayableRefIds)
-          : Promise.resolve({ data: [] }),
-        
-        // Buscar pagamentos das parcelas
         installmentRefIds.length > 0
-          ? supabase
-              .from("accounts_payable_payments")
-              .select("installment_id, interest_amount, discount_amount")
-              .in("installment_id", installmentRefIds)
-          : Promise.resolve({ data: [] }),
+          ? fetchAllPaginated<any>((from, to) =>
+              supabase
+                .from("accounts_payable_payments")
+                .select("installment_id, interest_amount, discount_amount")
+                .in("installment_id", installmentRefIds)
+                .range(from, to)
+            ).then(data => ({ data }))
+          : Promise.resolve({ data: [] as any[] }),
         
-        // Buscar pagamentos diretos
         accountPayableRefIds.length > 0
-          ? supabase
-              .from("accounts_payable_payments")
-              .select("account_payable_id, interest_amount, discount_amount")
-              .in("account_payable_id", accountPayableRefIds)
-          : Promise.resolve({ data: [] })
+          ? fetchAllPaginated<any>((from, to) =>
+              supabase
+                .from("accounts_payable_payments")
+                .select("account_payable_id, interest_amount, discount_amount")
+                .in("account_payable_id", accountPayableRefIds)
+                .range(from, to)
+            ).then(data => ({ data }))
+          : Promise.resolve({ data: [] as any[] })
       ]);
 
       // Criar mapas para lookup rápido
@@ -388,19 +399,26 @@ const AccountingExportReport = () => {
       // Buscar fornecedores, funcionários e contagem de parcelas em paralelo
       const [suppliersResult, employeesResult, installmentCountsResult] = await Promise.all([
         supplierIds.size > 0
-          ? supabase.from("suppliers").select("id, name").in("id", Array.from(supplierIds))
-          : Promise.resolve({ data: [] }),
+          ? fetchAllPaginated<any>((from, to) =>
+              supabase.from("suppliers").select("id, name").in("id", Array.from(supplierIds)).range(from, to)
+            ).then(data => ({ data }))
+          : Promise.resolve({ data: [] as any[] }),
         
         employeeIds.size > 0
-          ? supabase.from("employees").select("id, name").in("id", Array.from(employeeIds))
-          : Promise.resolve({ data: [] }),
+          ? fetchAllPaginated<any>((from, to) =>
+              supabase.from("employees").select("id, name").in("id", Array.from(employeeIds)).range(from, to)
+            ).then(data => ({ data }))
+          : Promise.resolve({ data: [] as any[] }),
         
         accountPayableIdsForInstallmentCount.size > 0
-          ? supabase
-              .from("accounts_payable_installments")
-              .select("account_payable_id, installment_number")
-              .in("account_payable_id", Array.from(accountPayableIdsForInstallmentCount))
-          : Promise.resolve({ data: [] })
+          ? fetchAllPaginated<any>((from, to) =>
+              supabase
+                .from("accounts_payable_installments")
+                .select("account_payable_id, installment_number")
+                .in("account_payable_id", Array.from(accountPayableIdsForInstallmentCount))
+                .range(from, to)
+            ).then(data => ({ data }))
+          : Promise.resolve({ data: [] as any[] })
       ]);
 
       // Criar mapas para lookup
