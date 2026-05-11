@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, ArrowUp, ArrowDown, Edit2 } from "lucide-react";
+import { Plus, Trash2, ArrowUp, ArrowDown, Edit2, Copy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useUserMatrix } from "@/hooks/useUserMatrix";
@@ -370,8 +370,20 @@ export const DREStructure: React.FC = () => {
   };
 
   // Função para obter subgrupos de um grupo específico
-  const getSubgroups = (parentGroupId: string) => {
-    return accountGroups.filter(group => group.parent_id === parentGroupId);
+  const getSubgroups = (parentGroupId: string, currentItemIndex?: number) => {
+    const currentItemGroupId = currentItemIndex !== undefined
+      ? currentStructure.items[currentItemIndex]?.account_group_id
+      : undefined;
+    const selectedSubgroupIds = currentStructure.items
+      .filter(item => item.item_type === 'subgroup' && item.account_group_id)
+      .map(item => item.account_group_id!);
+    return accountGroups.filter(group => {
+      if (group.parent_id !== parentGroupId) return false;
+      if (selectedSubgroupIds.includes(group.id) && group.id !== currentItemGroupId) {
+        return false;
+      }
+      return true;
+    });
   };
 
   // Função para encontrar o grupo pai de um subgrupo (o último grupo adicionado antes do subgrupo)
@@ -393,6 +405,70 @@ export const DREStructure: React.FC = () => {
       ...currentStructure,
       items: reorderedItems
     });
+  };
+  // Inserir novo subgrupo logo abaixo de um grupo (ou de um subgrupo existente do mesmo grupo)
+  const addSubgroupAfter = (index: number) => {
+    const items = [...currentStructure.items];
+    const newItem: StructureItem = {
+      item_type: 'subgroup',
+      name: '',
+      operation_type: 'credit',
+      position_order: index + 2,
+    };
+    items.splice(index + 1, 0, newItem);
+    const reorderedItems = items.map((item, i) => ({
+      ...item,
+      position_order: i + 1,
+    }));
+    setCurrentStructure({
+      ...currentStructure,
+      items: reorderedItems,
+    });
+  };
+  const handleDuplicateStructure = async (structure: DREStructureData) => {
+    if (!userBrandId) return;
+    try {
+      const { data: user } = await supabase.auth.getUser();
+      if (!user.user) throw new Error("Usuário não autenticado");
+      const { data: structureData, error: structureError } = await supabase
+        .from('dre_structures')
+        .insert({
+          name: `${structure.name} (Cópia)`,
+          created_by: user.user.id,
+          brand_id: userBrandId,
+        })
+        .select()
+        .single();
+      if (structureError) throw structureError;
+      if (structure.items.length > 0) {
+        const itemsToInsert = structure.items.map(item => ({
+          structure_id: structureData.id,
+          item_type: item.item_type,
+          account_group_id: item.account_group_id,
+          parent_id: item.parent_id,
+          name: item.name,
+          description: item.description,
+          operation_type: item.operation_type,
+          position_order: item.position_order,
+          sum_items: item.sum_items || [],
+        }));
+        const { error: itemsError } = await supabase
+          .from('dre_structure_items')
+          .insert(itemsToInsert);
+        if (itemsError) throw itemsError;
+      }
+      toast({
+        title: "Estrutura duplicada",
+        description: `Cópia de "${structure.name}" criada com sucesso`,
+      });
+      await fetchStructures();
+    } catch (error: any) {
+      toast({
+        title: "Erro ao duplicar estrutura",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
   };
   const moveItem = (index: number, direction: 'up' | 'down') => {
     const items = [...currentStructure.items];
@@ -513,7 +589,7 @@ export const DREStructure: React.FC = () => {
                                    <SelectValue placeholder={item.item_type === 'group' ? "Selecione o grupo" : "Selecione o subgrupo"} />
                                  </SelectTrigger>
                                  <SelectContent>
-                                   {(item.item_type === 'group' ? getMainGroups(index) : item.item_type === 'subgroup' ? getSubgroups(findParentGroup(index) || '') : []).map(group => <SelectItem key={group.id} value={group.id}>
+                                   {(item.item_type === 'group' ? getMainGroups(index) : item.item_type === 'subgroup' ? getSubgroups(findParentGroup(index) || '', index) : []).map(group => <SelectItem key={group.id} value={group.id}>
                                        {group.name}
                                      </SelectItem>)}
                                  </SelectContent>
@@ -540,6 +616,11 @@ export const DREStructure: React.FC = () => {
                           <TableCell>{item.position_order}</TableCell>
                           <TableCell>
                             <div className="flex space-x-1">
+                              {item.item_type === 'group' && (
+                                <Button size="sm" variant="ghost" onClick={() => addSubgroupAfter(index)} title="Adicionar subgrupo abaixo">
+                                  <Plus className="h-4 w-4" />
+                                </Button>
+                              )}
                               <Button size="sm" variant="ghost" onClick={() => moveItem(index, 'up')} disabled={index === 0}>
                                 <ArrowUp className="h-4 w-4" />
                               </Button>
@@ -599,6 +680,9 @@ export const DREStructure: React.FC = () => {
                         <div className="flex space-x-2">
                           <Button size="sm" variant="ghost" onClick={() => handleEditStructure(structure)}>
                             <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => handleDuplicateStructure(structure)} title="Duplicar estrutura">
+                            <Copy className="h-4 w-4" />
                           </Button>
                           <Button size="sm" variant="ghost" onClick={() => structure.id && handleDeleteStructure(structure.id)}>
                             <Trash2 className="h-4 w-4" />
