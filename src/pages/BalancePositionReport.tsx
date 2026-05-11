@@ -17,6 +17,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { addPdfHeaderWithLogo, renderPdfHeader } from "@/utils/pdfHeader";
 import * as XLSX from "xlsx";
+import { fetchAllPaginated } from "@/utils/supabasePagination";
 
 interface Store {
   id: string;
@@ -371,12 +372,15 @@ const BalancePositionReport = () => {
       });
 
       // Step 1: Fetch all transfers for all accounts in one query
-      const transfersPromise = allAccountIds.length > 0 
-        ? supabase
-            .from('transfers')
-            .select('*')
-            .lte('transfer_date', formattedTargetDate)
-        : Promise.resolve({ data: [] });
+      const transfersPromise = allAccountIds.length > 0
+        ? fetchAllPaginated<any>((from, to) =>
+            supabase
+              .from('transfers')
+              .select('*')
+              .lte('transfer_date', formattedTargetDate)
+              .range(from, to)
+          ).then(data => ({ data }))
+        : Promise.resolve({ data: [] as any[] });
 
       setLoadingMessage("Buscando transações financeiras...");
       setLoadingProgress(20);
@@ -384,58 +388,76 @@ const BalancePositionReport = () => {
       // Step 2: Fetch all financial transactions
       // Inclui todas as lojas vinculadas (especialmente importante para contas delivery)
       const financialTransSaidaPromise = allAccountIds.length > 0
-        ? supabase
-            .from('financial_transactions')
-            .select('amount, account_id, store_id, transaction_date, transaction_type')
-            .in('account_id', allAccountIds)
-            .in('store_id', allLinkedStoreIds)
-            .lte('transaction_date', formattedTargetDate)
-        : Promise.resolve({ data: [] });
+        ? fetchAllPaginated<any>((from, to) =>
+            supabase
+              .from('financial_transactions')
+              .select('amount, account_id, store_id, transaction_date, transaction_type')
+              .in('account_id', allAccountIds)
+              .in('store_id', allLinkedStoreIds)
+              .lte('transaction_date', formattedTargetDate)
+              .range(from, to)
+          ).then(data => ({ data }))
+        : Promise.resolve({ data: [] as any[] });
 
       setLoadingMessage("Buscando itens de caixa...");
       setLoadingProgress(30);
 
-      // Step 3: Fetch all cash control items in parallel
+      // Step 3: Fetch all cash control items in parallel (paginated)
       const cashControlItemsPromise = cashAccountIds.length > 0
-        ? supabase
-            .from('cash_control_cash_items')
-            .select('valor, cash_control_id, cash_account_id')
-            .in('cash_account_id', cashAccountIds)
-        : Promise.resolve({ data: [] });
+        ? fetchAllPaginated<any>((from, to) =>
+            supabase
+              .from('cash_control_cash_items')
+              .select('valor, cash_control_id, cash_account_id')
+              .in('cash_account_id', cashAccountIds)
+              .range(from, to)
+          ).then(data => ({ data }))
+        : Promise.resolve({ data: [] as any[] });
 
       const deliveryItemsPromise = deliveryAccountIds.length > 0
-        ? supabase
-            .from('cash_control_delivery_items')
-            .select('valor, cash_control_id, delivery_account_id')
-            .in('delivery_account_id', deliveryAccountIds)
-        : Promise.resolve({ data: [] });
+        ? fetchAllPaginated<any>((from, to) =>
+            supabase
+              .from('cash_control_delivery_items')
+              .select('valor, cash_control_id, delivery_account_id')
+              .in('delivery_account_id', deliveryAccountIds)
+              .range(from, to)
+          ).then(data => ({ data }))
+        : Promise.resolve({ data: [] as any[] });
 
       const cardItemsPromise = cardAccountIds.length > 0
-        ? supabase
-            .from('cash_control_card_items')
-            .select('valor, cash_control_id, card_account_id')
-            .in('card_account_id', cardAccountIds)
-        : Promise.resolve({ data: [] });
+        ? fetchAllPaginated<any>((from, to) =>
+            supabase
+              .from('cash_control_card_items')
+              .select('valor, cash_control_id, card_account_id')
+              .in('card_account_id', cardAccountIds)
+              .range(from, to)
+          ).then(data => ({ data }))
+        : Promise.resolve({ data: [] as any[] });
 
       const accountItemsPromise = currentAccountIds.length > 0
-        ? supabase
-            .from('cash_control_account_items')
-            .select('valor, cash_control_id, current_account_id')
-            .in('current_account_id', currentAccountIds)
-        : Promise.resolve({ data: [] });
+        ? fetchAllPaginated<any>((from, to) =>
+            supabase
+              .from('cash_control_account_items')
+              .select('valor, cash_control_id, current_account_id')
+              .in('current_account_id', currentAccountIds)
+              .range(from, to)
+          ).then(data => ({ data }))
+        : Promise.resolve({ data: [] as any[] });
 
       setLoadingMessage("Buscando transações de sócios...");
       setLoadingProgress(40);
 
       // Step 4: Fetch partner transactions - usa todas as lojas vinculadas às contas
       const partnerTransPromise = allAccountIds.length > 0
-        ? supabase
-            .from('partner_transactions')
-            .select('amount, transaction_type, account_id, store_id, payment_date')
-            .in('account_id', allAccountIds)
-            .in('store_id', allLinkedStoreIds)
-            .lte('payment_date', formattedTargetDate)
-        : Promise.resolve({ data: [] });
+        ? fetchAllPaginated<any>((from, to) =>
+            supabase
+              .from('partner_transactions')
+              .select('amount, transaction_type, account_id, store_id, payment_date')
+              .in('account_id', allAccountIds)
+              .in('store_id', allLinkedStoreIds)
+              .lte('payment_date', formattedTargetDate)
+              .range(from, to)
+          ).then(data => ({ data }))
+        : Promise.resolve({ data: [] as any[] });
 
       setLoadingMessage("Processando dados...");
       setLoadingProgress(50);
@@ -471,18 +493,25 @@ const BalancePositionReport = () => {
       setLoadingMessage("Buscando datas de controle de caixa...");
       setLoadingProgress(70);
 
-      // Fetch all cash control dates in one query
+      // Fetch all cash control dates (chunked + paginated to avoid URL/row limits)
       let cashControlMap = new Map<string, { date: string; store_id: string }>();
       if (allCashControlIds.size > 0) {
-        const { data: cashControlData } = await supabase
-          .from('cash_control')
-          .select('id, date, store_id')
-          .in('id', Array.from(allCashControlIds))
-          .lte('date', formattedTargetDate);
-        
-        (cashControlData || []).forEach((cc: any) => {
-          cashControlMap.set(cc.id, { date: cc.date, store_id: cc.store_id });
-        });
+        const idsArray = Array.from(allCashControlIds);
+        const chunkSize = 200;
+        for (let i = 0; i < idsArray.length; i += chunkSize) {
+          const chunk = idsArray.slice(i, i + chunkSize);
+          const chunkData = await fetchAllPaginated<any>((from, to) =>
+            supabase
+              .from('cash_control')
+              .select('id, date, store_id')
+              .in('id', chunk)
+              .lte('date', formattedTargetDate)
+              .range(from, to)
+          );
+          chunkData.forEach((cc: any) => {
+            cashControlMap.set(cc.id, { date: cc.date, store_id: cc.store_id });
+          });
+        }
       }
 
       setLoadingMessage("Calculando saldos...");
