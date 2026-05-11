@@ -18,6 +18,7 @@ import { addPdfHeaderWithLogo, renderPdfHeader } from "@/utils/pdfHeader";
 import * as XLSX from "xlsx";
 
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllPaginated } from "@/utils/supabasePagination";
 
 const formatCurrency = (value: number) => {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -218,39 +219,56 @@ const TurnoverReport = () => {
       const subgroupIds = [...new Set((params || []).map(p => p.subgroup_id).filter(Boolean))] as string[];
       if (subgroupIds.length === 0) return {};
 
-      // 2. Get product IDs that belong to those subgroups
-      const { data: products } = await supabase
-        .from('products')
-        .select('id')
-        .in('subgroup_id', subgroupIds);
+      // 2. Get product IDs that belong to those subgroups (paginated)
+      const products = await fetchAllPaginated<any>((from, to) =>
+        supabase
+          .from('products')
+          .select('id')
+          .in('subgroup_id', subgroupIds)
+          .range(from, to)
+      );
 
       const productIds = (products || []).map(p => p.id);
       if (productIds.length === 0) return {};
 
-      // 3. Get accounts_receivable IDs for the selected store that have items with those products
-      const { data: items } = await supabase
-        .from('accounts_receivable_items')
-        .select('account_receivable_id')
-        .eq('store_id', selectedStore)
-        .in('product_id', productIds);
+      // 3. Get accounts_receivable IDs for the selected store that have items with those products (paginated + chunked)
+      const items: any[] = [];
+      const chunkSize = 200;
+      for (let i = 0; i < productIds.length; i += chunkSize) {
+        const chunk = productIds.slice(i, i + chunkSize);
+        const chunkData = await fetchAllPaginated<any>((from, to) =>
+          supabase
+            .from('accounts_receivable_items')
+            .select('account_receivable_id')
+            .eq('store_id', selectedStore)
+            .in('product_id', chunk)
+            .range(from, to)
+        );
+        items.push(...chunkData);
+      }
 
-      const receivableIds = [...new Set((items || []).map(i => i.account_receivable_id))];
+      const receivableIds = [...new Set(items.map(i => i.account_receivable_id))];
       if (receivableIds.length === 0) return {};
 
-      // 4. Get payments for those receivables, grouped by payment_date
-      let paymentQuery = supabase
-        .from('accounts_receivable_payments')
-        .select('payment_date, amount_paid')
-        .in('account_receivable_id', receivableIds);
-
-      if (startDate) paymentQuery = paymentQuery.gte('payment_date', startDate);
-      if (endDate) paymentQuery = paymentQuery.lte('payment_date', endDate);
-
-      const { data: payments } = await paymentQuery;
+      // 4. Get payments for those receivables, grouped by payment_date (paginated + chunked)
+      const payments: any[] = [];
+      for (let i = 0; i < receivableIds.length; i += chunkSize) {
+        const chunk = receivableIds.slice(i, i + chunkSize);
+        const chunkData = await fetchAllPaginated<any>((from, to) => {
+          let q = supabase
+            .from('accounts_receivable_payments')
+            .select('payment_date, amount_paid')
+            .in('account_receivable_id', chunk);
+          if (startDate) q = q.gte('payment_date', startDate);
+          if (endDate) q = q.lte('payment_date', endDate);
+          return q.range(from, to);
+        });
+        payments.push(...chunkData);
+      }
 
       // 5. Group by date
       const dateMap: Record<string, number> = {};
-      (payments || []).forEach(p => {
+      payments.forEach(p => {
         const date = p.payment_date;
         dateMap[date] = (dateMap[date] || 0) + (p.amount_paid || 0);
       });
@@ -275,37 +293,32 @@ const TurnoverReport = () => {
     setLoading(true);
     
     try {
-      // Fetch cash control data and contas recebidas in parallel
-      let query = supabase
-        .from('cash_control')
-        .select(`
-          date,
-          faturamento_dinheiro,
-          faturamento_cartao,
-          faturamento_conta,
-          faturamento_delivery,
-          faturamento_total,
-          cash_control_card_items(valor, card_account_id),
-          cash_control_account_items(valor, current_account_id),
-          cash_control_delivery_items(valor, delivery_account_id)
-        `)
-        .eq('store_id', selectedStore)
-        .order('date');
+      // Fetch cash control data and contas recebidas in parallel (paginated)
+      const cashControlPromise = fetchAllPaginated<any>((from, to) => {
+        let q = supabase
+          .from('cash_control')
+          .select(`
+            date,
+            faturamento_dinheiro,
+            faturamento_cartao,
+            faturamento_conta,
+            faturamento_delivery,
+            faturamento_total,
+            cash_control_card_items(valor, card_account_id),
+            cash_control_account_items(valor, current_account_id),
+            cash_control_delivery_items(valor, delivery_account_id)
+          `)
+          .eq('store_id', selectedStore)
+          .order('date');
+        if (startDate) q = q.gte('date', startDate);
+        if (endDate) q = q.lte('date', endDate);
+        return q.range(from, to);
+      });
 
-      if (startDate) {
-        query = query.gte('date', startDate);
-      }
-      
-      if (endDate) {
-        query = query.lte('date', endDate);
-      }
-
-      const [{ data, error }, contasRecebidasMap] = await Promise.all([
-        query,
+      const [data, contasRecebidasMap] = await Promise.all([
+        cashControlPromise,
         fetchContasRecebidas()
       ]);
-
-      if (error) throw error;
 
       // Collect all dates (from cash_control and from contas recebidas)
       const allDates = new Set<string>();

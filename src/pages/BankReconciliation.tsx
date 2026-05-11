@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllPaginated } from "@/utils/supabasePagination";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -329,17 +330,18 @@ const BankReconciliation = () => {
     if (!selectedAccount || !startDate || !endDate) return;
 
     try {
-      const { data, error } = await supabase
-        .from('bank_ofx_transactions')
-        .select('*')
-        .eq('account_id', selectedAccount)
-        .eq('account_type', selectedAccountType)
-        .gte('posted_at', format(startDate, 'yyyy-MM-dd'))
-        .lte('posted_at', format(endDate, 'yyyy-MM-dd') + 'T23:59:59')
-        .order('posted_at', { ascending: false });
-
-      if (error) throw error;
-      setOfxTransactions(data || []);
+      const data = await fetchAllPaginated<any>((from, to) =>
+        supabase
+          .from('bank_ofx_transactions')
+          .select('*')
+          .eq('account_id', selectedAccount)
+          .eq('account_type', selectedAccountType)
+          .gte('posted_at', format(startDate, 'yyyy-MM-dd'))
+          .lte('posted_at', format(endDate, 'yyyy-MM-dd') + 'T23:59:59')
+          .order('posted_at', { ascending: false })
+          .range(from, to)
+      );
+      setOfxTransactions(data);
     } catch (error) {
       console.error('Error loading OFX transactions:', error);
     }
@@ -374,25 +376,32 @@ const BankReconciliation = () => {
         return;
       }
 
-      // Load financial transactions - filtro por account_id é suficiente
-      const { data: financialTrans } = await supabase
-        .from('financial_transactions')
-        .select('id, amount, transaction_date, description, reference_id, reference_type, transaction_type')
-        .eq('account_id', selectedAccount)
-        .gte('transaction_date', startDateStr)
-        .lte('transaction_date', endDateStr);
+      // Load financial transactions (paginated)
+      const financialTrans = await fetchAllPaginated<any>((from, to) =>
+        supabase
+          .from('financial_transactions')
+          .select('id, amount, transaction_date, description, reference_id, reference_type, transaction_type')
+          .eq('account_id', selectedAccount)
+          .gte('transaction_date', startDateStr)
+          .lte('transaction_date', endDateStr)
+          .range(from, to)
+      );
 
-      // Load suppliers and creditors for entity names
-      const [suppliersRes, creditorsRes] = await Promise.all([
-        supabase.from('suppliers').select('id, name'),
-        supabase.from('creditors').select('id, name'),
+      // Load suppliers and creditors for entity names (paginated)
+      const [suppliersData, creditorsData] = await Promise.all([
+        fetchAllPaginated<any>((from, to) =>
+          supabase.from('suppliers').select('id, name').range(from, to)
+        ),
+        fetchAllPaginated<any>((from, to) =>
+          supabase.from('creditors').select('id, name').range(from, to)
+        ),
       ]);
 
-      const suppliersMap = new Map((suppliersRes.data || []).map(s => [s.id, s.name]));
-      const creditorsMap = new Map((creditorsRes.data || []).map(c => [c.id, c.name]));
+      const suppliersMap = new Map(suppliersData.map((s: any) => [s.id, s.name]));
+      const creditorsMap = new Map(creditorsData.map((c: any) => [c.id, c.name]));
 
       // Transform to internal transactions
-      const internal: InternalTransaction[] = (financialTrans || []).map(t => {
+      const internal: InternalTransaction[] = financialTrans.map((t: any) => {
         let type: InternalTransaction['type'] = 'accounts_payable';
         let entityName = '';
         
@@ -420,41 +429,52 @@ const BankReconciliation = () => {
         };
       });
 
-      // Also load transfers directly
-      const { data: transfers } = await supabase
-        .from('transfers')
-        .select('*')
-        .or(`source_account_id.eq.${selectedAccount},destination_account_id.eq.${selectedAccount}`)
-        .gte('transfer_date', startDateStr)
-        .lte('transfer_date', endDateStr);
+      // Also load transfers directly (paginated)
+      const transfers = await fetchAllPaginated<any>((from, to) =>
+        supabase
+          .from('transfers')
+          .select('*')
+          .or(`source_account_id.eq.${selectedAccount},destination_account_id.eq.${selectedAccount}`)
+          .gte('transfer_date', startDateStr)
+          .lte('transfer_date', endDateStr)
+          .range(from, to)
+      );
 
       // Load cash control items based on account type
-      let cashControlItemPromise;
+      let cashControlItems: any[] = [];
       if (selectedAccountType === 'cash') {
-        cashControlItemPromise = supabase
-          .from('cash_control_cash_items')
-          .select('id, valor, cash_control_id, cash_control:cash_control_id(id, date, store_id)')
-          .eq('cash_account_id', selectedAccount);
+        cashControlItems = await fetchAllPaginated<any>((from, to) =>
+          supabase
+            .from('cash_control_cash_items')
+            .select('id, valor, cash_control_id, cash_control:cash_control_id(id, date, store_id)')
+            .eq('cash_account_id', selectedAccount)
+            .range(from, to)
+        );
       } else if (selectedAccountType === 'card') {
-        cashControlItemPromise = supabase
-          .from('cash_control_card_items')
-          .select('id, valor, cash_control_id, cash_control:cash_control_id(id, date, store_id)')
-          .eq('card_account_id', selectedAccount);
+        cashControlItems = await fetchAllPaginated<any>((from, to) =>
+          supabase
+            .from('cash_control_card_items')
+            .select('id, valor, cash_control_id, cash_control:cash_control_id(id, date, store_id)')
+            .eq('card_account_id', selectedAccount)
+            .range(from, to)
+        );
       } else if (selectedAccountType === 'delivery') {
-        cashControlItemPromise = supabase
-          .from('cash_control_delivery_items')
-          .select('id, valor, cash_control_id, cash_control:cash_control_id(id, date, store_id)')
-          .eq('delivery_account_id', selectedAccount);
+        cashControlItems = await fetchAllPaginated<any>((from, to) =>
+          supabase
+            .from('cash_control_delivery_items')
+            .select('id, valor, cash_control_id, cash_control:cash_control_id(id, date, store_id)')
+            .eq('delivery_account_id', selectedAccount)
+            .range(from, to)
+        );
       } else if (selectedAccountType === 'current') {
-        cashControlItemPromise = supabase
-          .from('cash_control_account_items')
-          .select('id, valor, cash_control_id, cash_control:cash_control_id(id, date, store_id)')
-          .eq('current_account_id', selectedAccount);
-      } else {
-        cashControlItemPromise = Promise.resolve({ data: [] });
+        cashControlItems = await fetchAllPaginated<any>((from, to) =>
+          supabase
+            .from('cash_control_account_items')
+            .select('id, valor, cash_control_id, cash_control:cash_control_id(id, date, store_id)')
+            .eq('current_account_id', selectedAccount)
+            .range(from, to)
+        );
       }
-
-      const { data: cashControlItems } = await cashControlItemPromise;
 
       if (transfers) {
         for (const t of transfers) {
@@ -494,13 +514,16 @@ const BankReconciliation = () => {
         }
       }
 
-      const { data: partnerTrans } = await supabase
-        .from('partner_transactions')
-        .select('id, amount, payment_date, transaction_type, notes, partners:partner_id(name)')
-        .in('store_id', linkedStoreIds)
-        .eq('account_id', selectedAccount)
-        .gte('payment_date', startDateStr)
-        .lte('payment_date', endDateStr);
+      const partnerTrans = await fetchAllPaginated<any>((from, to) =>
+        supabase
+          .from('partner_transactions')
+          .select('id, amount, payment_date, transaction_type, notes, partners:partner_id(name)')
+          .in('store_id', linkedStoreIds)
+          .eq('account_id', selectedAccount)
+          .gte('payment_date', startDateStr)
+          .lte('payment_date', endDateStr)
+          .range(from, to)
+      );
 
       if (partnerTrans) {
         for (const t of partnerTrans) {

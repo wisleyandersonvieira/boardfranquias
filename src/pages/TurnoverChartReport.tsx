@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/chart";
 import { LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllPaginated } from "@/utils/supabasePagination";
 
 interface Store {
   id: string;
@@ -166,24 +167,25 @@ const TurnoverChartReport = () => {
     setChartType('daily');
     
     try {
-      const { data, error } = await supabase
-        .from('cash_control')
-        .select(`
-          date,
-          store_id,
-          faturamento_total
-        `)
-        .in('store_id', selectedStores)
-        .gte('date', startDate)
-        .lte('date', endDate)
-        .order('date');
-
-      if (error) throw error;
+      const data = await fetchAllPaginated<any>((from, to) =>
+        supabase
+          .from('cash_control')
+          .select(`
+            date,
+            store_id,
+            faturamento_total
+          `)
+          .in('store_id', selectedStores)
+          .gte('date', startDate)
+          .lte('date', endDate)
+          .order('date')
+          .range(from, to)
+      );
 
       // Group by date with store as line keys
       const dailyData: Record<string, Record<string, number>> = {};
 
-      (data || []).forEach(item => {
+      data.forEach(item => {
         const dateKey = item.date;
         const store = stores.find(s => s.id === item.store_id);
         if (!store) return;
@@ -279,26 +281,27 @@ const TurnoverChartReport = () => {
     setDailyChartData([]);
     
     try {
-      // Use the filtered dates for both chart types
-      const { data, error } = await supabase
-        .from('cash_control')
-        .select(`
-          date,
-          store_id,
-          faturamento_total
-        `)
-        .in('store_id', selectedStores)
-        .gte('date', startDate)
-        .lte('date', endDate)
-        .order('date');
-
-      if (error) throw error;
+      // Use the filtered dates for both chart types (paginated)
+      const data = await fetchAllPaginated<any>((from, to) =>
+        supabase
+          .from('cash_control')
+          .select(`
+            date,
+            store_id,
+            faturamento_total
+          `)
+          .in('store_id', selectedStores)
+          .gte('date', startDate)
+          .lte('date', endDate)
+          .order('date')
+          .range(from, to)
+      );
 
       // Group by month number (1-12) with store+year as line keys
       const monthlyData: Record<number, Record<string, number>> = {};
       const yearsInData = new Set<number>();
 
-      (data || []).forEach(item => {
+      data.forEach(item => {
         const date = parseISO(item.date);
         const year = date.getFullYear();
         const month = date.getMonth() + 1; // 1-12
