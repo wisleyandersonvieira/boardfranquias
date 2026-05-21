@@ -1329,7 +1329,12 @@ const PurchasesReport = () => {
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-[300px] p-0">
-                    <Command>
+                    <Command
+                      filter={(value, search) => {
+                        if (!search) return 1;
+                        return value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
+                      }}
+                    >
                       <CommandInput placeholder="Buscar produto..." />
                       <CommandList>
                         <CommandEmpty>Nenhum produto encontrado.</CommandEmpty>
