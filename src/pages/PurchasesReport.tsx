@@ -126,8 +126,15 @@ const PurchasesReport = () => {
   };
 
   const fetchProducts = async () => {
-    const { data } = await supabase.from("products").select("id, name");
-    setProducts(data || []);
+    try {
+      const data = await fetchAllPaginated<any>((from, to) =>
+        supabase.from("products").select("id, name").order("name").range(from, to)
+      );
+      setProducts(data);
+    } catch (e) {
+      console.error("Erro ao carregar produtos:", e);
+      setProducts([]);
+    }
   };
 
   const fetchGroups = async () => {
