@@ -18,6 +18,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { addPdfHeaderWithLogo, renderPdfHeader } from "@/utils/pdfHeader";
 import * as XLSX from "xlsx";
+import { fetchAllPaginated } from "@/utils/supabasePagination";
 
 const PurchasesReport = () => {
   const { matrixId } = useUserMatrix();
@@ -126,8 +127,15 @@ const PurchasesReport = () => {
   };
 
   const fetchProducts = async () => {
-    const { data } = await supabase.from("products").select("id, name");
-    setProducts(data || []);
+    try {
+      const data = await fetchAllPaginated<any>((from, to) =>
+        supabase.from("products").select("id, name").order("name").range(from, to)
+      );
+      setProducts(data);
+    } catch (e) {
+      console.error("Erro ao carregar produtos:", e);
+      setProducts([]);
+    }
   };
 
   const fetchGroups = async () => {
@@ -1321,7 +1329,12 @@ const PurchasesReport = () => {
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-[300px] p-0">
-                    <Command>
+                    <Command
+                      filter={(value, search) => {
+                        if (!search) return 1;
+                        return value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
+                      }}
+                    >
                       <CommandInput placeholder="Buscar produto..." />
                       <CommandList>
                         <CommandEmpty>Nenhum produto encontrado.</CommandEmpty>
