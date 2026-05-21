@@ -18,6 +18,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { addPdfHeaderWithLogo, renderPdfHeader } from "@/utils/pdfHeader";
 import * as XLSX from "xlsx";
+import { fetchAllPaginated } from "@/utils/supabasePagination";
 
 const PurchasesReport = () => {
   const { matrixId } = useUserMatrix();
