@@ -260,6 +260,11 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
       const initialBalance = account.initial_balance || 0;
       const initialBalanceDate = account.initial_balance_date;
 
+      // Data limite inferior para buscar movimentações:
+      // - Se a conta tem data_saldo_inicial, usar essa data
+      // - Caso contrário, buscar todo o histórico anterior (sem limite inferior)
+      const lowerBoundStr = initialBalanceDate || '1900-01-01';
+
       setLoadingProgress(10);
 
       // ========== ETAPA 1: Buscar todos os dados em paralelo ==========
@@ -313,7 +318,7 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
           .from('transfers')
           .select('*')
           .or(`source_account_id.eq.${selectedAccount},destination_account_id.eq.${selectedAccount}`)
-          .gte('transfer_date', startDateStr)
+          .gte('transfer_date', lowerBoundStr)
           .lte('transfer_date', endDateStr)
           .order('transfer_date')
           .range(from, to)
@@ -325,7 +330,7 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
           .from('financial_transactions')
           .select('id, amount, transaction_date, description, reference_id, reference_type, transaction_type, store_id')
           .eq('account_id', selectedAccount)
-          .gte('transaction_date', startDateStr)
+          .gte('transaction_date', lowerBoundStr)
           .lte('transaction_date', endDateStr)
           .range(from, to)
       ).then(data => ({ data }));
@@ -378,7 +383,7 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
           .select('id, amount, payment_date, transaction_type, notes, partners:partner_id(name)')
           .in('store_id', linkedStoreIds)
           .eq('account_id', selectedAccount)
-          .gte('payment_date', startDateStr)
+          .gte('payment_date', lowerBoundStr)
           .lte('payment_date', endDateStr)
           .range(from, to)
       ).then(data => ({ data }));
@@ -551,13 +556,11 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
 
       // ========== ETAPA 3: Calcular saldo anterior (antes do período) ==========
       let saldoDiaAnterior = initialBalance;
-      
-      if (initialBalanceDate && dayBefore > new Date(initialBalanceDate)) {
-        const inicialDateStr = initialBalanceDate;
-        
-        // Processar transferências anteriores
+
+      {
+        // Processar transferências anteriores ao período
         (transfersResult.data || []).forEach((transfer: any) => {
-          if (transfer.transfer_date >= inicialDateStr && transfer.transfer_date <= dayBeforeStr) {
+          if (transfer.transfer_date < startDateStr) {
             if (transfer.source_account_id === selectedAccount) {
               saldoDiaAnterior -= transfer.amount;
             } else if (transfer.destination_account_id === selectedAccount) {
@@ -566,9 +569,9 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
           }
         });
 
-        // Processar financial transactions anteriores
+        // Processar financial transactions anteriores ao período
         (financialTransResult.data || []).forEach((trans: any) => {
-          if (trans.transaction_date >= inicialDateStr && trans.transaction_date <= dayBeforeStr) {
+          if (trans.transaction_date < startDateStr) {
             // Validar se a transação ainda é válida
             if (trans.reference_type === 'accounts_payable_installments') {
               const inst = payableInstallmentsMap.get(trans.reference_id);
@@ -597,14 +600,14 @@ export function ExtratosModal({ open, onOpenChange }: ExtratosModalProps) {
         // Processar cash control items anteriores (data vem do join)
         (cashControlItemsResult.data || []).forEach((item: any) => {
           const ccDate = (item.cash_control as any)?.date;
-          if (ccDate && ccDate >= inicialDateStr && ccDate <= dayBeforeStr) {
+          if (ccDate && ccDate < startDateStr && ccDate >= lowerBoundStr) {
             saldoDiaAnterior += item.valor;
           }
         });
 
         // Processar partner transactions anteriores
         (partnerTransResult.data || []).forEach((trans: any) => {
-          if (trans.payment_date >= inicialDateStr && trans.payment_date <= dayBeforeStr) {
+          if (trans.payment_date < startDateStr) {
             if (trans.transaction_type === 'aporte') {
               saldoDiaAnterior += Number(trans.amount);
             } else {
