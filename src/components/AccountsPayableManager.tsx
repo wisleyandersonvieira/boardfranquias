@@ -4872,22 +4872,20 @@ export function AccountsPayableManager() {
 
                 </TabsContent>
 
-                <TabsContent value="items" className="space-y-4">
+                <TabsContent value="items" className="space-y-3">
                   {/* Seção de Loja Padrão */}
                   <Card>
-                    <CardHeader>
-                      <CardTitle>Loja Padrão (Opcional)</CardTitle>
-                      <p className="text-sm text-muted-foreground">
-                        Selecione uma loja padrão para aplicar automaticamente a todos os itens. 
-                        {items.length > 0 && " Será aplicada aos itens existentes também."}
-                      </p>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex gap-4 items-end">
-                        <div className="flex-1 space-y-2">
-                          <Label>Loja Padrão</Label>
+                    <CardContent className="p-3">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <div className="sm:w-56 shrink-0">
+                          <p className="text-sm font-semibold leading-none">Loja Padrão</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Aplicada automaticamente aos itens.
+                          </p>
+                        </div>
+                        <div className="flex-1">
                           <Select value={defaultStore} onValueChange={handleDefaultStoreChange}>
-                            <SelectTrigger>
+                            <SelectTrigger className="h-9 text-sm">
                               <SelectValue placeholder="Nenhuma loja padrão selecionada" />
                             </SelectTrigger>
                             <SelectContent>
@@ -4899,34 +4897,30 @@ export function AccountsPayableManager() {
                             </SelectContent>
                           </Select>
                         </div>
-                        <div className="flex items-center gap-2">
-                          {defaultStore && (
-                            <Button 
-                              variant="outline" 
+                        {defaultStore && (
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-xs text-green-600 font-medium">✓ Ativa</span>
+                            <Button
+                              variant="outline"
                               size="sm"
+                              className="h-9"
                               onClick={() => handleDefaultStoreChange("")}
                             >
-                              Limpar Loja Padrão
+                              Limpar
                             </Button>
-                          )}
-                          {defaultStore && (
-                            <div className="text-sm text-green-600 font-medium">
-                              ✓ Loja padrão ativa
-                            </div>
-                          )}
-                        </div>
+                          </div>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
 
                   <Card>
-                    <CardHeader>
-                      <CardTitle>Adicionar Item</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div className="space-y-2">
-                          <Label>Produto</Label>
+                    <CardContent className="p-3 space-y-2">
+                      <p className="text-sm font-semibold leading-none">Adicionar Item</p>
+
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)_auto] lg:items-end">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Produto</Label>
                           <div className="relative">
                             <Input
                               placeholder="Digite o nome do produto..."
@@ -4935,7 +4929,7 @@ export function AccountsPayableManager() {
                               onFocus={() => setShowProductDropdown(productSearchTerm.trim().length > 0 && filteredProducts.length > 0)}
                               onBlur={() => setTimeout(() => setShowProductDropdown(false), 200)}
                               disabled={isViewOnly}
-                              className="pr-10"
+                              className="h-9 text-sm pr-10"
                             />
                             <Button
                               type="button"
@@ -4947,13 +4941,13 @@ export function AccountsPayableManager() {
                             >
                               <Search className="h-4 w-4" />
                             </Button>
-                            
+
                             {showProductDropdown && filteredProducts.length > 0 && (
                               <div className="absolute z-50 w-full mt-1 bg-background border rounded-md shadow-lg max-h-60 overflow-auto">
                                 {filteredProducts.slice(0, 5).map((product) => (
                                   <div
                                     key={product.id}
-                                    className="px-3 py-2 hover:bg-muted cursor-pointer border-b last:border-b-0"
+                                    className="px-3 py-2 text-sm hover:bg-muted cursor-pointer border-b last:border-b-0"
                                     onMouseDown={() => handleProductSelect(product)}
                                   >
                                     <div className="font-medium">
@@ -4966,8 +4960,8 @@ export function AccountsPayableManager() {
                           </div>
                         </div>
 
-                        <div className="space-y-2">
-                          <Label>Quantidade</Label>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Quantidade</Label>
                           <Input
                             type="number"
                             min="0.01"
@@ -4975,11 +4969,12 @@ export function AccountsPayableManager() {
                             value={quantity}
                             onChange={(e) => setQuantity(Number(e.target.value))}
                             disabled={isViewOnly}
+                            className="h-9 text-sm"
                           />
                         </div>
 
-                        <div className="space-y-2">
-                          <Label>Valor Unitário</Label>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Valor Unitário</Label>
                           <Input
                             type="number"
                             min="0.01"
@@ -4994,16 +4989,17 @@ export function AccountsPayableManager() {
                               }
                             }}
                             disabled={isViewOnly}
+                            className="h-9 text-sm"
                           />
                         </div>
 
-                        <div className="space-y-2">
-                          <Label>
-                            Loja {defaultStore && <span className="text-sm text-muted-foreground">(opcional - loja padrão ativa)</span>}
+                        <div className="space-y-1">
+                          <Label className="text-xs">
+                            Loja {defaultStore && <span className="text-muted-foreground font-normal">(loja padrão ativa)</span>}
                           </Label>
                           <Select value={selectedStore} onValueChange={setSelectedStore} disabled={!!defaultStore || isViewOnly}>
-                            <SelectTrigger>
-                              <SelectValue placeholder={defaultStore ? 
+                            <SelectTrigger className="h-9 text-sm">
+                              <SelectValue placeholder={defaultStore ?
                                 stores.find(s => s.id === defaultStore)?.name : "Selecione"} />
                             </SelectTrigger>
                             <SelectContent>
@@ -5015,71 +5011,76 @@ export function AccountsPayableManager() {
                             </SelectContent>
                           </Select>
                         </div>
-                      </div>
 
-                        <div className="flex justify-between items-center">
-                          <div className="text-lg font-semibold">
-                            Total do Item: R$ {(Math.round((quantity * unitPrice) * 100) / 100).toFixed(2)}
-                          </div>
-                        <Button onClick={addItem} disabled={isViewOnly}>
+                        <Button onClick={addItem} disabled={isViewOnly} className="h-9 w-full lg:w-auto">
                           <Plus className="h-4 w-4 mr-2" />
                           Adicionar Item
                         </Button>
                       </div>
+
+                      <div className="text-xs text-muted-foreground text-right">
+                        Total do Item: R$ {(Math.round((quantity * unitPrice) * 100) / 100).toFixed(2)}
+                      </div>
                     </CardContent>
                   </Card>
 
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Produto</TableHead>
-                        <TableHead>Quantidade</TableHead>
-                        <TableHead>Valor Unit.</TableHead>
-                        <TableHead>Total</TableHead>
-                        <TableHead>Loja</TableHead>
-                        {!isViewOnly && <TableHead>Ações</TableHead>}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {items.map((item, index) => (
-                        <TableRow key={index}>
-                          <TableCell>{item.product_name}</TableCell>
-                          <TableCell>{item.quantity}</TableCell>
-                          <TableCell>{item.unit_price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</TableCell>
-                          <TableCell>{item.total_price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</TableCell>
-                          <TableCell>{item.store_name}</TableCell>
-                          {!isViewOnly && (
-                            <TableCell>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => removeItem(index)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </TableCell>
-                          )}
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="h-8 px-2 text-xs">Produto</TableHead>
+                          <TableHead className="h-8 px-2 text-xs">Quantidade</TableHead>
+                          <TableHead className="h-8 px-2 text-xs">Valor Unit.</TableHead>
+                          <TableHead className="h-8 px-2 text-xs">Total</TableHead>
+                          <TableHead className="h-8 px-2 text-xs">Loja</TableHead>
+                          {!isViewOnly && <TableHead className="h-8 px-2 text-xs">Ações</TableHead>}
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {items.length === 0 && (
+                          <TableRow>
+                            <TableCell colSpan={isViewOnly ? 5 : 6} className="px-2 py-4 text-center text-sm text-muted-foreground">
+                              Nenhum item adicionado
+                            </TableCell>
+                          </TableRow>
+                        )}
+                        {items.map((item, index) => (
+                          <TableRow key={index}>
+                            <TableCell className="px-2 py-1 text-sm">{item.product_name}</TableCell>
+                            <TableCell className="px-2 py-1 text-sm">{item.quantity}</TableCell>
+                            <TableCell className="px-2 py-1 text-sm">{item.unit_price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</TableCell>
+                            <TableCell className="px-2 py-1 text-sm">{item.total_price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</TableCell>
+                            <TableCell className="px-2 py-1 text-sm">{item.store_name}</TableCell>
+                            {!isViewOnly && (
+                              <TableCell className="px-2 py-1">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 w-7 p-0"
+                                  onClick={() => removeItem(index)}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </TableCell>
+                            )}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
 
                   {items.length > 0 && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Total Geral</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="text-2xl font-bold text-primary">
-                          {getTotalAmount().toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                        </div>
-                      </CardContent>
-                    </Card>
+                    <div className="flex items-center justify-end gap-2 rounded-md border bg-muted/40 px-3 py-2">
+                      <span className="text-xs text-muted-foreground">Total Geral</span>
+                      <span className="text-lg font-bold text-primary">
+                        {getTotalAmount().toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                      </span>
+                    </div>
                   )}
                 </TabsContent>
               </Tabs>
 
-              <div className="flex justify-end gap-2 pt-4">
+              <div className="flex justify-end gap-2 pt-3">
                 {isViewOnly ? (
                   <Button variant="outline" onClick={handleBackToList}>
                     Voltar
