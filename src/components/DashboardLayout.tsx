@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import AppSidebar from "./AppSidebar";
-import { AccountsPayableModal } from "@/components/AccountsPayableModal";
+import { ACCOUNTS_PAYABLE_PATH } from "@/lib/routes";
 import { AccountsReceivableModal } from "@/components/AccountsReceivableModal";
 
 import { TransfersModal } from "@/components/TransfersModal";
@@ -55,7 +55,6 @@ const DashboardLayout = ({ children, user, pendingTasks }: DashboardLayoutProps)
   const { canEdit: cadastrosCanEdit, canDelete: cadastrosCanDelete, loading: cadastrosLoading } = useCadastrosPermissions();
   
   // Financeiro modals
-  const [accountsPayableOpen, setAccountsPayableOpen] = useState(false);
   const [accountsReceivableOpen, setAccountsReceivableOpen] = useState(false);
   const [transfersOpen, setTransfersOpen] = useState(false);
   const [periodControlOpen, setPeriodControlOpen] = useState(false);
@@ -97,7 +96,7 @@ const DashboardLayout = ({ children, user, pendingTasks }: DashboardLayoutProps)
       <AppSidebar
         onOpenFinanceiro={() => {}}
         onOpenCaixa={handleOpenCaixa}
-        onOpenAccountsPayable={() => setAccountsPayableOpen(true)}
+        onOpenAccountsPayable={() => navigate(ACCOUNTS_PAYABLE_PATH)}
         onOpenAccountsReceivable={() => setAccountsReceivableOpen(true)}
         onOpenTransfers={() => setTransfersOpen(true)}
         onOpenPeriodControl={() => setPeriodControlOpen(true)}
@@ -181,13 +180,6 @@ const DashboardLayout = ({ children, user, pendingTasks }: DashboardLayoutProps)
       </div>
 
       {/* Financeiro Modals */}
-      {accountsPayableOpen && (
-        <AccountsPayableModal 
-          open={accountsPayableOpen} 
-          onOpenChange={setAccountsPayableOpen} 
-        />
-      )}
-      
       {accountsReceivableOpen && (
         <AccountsReceivableModal 
           open={accountsReceivableOpen} 

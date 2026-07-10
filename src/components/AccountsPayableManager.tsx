@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trash2, Plus, Edit, RefreshCw, Upload, X, FileText, FileDown, DollarSign, Eye, Search, Filter, ChevronLeft, ChevronRight, Paperclip, Loader2, ArrowUpDown, ArrowUp, ArrowDown, Check, ChevronsUpDown } from "lucide-react";
+import { Trash2, Plus, Edit, RefreshCw, Upload, X, FileText, FileDown, DollarSign, Eye, Search, ChevronLeft, ChevronRight, Paperclip, Loader2, ArrowUpDown, ArrowUp, ArrowDown, Check, ChevronsUpDown } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
@@ -21,11 +22,12 @@ import { ProductSearchModal } from "./ProductSearchModal";
 import { validateAccountsPayablePeriod } from "@/utils/periodValidation";
 import * as pdfjsLib from 'pdfjs-dist';
 import { useFinanceiroPermissions } from "@/hooks/useFinanceiroPermissions";
-
-interface AccountsPayableModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}
+import { PageHeader } from "@/components/page/PageHeader";
+import { BackButton } from "@/components/page/BackButton";
+import { FilterCard } from "@/components/page/FilterCard";
+import { DataTableCard } from "@/components/page/DataTableCard";
+import { ListPageContainer, FormPageContainer } from "@/components/page/PageContainer";
+import { ACCOUNTS_PAYABLE_PATH, ACCOUNTS_PAYABLE_NEW_PATH as NEW_PATH } from "@/lib/routes";
 
 interface Supplier {
   id: string;
@@ -114,8 +116,15 @@ interface AccountLog {
   details?: string;
 }
 
-export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModalProps) {
-  const [activeTab, setActiveTab] = useState("view");
+export function AccountsPayableManager() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  // Só /new é linkável diretamente: as rotas de edição/visualização dependem do
+  // registro carregado em memória, então um F5 nelas cai de volta na listagem
+  // (a sincronização de URL abaixo cuida disso).
+  const [activeTab, setActiveTab] = useState(() =>
+    location.pathname === NEW_PATH ? "create" : "view"
+  );
   const [accountsPayable, setAccountsPayable] = useState<AccountPayable[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -129,8 +138,8 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
   // Sorting state
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  const viewItemsPerPage = 15;
-  const { canEdit } = useFinanceiroPermissions();
+  const viewItemsPerPage = 10;
+  const { canEdit, loading: permissionsLoading } = useFinanceiroPermissions();
   
   // Document types from database
   const [documentTypes, setDocumentTypes] = useState<DocumentType[]>([]);
@@ -289,58 +298,55 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const [showEmployeeDropdown, setShowEmployeeDropdown] = useState(false);
 
+  const resetForm = () => {
+    setIsEmployeeMode(false);
+    setSupplierId("");
+    setEmployeeId("");
+    setSupplierSearchTerm("");
+    setEmployeeSearchTerm("");
+    setDocumentType("");
+    setDocumentNumber("");
+    setIssueDate("");
+    setDueDate("");
+    setDataCompetencia("");
+    setNotes("");
+    setItems([]);
+    setDefaultStore("");
+    setSelectedStore("");
+    setSelectedProduct("");
+    setQuantity(1);
+    setUnitPrice(0);
+    setAttachments([]);
+    setExistingAttachments([]);
+    setNoteRecorded(false);
+    setInstallments([]);
+    setEditingAccount(null);
+    setIsEditing(false);
+    setIsRealEdit(false);
+    setIsViewOnly(false);
+    setViewOnlyAccount(null);
+    setAccountLogs([]);
+  };
+
   useEffect(() => {
-    if (open) {
-      fetchSuppliers();
-      fetchEmployees();
-      fetchProducts();
-      fetchStores();
-      fetchCurrentAccounts();
-      fetchDocumentTypes();
-      if (activeTab === "view") {
-        // Buscar as 5 últimas contas por padrão na aba visualizar
-        fetchLatestAccounts();
-      }
-      if (activeTab === "payment") {
-        clearPaymentFilters();
-      }
-    } else {
-      // Reset form quando modal for fechado
-      setIsEmployeeMode(false);
-      setSupplierId("");
-      setEmployeeId("");
-      setSupplierSearchTerm("");
-      setEmployeeSearchTerm("");
-      setDocumentType("");
-      setDocumentNumber("");
-      setIssueDate("");
-      setDueDate("");
-      setDataCompetencia("");
-      setNotes("");
-      setItems([]);
-      setDefaultStore("");
-      setSelectedStore("");
-      setSelectedProduct("");
-      setQuantity(1);
-      setUnitPrice(0);
-      setAttachments([]);
-      setExistingAttachments([]);
-      setNoteRecorded(false);
-      setInstallments([]);
-      setEditingAccount(null);
-      setIsEditing(false);
-      setIsRealEdit(false);
-      setIsViewOnly(false);
-      setViewOnlyAccount(null);
-      setAccountLogs([]);
+    fetchSuppliers();
+    fetchEmployees();
+    fetchProducts();
+    fetchStores();
+    fetchCurrentAccounts();
+    fetchDocumentTypes();
+    if (activeTab === "view") {
+      // Buscar as 10 últimas contas por padrão na listagem
+      fetchLatestAccounts();
     }
-  }, [open, activeTab]);
+    if (activeTab === "payment") {
+      clearPaymentFilters();
+    }
+  }, [activeTab]);
 
   // Recarregar produtos quando o modo funcionário mudar
   useEffect(() => {
-    if (open) {
-      fetchProducts();
-    }
+    fetchProducts();
   }, [isEmployeeMode]);
 
   const fetchDocumentTypes = async () => {
@@ -369,7 +375,7 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
           stores(name)
         `)
         .order("created_at", { ascending: false })
-        .limit(5);
+        .limit(10);
 
       if (error) throw error;
       const formattedData = (data || []).map(item => ({
@@ -788,8 +794,16 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
     setFilterStatus("all");
     setFilterCreatedAtFrom("");
     setFilterCreatedAtTo("");
-    fetchLatestAccounts(); // Voltar para as 5 últimas contas
+    fetchLatestAccounts(); // Voltar para as 10 últimas contas
   };
+
+  // Os selects usam "" como valor inicial e "all" depois de limpos — ambos
+  // significam "sem filtro".
+  const isUnset = (value: string) => value === "" || value === "all";
+  const hasActiveFilters =
+    !!filterDateFrom || !!filterDateTo || !isUnset(filterSupplier) || !isUnset(filterEmployee) ||
+    !isUnset(filterStore) || !!filterDocumentNumber || !!filterDueDateFrom || !!filterDueDateTo ||
+    !isUnset(filterStatus) || !isUnset(filterPaymentAccount) || !!filterCreatedAtFrom || !!filterCreatedAtTo;
 
   // Filtered supplier list for combobox
   const filteredSuppliers = suppliers.filter(supplier =>
@@ -2867,14 +2881,9 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
           description: "Arquivos foram adicionados com sucesso à conta.",
         });
         
-        // Reset form and close
-        setAttachments([]);
-        setExistingAttachments([]);
-        setIsEditing(false);
-        setIsViewOnly(false);
-        setEditingAccount(null);
-        onOpenChange(false);
-        
+        // Reset form and voltar para a listagem
+        handleBackToList();
+
       } catch (error) {
         console.error("Error updating attachments:", error);
         toast({
@@ -3865,62 +3874,102 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
     }
   };
 
-  const handleDialogChange = (isOpen: boolean) => {
-    // Se está tentando fechar o modal (isOpen = false)
-    if (!isOpen) {
-      // Se está em modo de edição ou visualização, volta para a aba "view"
-      if (isEditing || isViewOnly) {
-        // Limpar estados de edição/visualização
-        setIsEditing(false);
-        setIsViewOnly(false);
-        setIsRealEdit(false);
-        setEditingAccount(null);
-        setViewOnlyAccount(null);
-        setExistingAttachments([]);
-        setAttachments([]);
-        setItems([]);
-        setActiveTab("view");
-        return; // Não fecha o modal, apenas volta para a aba view
-      }
-    }
-    // Caso contrário, comportamento padrão (fechar/abrir modal)
-    onOpenChange(isOpen);
+  /** Volta para a listagem, descartando o que estiver no formulário. */
+  const handleBackToList = () => {
+    resetForm();
+    setActiveTab("view");
   };
 
-  return (
-    <Dialog open={open} onOpenChange={handleDialogChange}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Contas a Pagar</DialogTitle>
-        </DialogHeader>
-        
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="view">Visualizar Contas</TabsTrigger>
-            <TabsTrigger value="create" disabled={!canEdit}>Cadastrar Conta</TabsTrigger>
-          </TabsList>
+  /** Abre o formulário em branco para cadastrar uma nova conta. */
+  const startCreate = () => {
+    resetForm();
+    setActiveTab("create");
+  };
 
+  // A URL é derivada do estado do formulário — nunca o contrário. Assim toda a
+  // lógica interna (handleEditAccount, handleSave, ...) continua trabalhando
+  // apenas com setActiveTab, como fazia na modal.
+  const canonicalPath = useMemo(() => {
+    if (activeTab !== "create") return ACCOUNTS_PAYABLE_PATH;
+    if (isRealEdit && editingAccount) return `${ACCOUNTS_PAYABLE_PATH}/${editingAccount.id}/edit`;
+    if (isViewOnly && viewOnlyAccount) return `${ACCOUNTS_PAYABLE_PATH}/${viewOnlyAccount.id}`;
+    return NEW_PATH;
+  }, [activeTab, isRealEdit, editingAccount, isViewOnly, viewOnlyAccount]);
+
+  // Reconcilia URL e estado sempre que um dos dois muda.
+  const prevCanonicalPathRef = useRef(canonicalPath);
+  useEffect(() => {
+    const stateChanged = prevCanonicalPathRef.current !== canonicalPath;
+    prevCanonicalPathRef.current = canonicalPath;
+
+    if (location.pathname === canonicalPath) return;
+
+    // Voltar do navegador a partir do formulário: só é "voltar" se quem mudou
+    // foi a URL, e não o estado — senão abrir o formulário (que ainda está na
+    // URL da listagem por um render) seria desfeito na hora.
+    if (!stateChanged && location.pathname === ACCOUNTS_PAYABLE_PATH && activeTab === "create") {
+      handleBackToList();
+      return;
+    }
+
+    // Abrir o formulário empilha uma entrada no histórico. Sair dele (salvar,
+    // cancelar) e corrigir uma URL que não corresponde mais ao estado — como um
+    // F5 em /accounts-payable/:id/edit — substituem a entrada atual.
+    const openingForm = canonicalPath !== ACCOUNTS_PAYABLE_PATH;
+    navigate(canonicalPath, { replace: !stateChanged || !openingForm });
+  }, [canonicalPath, location.pathname]);
+
+  // Deep link em /new sem permissão de escrita.
+  useEffect(() => {
+    if (!permissionsLoading && !canEdit && activeTab === "create") {
+      handleBackToList();
+    }
+  }, [permissionsLoading, canEdit, activeTab]);
+
+  const formTitle = isRealEdit
+    ? "Editar Conta a Pagar"
+    : isViewOnly
+      ? "Visualizar Conta a Pagar"
+      : "Cadastrar Conta a Pagar";
+
+  return (
+    <ListPageContainer>
+      {activeTab === "view" ? (
+        <PageHeader
+          title="Contas a Pagar"
+          subtitle="Gerencie suas contas, filtros, vencimentos, pagamentos e cadastros."
+          actions={
+            <Button onClick={startCreate} disabled={!canEdit}>
+              <Plus className="h-4 w-4 mr-2" />
+              Cadastrar Conta
+            </Button>
+          }
+        />
+      ) : (
+        <FormPageContainer>
+          <BackButton onClick={handleBackToList} />
+          <PageHeader
+            title={formTitle}
+            subtitle="Preencha os dados da conta e seus itens."
+          />
+        </FormPageContainer>
+      )}
+
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsContent value="view">
-            <div className="space-y-4">
+            <div className="space-y-6">
               {/* Filtros */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Filter className="h-5 w-5" />
-                    Filtros de Busca
-                  </CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    {showFilteredData ? 
-                      (filterDateFrom || filterDateTo || filterSupplier !== "" || filterEmployee !== "" || filterStore !== "" || filterDocumentNumber || filterDueDateFrom || filterDueDateTo || filterStatus !== "all" || filterPaymentAccount !== "" || filterCreatedAtFrom || filterCreatedAtTo
+              <FilterCard
+                description={
+                  showFilteredData
+                    ? (hasActiveFilters
                         ? `${accountsPayable.length} conta(s) encontrada(s) com os filtros aplicados`
-                        : `Exibindo as 5 contas mais recentes`
-                      )
-                      : "Configure os filtros para buscar contas específicas ou veja as últimas cadastradas"
-                    }
-                  </p>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        : `Exibindo as 10 contas mais recentes`)
+                    : "Configure os filtros para buscar contas específicas ou veja as últimas cadastradas"
+                }
+                onApply={fetchFilteredAccountsPayable}
+                onClear={clearFilters}
+              >
                     <div>
                       <Label htmlFor="filter-date-from">Data Baixa (De)</Label>
                       <Input
@@ -4150,25 +4199,11 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
                         onChange={(e) => setFilterCreatedAtTo(e.target.value)}
                       />
                     </div>
-                  </div>
-                  <div className="flex gap-2 mt-4">
-                    <Button onClick={fetchFilteredAccountsPayable}>
-                      Aplicar Filtros
-                    </Button>
-                    <Button variant="outline" onClick={clearFilters}>
-                      Limpar Filtros
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+              </FilterCard>
 
               {/* Resultados */}
               {showFilteredData && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Contas a Pagar</CardTitle>
-                  </CardHeader>
-                  <CardContent>
+                <DataTableCard title="Contas a Pagar">
                     {(() => {
                       // Sorting function
                       const handleSort = (column: string) => {
@@ -4435,14 +4470,14 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
                         </>
                       );
                     })()}
-                  </CardContent>
-                </Card>
+                </DataTableCard>
               )}
             </div>
           </TabsContent>
 
           <TabsContent value="create">
-            <div className="space-y-6">
+            <Card>
+              <CardContent className="space-y-6 pt-6">
               <Tabs defaultValue="form" className="w-full">
                 <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="form">Formulário</TabsTrigger>
@@ -5046,16 +5081,12 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
 
               <div className="flex justify-end gap-2 pt-4">
                 {isViewOnly ? (
-                  <Button variant="outline" onClick={() => {
-                    setIsViewOnly(false);
-                    setViewOnlyAccount(null);
-                    setActiveTab("view");
-                  }}>
+                  <Button variant="outline" onClick={handleBackToList}>
                     Voltar
                   </Button>
                   ) : (
                     <>
-                      <Button variant="outline" onClick={() => onOpenChange(false)}>
+                      <Button variant="outline" onClick={handleBackToList}>
                         Cancelar
                       </Button>
                       
@@ -5078,7 +5109,8 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
                     </>
                   )}
               </div>
-            </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
 
@@ -5587,9 +5619,8 @@ export function AccountsPayableModal({ open, onOpenChange }: AccountsPayableModa
           onSelectProduct={handleProductSelect}
           isEmployeeMode={isEmployeeMode}
         />
-      </DialogContent>
-    </Dialog>
+    </ListPageContainer>
   );
 }
 
-export default AccountsPayableModal;
+export default AccountsPayableManager;

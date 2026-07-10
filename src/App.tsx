@@ -23,6 +23,7 @@ import Reports from "./pages/Reports";
 import StockModule from "./pages/StockModule";
 import StockControl from "./pages/StockControl";
 import NotFound from "./pages/NotFound";
+import AccountsPayable from "./pages/AccountsPayable";
 import AccountsPayableModule from "./pages/AccountsPayableModule";
 import AccountsPayableReport from "./pages/AccountsPayableReport";
 import PaidAccountsReport from "./pages/PaidAccountsReport";
@@ -84,6 +85,7 @@ function App() {
               <Route path="/reports" element={protect(<Reports />)} />
               <Route path="/stock" element={protect(<StockModule />)} />
               <Route path="/stock/:storeId" element={protect(<StockControl />)} />
+              <Route path="/accounts-payable/*" element={protect(<AccountsPayable />)} />
               <Route path="/reports/accounts-payable" element={protect(<AccountsPayableModule />)} />
               <Route path="/reports/accounts-payable/pending" element={protect(<AccountsPayableReport />)} />
               <Route path="/reports/accounts-payable/paid" element={protect(<PaidAccountsReport />)} />
