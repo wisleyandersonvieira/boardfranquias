@@ -499,6 +499,9 @@ export function AccountsPayableManager() {
       let idFilters: Set<string>[] = [];
       let hasIdFilter = false;
 
+      // Import paginação para evitar limite silencioso de 1000 linhas nas buscas de IDs
+      const { fetchAllPaginated: fetchAllPag } = await import("@/utils/supabasePagination");
+
       // Apply filters only if they have values
       if (filterDateFrom || filterDateTo) {
         hasIdFilter = true;
@@ -506,42 +509,27 @@ export function AccountsPayableManager() {
         let accountsWithInstallmentPaymentDate: string[] = [];
         
         // Buscar contas com payment_date principal
-        if (filterDateFrom && filterDateTo) {
-          const { data: mainPaymentData } = await supabase
-            .from("accounts_payable")
-            .select("id")
-            .gte("payment_date", filterDateFrom)
-            .lte("payment_date", filterDateTo);
-          accountsWithPaymentDate = mainPaymentData?.map(item => item.id) || [];
-        } else if (filterDateFrom) {
-          const { data: mainPaymentData } = await supabase
-            .from("accounts_payable")
-            .select("id")
-            .gte("payment_date", filterDateFrom);
-          accountsWithPaymentDate = mainPaymentData?.map(item => item.id) || [];
-        } else if (filterDateTo) {
-          const { data: mainPaymentData } = await supabase
-            .from("accounts_payable")
-            .select("id")
-            .lte("payment_date", filterDateTo);
-          accountsWithPaymentDate = mainPaymentData?.map(item => item.id) || [];
-        }
+        const mainPaymentData = await fetchAllPag<{ id: string }>((from, to) => {
+          let q = supabase.from("accounts_payable").select("id").order("id").range(from, to);
+          if (filterDateFrom) q = q.gte("payment_date", filterDateFrom);
+          if (filterDateTo) q = q.lte("payment_date", filterDateTo);
+          return q;
+        });
+        accountsWithPaymentDate = mainPaymentData.map(item => item.id);
         
         // Buscar contas que têm parcelas com payment_date no período
-        let installmentQuery = supabase
-          .from("accounts_payable_installments")
-          .select("account_payable_id")
-          .not("payment_date", "is", null);
-        
-        if (filterDateFrom) {
-          installmentQuery = installmentQuery.gte("payment_date", filterDateFrom);
-        }
-        if (filterDateTo) {
-          installmentQuery = installmentQuery.lte("payment_date", filterDateTo);
-        }
-        
-        const { data: installmentData } = await installmentQuery;
-        accountsWithInstallmentPaymentDate = installmentData?.map(item => item.account_payable_id) || [];
+        const installmentData = await fetchAllPag<{ account_payable_id: string }>((from, to) => {
+          let q = supabase
+            .from("accounts_payable_installments")
+            .select("account_payable_id")
+            .not("payment_date", "is", null)
+            .order("account_payable_id")
+            .range(from, to);
+          if (filterDateFrom) q = q.gte("payment_date", filterDateFrom);
+          if (filterDateTo) q = q.lte("payment_date", filterDateTo);
+          return q;
+        });
+        accountsWithInstallmentPaymentDate = installmentData.map(item => item.account_payable_id);
         
         // Combinar IDs de ambas as buscas
         const allAccountIds = [...new Set([...accountsWithPaymentDate, ...accountsWithInstallmentPaymentDate])];
@@ -558,20 +546,26 @@ export function AccountsPayableManager() {
       // Para filtro de loja, buscar contas que tenham itens na loja selecionada
       if (filterStore && filterStore !== "all" && filterStore !== "") {
         hasIdFilter = true;
-        const { data: itemsWithStore } = await supabase
-          .from("accounts_payable_items")
-          .select("account_payable_id")
-          .eq("store_id", filterStore);
-        
-        const accountsWithStoreItems = [...new Set(itemsWithStore?.map(item => item.account_payable_id) || [])];
+        const itemsWithStore = await fetchAllPag<{ account_payable_id: string }>((from, to) =>
+          supabase
+            .from("accounts_payable_items")
+            .select("account_payable_id")
+            .eq("store_id", filterStore)
+            .order("account_payable_id")
+            .range(from, to)
+        );
+        const accountsWithStoreItems = [...new Set(itemsWithStore.map(item => item.account_payable_id))];
         
         // Also include accounts that have store_id directly matching
-        const { data: accountsWithDirectStore } = await supabase
-          .from("accounts_payable")
-          .select("id")
-          .eq("store_id", filterStore);
-        
-        const directStoreIds = accountsWithDirectStore?.map(item => item.id) || [];
+        const accountsWithDirectStore = await fetchAllPag<{ id: string }>((from, to) =>
+          supabase
+            .from("accounts_payable")
+            .select("id")
+            .eq("store_id", filterStore)
+            .order("id")
+            .range(from, to)
+        );
+        const directStoreIds = accountsWithDirectStore.map(item => item.id);
         const allStoreAccountIds = [...new Set([...accountsWithStoreItems, ...directStoreIds])];
         
         if (allStoreAccountIds.length === 0) {
@@ -632,44 +626,44 @@ export function AccountsPayableManager() {
       // Filtro de vencimento
       if (filterDueDateFrom || filterDueDateTo) {
         hasIdFilter = true;
-        let installmentDueDateQuery = supabase
-          .from("accounts_payable_installments")
-          .select("account_payable_id");
-        
-        if (filterDueDateFrom) {
-          installmentDueDateQuery = installmentDueDateQuery.gte("due_date", filterDueDateFrom);
-        }
-        if (filterDueDateTo) {
-          installmentDueDateQuery = installmentDueDateQuery.lte("due_date", filterDueDateTo);
-        }
-        
-        const { data: installmentDueDateData } = await installmentDueDateQuery;
-        const accountsWithInstallmentDueDate = installmentDueDateData?.map(item => item.account_payable_id) || [];
+        const installmentDueDateData = await fetchAllPag<{ account_payable_id: string }>((from, to) => {
+          let q = supabase
+            .from("accounts_payable_installments")
+            .select("account_payable_id")
+            .order("account_payable_id")
+            .range(from, to);
+          if (filterDueDateFrom) q = q.gte("due_date", filterDueDateFrom);
+          if (filterDueDateTo) q = q.lte("due_date", filterDueDateTo);
+          return q;
+        });
+        const accountsWithInstallmentDueDate = installmentDueDateData.map(item => item.account_payable_id);
         
         // Também buscar contas sem parcelas que tenham due_date no período
-        let mainDueDateQuery = supabase
-          .from("accounts_payable")
-          .select("id");
-        
-        if (filterDueDateFrom) {
-          mainDueDateQuery = mainDueDateQuery.gte("due_date", filterDueDateFrom);
-        }
-        if (filterDueDateTo) {
-          mainDueDateQuery = mainDueDateQuery.lte("due_date", filterDueDateTo);
-        }
-        
-        const { data: mainDueDateData } = await mainDueDateQuery;
+        const mainDueDateData = await fetchAllPag<{ id: string }>((from, to) => {
+          let q = supabase.from("accounts_payable").select("id").order("id").range(from, to);
+          if (filterDueDateFrom) q = q.gte("due_date", filterDueDateFrom);
+          if (filterDueDateTo) q = q.lte("due_date", filterDueDateTo);
+          return q;
+        });
         
         const accountsWithMainDueDate: string[] = [];
         if (mainDueDateData && mainDueDateData.length > 0) {
           const mainAccountIds = mainDueDateData.map(item => item.id);
-          
-          const { data: accountsWithInstallments } = await supabase
-            .from("accounts_payable_installments")
-            .select("account_payable_id")
-            .in("account_payable_id", mainAccountIds);
-          
-          const accountsWithInstallmentsSet = new Set(accountsWithInstallments?.map(item => item.account_payable_id) || []);
+          // Chunk .in() para evitar URLs muito longas e paginar cada chunk
+          const accountsWithInstallmentsSet = new Set<string>();
+          const CHUNK = 150;
+          for (let i = 0; i < mainAccountIds.length; i += CHUNK) {
+            const chunk = mainAccountIds.slice(i, i + CHUNK);
+            const rows = await fetchAllPag<{ account_payable_id: string }>((from, to) =>
+              supabase
+                .from("accounts_payable_installments")
+                .select("account_payable_id")
+                .in("account_payable_id", chunk)
+                .order("account_payable_id")
+                .range(from, to)
+            );
+            rows.forEach(r => accountsWithInstallmentsSet.add(r.account_payable_id));
+          }
           
           mainAccountIds.forEach(id => {
             if (!accountsWithInstallmentsSet.has(id)) {
