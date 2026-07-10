@@ -7,12 +7,24 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, Eraser, FileSpreadsheet, FileText, Loader2, Search } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { MultiSelectFilter, MultiSelectOption } from "@/components/page/MultiSelectFilter";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ChevronDown,
+  Eraser,
+  FileSpreadsheet,
+  FileText,
+  Loader2,
+  Search,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { addPdfHeaderWithLogo, renderPdfHeader } from "@/utils/pdfHeader";
+import { cn } from "@/lib/utils";
 import * as XLSX from "xlsx";
 
 type RpcResponse<T> = Promise<{ data: T[] | null; error: Error | null }>;
@@ -50,7 +62,13 @@ type AppliedFilters = {
   start_date: string;
   end_date: string;
   columns: ColumnKey[];
+  store_ids: string[];
+  supplier_ids: string[];
+  group_ids: string[];
+  subgroup_ids: string[];
 };
+
+type GroupOption = MultiSelectOption & { parentId: string | null };
 
 // A ordem aqui define a ordem das colunas na tabela e nas exportacoes.
 const COLUMN_DEFS: { key: ColumnKey; label: string; numeric: boolean; field: keyof BIRow }[] = [
@@ -74,6 +92,20 @@ const QUICK_VIEWS: { label: string; columns: ColumnKey[] }[] = [
 const DEFAULT_COLUMNS: ColumnKey[] = ["store", "group", "value"];
 const PAGE_SIZE = 50;
 const EXPORT_BATCH = 1000;
+
+// Um array vazio significa "sem filtro" para as funcoes do banco.
+const asFilterArray = (values: string[]) => (values.length > 0 ? values : null);
+
+// Os argumentos que as tres funcoes do BI compartilham: periodo + dimensoes filtradas.
+const rpcFilterArgs = (filters: AppliedFilters) => ({
+  p_date_type: filters.date_type,
+  p_start_date: filters.start_date,
+  p_end_date: filters.end_date,
+  p_store_ids: asFilterArray(filters.store_ids),
+  p_supplier_ids: asFilterArray(filters.supplier_ids),
+  p_group_ids: asFilterArray(filters.group_ids),
+  p_subgroup_ids: asFilterArray(filters.subgroup_ids),
+});
 
 const sortColumns = (columns: ColumnKey[]): ColumnKey[] =>
   COLUMN_DEFS.filter((def) => columns.includes(def.key)).map((def) => def.key);
@@ -106,6 +138,17 @@ const BIReport = () => {
   const [endDate, setEndDate] = useState(monthRange.end);
   const [selectedColumns, setSelectedColumns] = useState<ColumnKey[]>(DEFAULT_COLUMNS);
 
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [storeIds, setStoreIds] = useState<string[]>([]);
+  const [supplierIds, setSupplierIds] = useState<string[]>([]);
+  const [groupIds, setGroupIds] = useState<string[]>([]);
+  const [subgroupIds, setSubgroupIds] = useState<string[]>([]);
+
+  const [storeOptions, setStoreOptions] = useState<MultiSelectOption[]>([]);
+  const [supplierOptions, setSupplierOptions] = useState<MultiSelectOption[]>([]);
+  const [groupOptions, setGroupOptions] = useState<MultiSelectOption[]>([]);
+  const [subgroupOptions, setSubgroupOptions] = useState<GroupOption[]>([]);
+
   const [applied, setApplied] = useState<AppliedFilters | null>(null);
   const [rows, setRows] = useState<BIRow[]>([]);
   const [totals, setTotals] = useState<BITotals | null>(null);
@@ -128,6 +171,67 @@ const BIReport = () => {
     );
   };
 
+  // Opcoes dos filtros. As lojas vem da mesma funcao que o BI usa para limitar
+  // o relatorio, entao o combo nunca oferece uma loja que o usuario nao ve.
+  useEffect(() => {
+    const loadOptions = async () => {
+      try {
+        const { data: allowedStoreIds, error: storeIdsError } =
+          await rpcClient.rpc<string>("get_bi_accessible_store_ids", {});
+        if (storeIdsError) throw storeIdsError;
+
+        const [storesResult, suppliersResult, groupsResult] = await Promise.all([
+          supabase
+            .from("stores")
+            .select("id, name")
+            .in("id", allowedStoreIds ?? [])
+            .order("name"),
+          supabase.from("suppliers").select("id, name").order("name"),
+          supabase.from("account_groups").select("id, name, parent_id").order("name"),
+        ]);
+
+        setStoreOptions((storesResult.data ?? []).map((s) => ({ value: s.id, label: s.name })));
+        setSupplierOptions((suppliersResult.data ?? []).map((s) => ({ value: s.id, label: s.name })));
+
+        const allGroups = groupsResult.data ?? [];
+        setGroupOptions(
+          allGroups.filter((g) => g.parent_id === null).map((g) => ({ value: g.id, label: g.name })),
+        );
+        setSubgroupOptions(
+          allGroups
+            .filter((g) => g.parent_id !== null)
+            .map((g) => ({ value: g.id, label: g.name, parentId: g.parent_id })),
+        );
+      } catch (error) {
+        console.error("Erro ao carregar opções de filtro do BI:", error);
+        toast({
+          title: "Filtros indisponíveis",
+          description: "Não foi possível carregar lojas, fornecedores e grupos.",
+          variant: "destructive",
+        });
+      }
+    };
+
+    void loadOptions();
+  }, []);
+
+  // Ao escolher grupos, o combo de subgrupo passa a listar só os filhos deles.
+  const visibleSubgroupOptions = useMemo(
+    () =>
+      groupIds.length === 0
+        ? subgroupOptions
+        : subgroupOptions.filter((sg) => sg.parentId !== null && groupIds.includes(sg.parentId)),
+    [subgroupOptions, groupIds],
+  );
+
+  // ...e os subgrupos ja selecionados que nao pertencem mais aos grupos escolhidos saem.
+  useEffect(() => {
+    if (groupIds.length === 0 || subgroupIds.length === 0) return;
+    const allowed = new Set(visibleSubgroupOptions.map((sg) => sg.value));
+    const next = subgroupIds.filter((id) => allowed.has(id));
+    if (next.length !== subgroupIds.length) setSubgroupIds(next);
+  }, [groupIds, subgroupIds, visibleSubgroupOptions]);
+
   const fetchPage = useCallback(
     async (filters: AppliedFilters, pageIndex: number, sortCol: ColumnKey, sortDir: SortDirection) => {
       setLoading(true);
@@ -135,20 +239,14 @@ const BIReport = () => {
       try {
         const [reportResult, totalsResult] = await Promise.all([
           rpcClient.rpc<BIRow>("get_bi_report", {
-            p_date_type: filters.date_type,
-            p_start_date: filters.start_date,
-            p_end_date: filters.end_date,
+            ...rpcFilterArgs(filters),
             p_columns: filters.columns,
             p_sort_column: sortCol,
             p_sort_direction: sortDir,
             p_limit: PAGE_SIZE,
             p_offset: pageIndex * PAGE_SIZE,
           }),
-          rpcClient.rpc<BITotals>("get_bi_report_totals", {
-            p_date_type: filters.date_type,
-            p_start_date: filters.start_date,
-            p_end_date: filters.end_date,
-          }),
+          rpcClient.rpc<BITotals>("get_bi_report_totals", rpcFilterArgs(filters)),
         ]);
 
         if (reportResult.error) throw reportResult.error;
@@ -208,6 +306,10 @@ const BIReport = () => {
       start_date: startDate,
       end_date: endDate,
       columns,
+      store_ids: storeIds,
+      supplier_ids: supplierIds,
+      group_ids: groupIds,
+      subgroup_ids: subgroupIds,
     };
     setApplied(filters);
     setPage(0);
@@ -220,6 +322,10 @@ const BIReport = () => {
     setStartDate(monthRange.start);
     setEndDate(monthRange.end);
     setSelectedColumns(DEFAULT_COLUMNS);
+    setStoreIds([]);
+    setSupplierIds([]);
+    setGroupIds([]);
+    setSubgroupIds([]);
   };
 
   const changeSort = (key: ColumnKey) => {
@@ -246,6 +352,10 @@ const BIReport = () => {
       start_date: monthRange.start,
       end_date: monthRange.end,
       columns: DEFAULT_COLUMNS,
+      store_ids: [],
+      supplier_ids: [],
+      group_ids: [],
+      subgroup_ids: [],
     };
     setApplied(filters);
     void fetchPage(filters, 0, "value", "desc");
@@ -257,9 +367,7 @@ const BIReport = () => {
     let offset = 0;
     for (;;) {
       const { data, error } = await rpcClient.rpc<BIRow>("get_bi_report", {
-        p_date_type: filters.date_type,
-        p_start_date: filters.start_date,
-        p_end_date: filters.end_date,
+        ...rpcFilterArgs(filters),
         p_columns: filters.columns,
         p_sort_column: sortColumn,
         p_sort_direction: sortDirection,
@@ -280,10 +388,22 @@ const BIReport = () => {
     value: data.reduce((sum, row) => sum + Number(row.total_value || 0), 0),
   });
 
-  const filterSummary = (filters: AppliedFilters) =>
-    `${filters.date_type === "competence_date" ? "Data de competência" : "Data de pagamento"}: ${datePtBr(
-      filters.start_date,
-    )} a ${datePtBr(filters.end_date)}`;
+  const labelsOf = (options: MultiSelectOption[], ids: string[]) =>
+    ids.map((id) => options.find((o) => o.value === id)?.label ?? id).join(", ");
+
+  // Vai para a tela e para o cabecalho das exportacoes.
+  const filterSummary = (filters: AppliedFilters) => {
+    const parts = [
+      `${filters.date_type === "competence_date" ? "Data de competência" : "Data de pagamento"}: ${datePtBr(
+        filters.start_date,
+      )} a ${datePtBr(filters.end_date)}`,
+    ];
+    if (filters.store_ids.length) parts.push(`Lojas: ${labelsOf(storeOptions, filters.store_ids)}`);
+    if (filters.supplier_ids.length) parts.push(`Fornecedores: ${labelsOf(supplierOptions, filters.supplier_ids)}`);
+    if (filters.group_ids.length) parts.push(`Grupos: ${labelsOf(groupOptions, filters.group_ids)}`);
+    if (filters.subgroup_ids.length) parts.push(`Subgrupos: ${labelsOf(subgroupOptions, filters.subgroup_ids)}`);
+    return parts.join(" · ");
+  };
 
   const handleExportExcel = async () => {
     if (!applied || totalRows === 0) return;
@@ -394,6 +514,11 @@ const BIReport = () => {
   const totalPages = Math.max(1, Math.ceil(totalRows / PAGE_SIZE));
   const hasData = rows.length > 0;
 
+  const activeFilterCount =
+    storeIds.length + supplierIds.length + groupIds.length + subgroupIds.length;
+  // Linhas sem produto (frete, serviços) não têm grupo, então saem do resultado.
+  const productFilterApplied = (applied?.group_ids.length ?? 0) + (applied?.subgroup_ids.length ?? 0) > 0;
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card">
@@ -413,13 +538,46 @@ const BIReport = () => {
 
       <main className="container mx-auto px-4 py-8 space-y-6">
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Search className="h-5 w-5" />
-              Filtros
-            </CardTitle>
-            <CardDescription>Escolha o tipo de data, o período e as colunas de análise.</CardDescription>
-          </CardHeader>
+          <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
+            <CollapsibleTrigger asChild>
+              {/* O gatilho é o cabeçalho inteiro (um div), então o teclado precisa
+                  de ajuda: Radix só trata Enter/Espaço em <button> nativo. */}
+              <CardHeader
+                role="button"
+                tabIndex={0}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setFiltersOpen((open) => !open);
+                  }
+                }}
+                className="cursor-pointer select-none hover:bg-muted/40 transition-colors rounded-t-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Search className="h-5 w-5" />
+                      Filtros
+                      {activeFilterCount > 0 && (
+                        <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">
+                          {activeFilterCount}
+                        </span>
+                      )}
+                    </CardTitle>
+                    <CardDescription>
+                      {applied ? filterSummary(applied) : "Escolha o tipo de data, o período e as colunas de análise."}
+                    </CardDescription>
+                  </div>
+                  <ChevronDown
+                    className={cn(
+                      "h-5 w-5 shrink-0 text-muted-foreground transition-transform",
+                      filtersOpen && "rotate-180",
+                    )}
+                  />
+                </div>
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="space-y-2">
@@ -454,6 +612,45 @@ const BIReport = () => {
                   </Button>
                 </div>
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <MultiSelectFilter
+                label="Loja"
+                placeholder="Todas"
+                options={storeOptions}
+                selected={storeIds}
+                onChange={setStoreIds}
+                searchPlaceholder="Buscar loja..."
+                emptyText="Nenhuma loja"
+              />
+              <MultiSelectFilter
+                label="Fornecedor"
+                placeholder="Todos"
+                options={supplierOptions}
+                selected={supplierIds}
+                onChange={setSupplierIds}
+                searchPlaceholder="Buscar fornecedor..."
+                emptyText="Nenhum fornecedor"
+              />
+              <MultiSelectFilter
+                label="Grupo"
+                placeholder="Todos"
+                options={groupOptions}
+                selected={groupIds}
+                onChange={setGroupIds}
+                searchPlaceholder="Buscar grupo..."
+                emptyText="Nenhum grupo"
+              />
+              <MultiSelectFilter
+                label="Sub Grupo"
+                placeholder="Todos"
+                options={visibleSubgroupOptions}
+                selected={subgroupIds}
+                onChange={setSubgroupIds}
+                searchPlaceholder="Buscar sub grupo..."
+                emptyText={groupIds.length > 0 ? "Nenhum sub grupo nos grupos escolhidos" : "Nenhum sub grupo"}
+              />
             </div>
 
             {dateType === "payment_date" && (
@@ -493,20 +690,24 @@ const BIReport = () => {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={handleExportExcel} disabled={exporting || loading || !hasData}>
-                {exporting ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <FileSpreadsheet className="h-4 w-4 mr-2" />
-                )}
-                Exportar Excel
-              </Button>
-              <Button variant="outline" onClick={handleExportPdf} disabled={exporting || loading || !hasData}>
-                {exporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
-                Exportar PDF
-              </Button>
-            </div>
+          </CardContent>
+            </CollapsibleContent>
+          </Collapsible>
+
+          {/* Fora do colapsável: exportar continua acessível com os filtros fechados. */}
+          <CardContent className="pt-0 flex justify-end gap-2">
+            <Button variant="outline" onClick={handleExportExcel} disabled={exporting || loading || !hasData}>
+              {exporting ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+              )}
+              Exportar Excel
+            </Button>
+            <Button variant="outline" onClick={handleExportPdf} disabled={exporting || loading || !hasData}>
+              {exporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
+              Exportar PDF
+            </Button>
           </CardContent>
         </Card>
 
@@ -557,6 +758,15 @@ const BIReport = () => {
           <CardHeader>
             <CardTitle>Resultado</CardTitle>
             {applied && <CardDescription>{filterSummary(applied)}</CardDescription>}
+            {productFilterApplied && (
+              <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                <span>
+                  Filtro de grupo ou sub grupo ativo: lançamentos sem produto (frete, serviços, contas sem itens) não
+                  possuem grupo e ficam de fora. O total abaixo não corresponde ao total do Contas a Pagar do período.
+                </span>
+              </div>
+            )}
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -577,7 +787,10 @@ const BIReport = () => {
                     <TableHeader>
                       <TableRow>
                         {visibleColumns.map((def) => (
-                          <TableHead key={def.key} className={def.numeric ? "text-right" : undefined}>
+                          <TableHead
+                            key={def.key}
+                            className={cn("h-9 px-3 text-xs", def.numeric && "text-right")}
+                          >
                             <button
                               type="button"
                               onClick={() => changeSort(def.key)}
@@ -594,7 +807,10 @@ const BIReport = () => {
                       {rows.map((row, index) => (
                         <TableRow key={index}>
                           {visibleColumns.map((def) => (
-                            <TableCell key={def.key} className={def.numeric ? "text-right" : undefined}>
+                            <TableCell
+                              key={def.key}
+                              className={cn("px-3 py-1 text-sm", def.numeric && "text-right tabular-nums")}
+                            >
                               {def.key === "value"
                                 ? currency(row.total_value)
                                 : def.key === "quantity"
@@ -609,19 +825,23 @@ const BIReport = () => {
                           {visibleColumns.map((def, index) => {
                             if (def.key === "value") {
                               return (
-                                <TableCell key={def.key} className="text-right">
+                                <TableCell key={def.key} className="px-3 py-1.5 text-sm text-right tabular-nums">
                                   {currency(totals?.total_value ?? 0)}
                                 </TableCell>
                               );
                             }
                             if (def.key === "quantity") {
                               return (
-                                <TableCell key={def.key} className="text-right">
+                                <TableCell key={def.key} className="px-3 py-1.5 text-sm text-right tabular-nums">
                                   {quantity(totals?.total_quantity ?? 0)}
                                 </TableCell>
                               );
                             }
-                            return <TableCell key={def.key}>{index === 0 ? "TOTAL GERAL" : ""}</TableCell>;
+                            return (
+                              <TableCell key={def.key} className="px-3 py-1.5 text-sm">
+                                {index === 0 ? "TOTAL GERAL" : ""}
+                              </TableCell>
+                            );
                           })}
                         </TableRow>
                       )}
