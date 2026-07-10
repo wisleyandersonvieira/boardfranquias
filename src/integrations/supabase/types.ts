@@ -4165,6 +4165,71 @@ export type Database = {
           store_name: string
         }[]
       }
+      get_bi_accessible_store_ids: { Args: never; Returns: string[] }
+      get_bi_fact_rows: {
+        Args: {
+          p_date_type: string
+          p_end_date: string
+          p_group_ids?: string[]
+          p_start_date: string
+          p_store_ids?: string[]
+          p_subgroup_ids?: string[]
+          p_supplier_ids?: string[]
+        }
+        Returns: {
+          group_name: string
+          product_name: string
+          quantity: number
+          store_name: string
+          subgroup_name: string
+          supplier_name: string
+          value: number
+        }[]
+      }
+      get_bi_report: {
+        Args: {
+          p_columns: string[]
+          p_date_type: string
+          p_end_date: string
+          p_group_ids?: string[]
+          p_limit?: number
+          p_offset?: number
+          p_sort_column?: string
+          p_sort_direction?: string
+          p_start_date: string
+          p_store_ids?: string[]
+          p_subgroup_ids?: string[]
+          p_supplier_ids?: string[]
+        }
+        Returns: {
+          group_name: string
+          product_name: string
+          store_name: string
+          subgroup_name: string
+          supplier_name: string
+          total_quantity: number
+          total_rows: number
+          total_value: number
+        }[]
+      }
+      get_bi_report_totals: {
+        Args: {
+          p_date_type: string
+          p_end_date: string
+          p_group_ids?: string[]
+          p_start_date: string
+          p_store_ids?: string[]
+          p_subgroup_ids?: string[]
+          p_supplier_ids?: string[]
+        }
+        Returns: {
+          product_count: number
+          store_count: number
+          supplier_count: number
+          total_quantity: number
+          total_value: number
+        }[]
+      }
       get_brand_by_id: {
         Args: { p_brand_id: string }
         Returns: {
