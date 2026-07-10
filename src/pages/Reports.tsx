@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, FileText, DollarSign, TrendingUpDown, LineChart, Wallet, FileArchive, ShoppingCart, Tags } from "lucide-react";
+import { ArrowLeft, FileText, DollarSign, TrendingUpDown, LineChart, Wallet, FileArchive, ShoppingCart, Tags, BarChart3 } from "lucide-react";
 const Reports = () => {
   const navigate = useNavigate();
   const reportModules = [{
@@ -60,6 +60,13 @@ const Reports = () => {
     icon: FileArchive,
     color: "bg-indigo-500",
     onClick: () => navigate("/reports/accounting-export")
+  }, {
+    id: "bi",
+    title: "BI Gerencial",
+    description: "Análises dinâmicas por loja, fornecedor, grupo, subgrupo e produto",
+    icon: BarChart3,
+    color: "bg-sky-500",
+    onClick: () => navigate("/reports/bi")
   }, {
     id: "product-analysis",
     title: "Análise de Produto",

@@ -44,6 +44,7 @@ import OFXManagement from "./pages/OFXManagement";
 import EmployeeReport from "./pages/EmployeeReport";
 import PurchasesReport from "./pages/PurchasesReport";
 import ProductAnalysisReport from "./pages/ProductAnalysisReport";
+import BIReport from "./pages/BIReport";
 import ProtectedRoute from "./components/ProtectedRoute";
 import NfeImport from "./pages/NfeImport";
 const queryClient = new QueryClient({
@@ -105,6 +106,7 @@ function App() {
               <Route path="/reports/purchases" element={protect(<PurchasesReport />)} />
               <Route path="/reports/product-analysis" element={protect(<ProductAnalysisReport />)} />
               <Route path="/relatorios/analise-produto" element={protect(<ProductAnalysisReport />)} />
+              <Route path="/reports/bi" element={protect(<BIReport />)} />
               <Route path="/nfe-import" element={protect(<NfeImport />)} />
               <Route path="*" element={<NotFound />} />
             </Routes>

@@ -291,6 +291,7 @@ const AppSidebar = ({
       title: "Relatórios",
       icon: BarChart3,
       subMenus: [
+        { id: "rel-bi", label: "BI", route: "/reports/bi" },
         { id: "rel-contas-pagar", label: "Contas a Pagar", route: "/reports/accounts-payable/pending" },
         { id: "rel-compras", label: "Compras", route: "/reports/purchases" },
         { id: "rel-analise-produto", label: "Análise de Produto", route: "/relatorios/analise-produto" },
