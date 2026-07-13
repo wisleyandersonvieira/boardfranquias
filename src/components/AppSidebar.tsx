@@ -86,6 +86,9 @@ interface AppSidebarProps {
   onOpenPartners: () => void;
   onOpenPartnerTransactions: () => void;
   onOpenServiceOrders: () => void;
+  /** No mobile a barra vira um menu sobreposto controlado pela topbar. */
+  mobileOpen?: boolean;
+  onMobileOpenChange?: (open: boolean) => void;
 }
 
 const AppSidebar = ({
@@ -113,7 +116,10 @@ const AppSidebar = ({
   onOpenPartners,
   onOpenPartnerTransactions,
   onOpenServiceOrders,
+  mobileOpen = false,
+  onMobileOpenChange,
 }: AppSidebarProps) => {
+  const closeMobileMenu = () => onMobileOpenChange?.(false);
   const navigate = useNavigate();
   const [activeModule, setActiveModule] = useState<string | null>(null);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
@@ -389,6 +395,7 @@ const AppSidebar = ({
       navigate(item.route);
       setActiveModule(null);
       setIsPanelOpen(false);
+      closeMobileMenu();
     } else if (item.subMenus || item.dynamicSubMenus) {
       if (activeModule === item.id) {
         setActiveModule(null);
@@ -493,6 +500,7 @@ const AppSidebar = ({
     }
     setActiveModule(null);
     setIsPanelOpen(false);
+    closeMobileMenu();
   };
 
   const getSubMenusForItem = (item: MenuItem): SubMenuItem[] => {
@@ -511,18 +519,43 @@ const AppSidebar = ({
 
   return (
     <>
+      {/* Overlay do menu mobile (a barra fixa não existe abaixo de 768px) */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          onClick={closeMobileMenu}
+        />
+      )}
+
       {/* Barra lateral fixa com ícones */}
-      <aside className="fixed left-0 top-0 h-full w-16 bg-secondary z-50 flex flex-col">
+      <aside
+        className={cn(
+          "fixed left-0 top-0 h-full w-16 bg-secondary z-50 flex-col",
+          mobileOpen ? "flex" : "hidden md:flex"
+        )}
+      >
         {/* Logo - Link para Dashboard */}
-        <button 
-          onClick={() => navigate('/dashboard')}
+        <button
+          onClick={() => {
+            navigate('/dashboard');
+            closeMobileMenu();
+          }}
           className="h-14 flex items-center justify-center bg-primary hover:bg-primary/90 transition-colors cursor-pointer"
         >
           <Home className="h-6 w-6 text-primary-foreground" />
         </button>
 
+        {/* Fechar menu (apenas mobile) */}
+        <button
+          onClick={closeMobileMenu}
+          aria-label="Fechar menu"
+          className="md:hidden h-10 flex items-center justify-center hover:bg-secondary-foreground/10 transition-colors"
+        >
+          <X className="h-5 w-5 text-secondary-foreground" />
+        </button>
+
         {/* Menu Items */}
-        <nav className="flex-1 py-2">
+        <nav className="flex-1 py-2 overflow-y-auto">
           {filteredMenuItems.map((item) => {
             const IconComponent = item.icon;
             const isActive = activeModule === item.id;
@@ -578,7 +611,7 @@ const AppSidebar = ({
           />
           
           {/* Painel de submenus */}
-          <div className="fixed left-16 top-0 h-full w-72 bg-card border-r shadow-lg z-50 animate-slide-in-right">
+          <div className="fixed left-16 top-0 h-full w-[calc(100vw-4rem)] max-w-72 md:w-72 bg-card border-r shadow-lg z-50 animate-slide-in-right overflow-y-auto">
             {/* Header do painel */}
             <div className="h-14 px-4 flex items-center justify-between border-b bg-card">
               <h2 className="font-semibold text-lg">{activeItem.title}</h2>

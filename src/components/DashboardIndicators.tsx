@@ -31,6 +31,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useDebounce } from "@/hooks/useDebounce";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface Store {
   id: string;
@@ -128,6 +129,7 @@ const statusLabels: Record<StorePerformance["status"], string> = {
 };
 
 const DashboardIndicators = ({ userId }: DashboardIndicatorsProps) => {
+  const isMobile = useIsMobile();
   const [selectedStores, setSelectedStores] = useState<string[]>([]);
   const [selectedYear, setSelectedYear] = useState<number>(today.getFullYear());
   const [selectedMonths, setSelectedMonths] = useState<number[]>([today.getMonth() + 1]);
@@ -599,8 +601,8 @@ const DashboardIndicators = ({ userId }: DashboardIndicatorsProps) => {
   const projectionColor = projection.difference >= 0 ? "text-green-600" : "text-red-600";
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-lg border bg-card p-4 shadow-sm">
+    <div className="space-y-4 md:space-y-6 max-w-full">
+      <div className="rounded-lg border bg-card p-3 shadow-sm md:p-4">
         <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_120px_minmax(280px,2fr)]">
           <div className="space-y-2">
             <span className="text-sm font-medium">Loja</span>
@@ -661,7 +663,7 @@ const DashboardIndicators = ({ userId }: DashboardIndicatorsProps) => {
                   key={month.value}
                   type="button"
                   onClick={() => handleMonthToggle(String(month.value))}
-                  className={`h-9 rounded-md border text-xs font-medium transition-colors ${
+                  className={`h-8 rounded-md border text-xs font-medium transition-colors md:h-9 ${
                     selectedMonths.includes(month.value)
                       ? "border-primary bg-primary text-primary-foreground"
                       : "border-border bg-background hover:bg-muted"
@@ -677,12 +679,12 @@ const DashboardIndicators = ({ userId }: DashboardIndicatorsProps) => {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
         <Card className="shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Faturamento do período</CardTitle>
-            <DollarSign className="h-4 w-4 text-primary" />
+          <CardHeader className="flex flex-row items-center justify-between gap-2 p-3 pb-2 md:p-6 md:pb-2">
+            <CardTitle className="text-xs font-medium text-muted-foreground md:text-sm">Faturamento do período</CardTitle>
+            <DollarSign className="h-4 w-4 shrink-0 text-primary" />
           </CardHeader>
-          <CardContent className="space-y-2">
-            <div className="text-2xl font-bold">{loading ? "..." : formatCurrency(totalRevenue)}</div>
+          <CardContent className="space-y-2 p-3 pt-0 md:p-6 md:pt-0">
+            <div className="text-xl font-bold md:text-2xl">{loading ? "..." : formatCurrency(totalRevenue)}</div>
             <p className="text-xs text-muted-foreground">{periodLabel} de {debouncedYear}</p>
             <div className={`flex items-center gap-1 text-sm font-medium ${variationColor}`}>
               {previousVariation >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
@@ -692,12 +694,12 @@ const DashboardIndicators = ({ userId }: DashboardIndicatorsProps) => {
         </Card>
 
         <Card className="shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Meta do período</CardTitle>
-            <Target className="h-4 w-4 text-primary" />
+          <CardHeader className="flex flex-row items-center justify-between gap-2 p-3 pb-2 md:p-6 md:pb-2">
+            <CardTitle className="text-xs font-medium text-muted-foreground md:text-sm">Meta do período</CardTitle>
+            <Target className="h-4 w-4 shrink-0 text-primary" />
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="text-2xl font-bold">{loading ? "..." : `${formatPercent(goalPercentage)}%`}</div>
+          <CardContent className="space-y-3 p-3 pt-0 md:p-6 md:pt-0">
+            <div className="text-xl font-bold md:text-2xl">{loading ? "..." : `${formatPercent(goalPercentage)}%`}</div>
             <Progress value={Math.min(goalPercentage, 100)} className="h-2" />
             <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
               <span>Meta: {formatCurrency(totalGoal)}</span>
@@ -707,12 +709,12 @@ const DashboardIndicators = ({ userId }: DashboardIndicatorsProps) => {
         </Card>
 
         <Card className="shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Diferença para meta</CardTitle>
-            <TrendingUp className="h-4 w-4 text-primary" />
+          <CardHeader className="flex flex-row items-center justify-between gap-2 p-3 pb-2 md:p-6 md:pb-2">
+            <CardTitle className="text-xs font-medium text-muted-foreground md:text-sm">Diferença para meta</CardTitle>
+            <TrendingUp className="h-4 w-4 shrink-0 text-primary" />
           </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${differenceColor}`}>
+          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
+            <div className={`text-xl font-bold md:text-2xl ${differenceColor}`}>
               {loading ? "..." : formatCurrency(goalDifference)}
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
@@ -722,26 +724,26 @@ const DashboardIndicators = ({ userId }: DashboardIndicatorsProps) => {
         </Card>
 
         <Card className="shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Projeção de fechamento</CardTitle>
-            <LineChartIcon className="h-4 w-4 text-primary" />
+          <CardHeader className="flex flex-row items-center justify-between gap-2 p-3 pb-2 md:p-6 md:pb-2">
+            <CardTitle className="text-xs font-medium text-muted-foreground md:text-sm">Projeção de fechamento</CardTitle>
+            <LineChartIcon className="h-4 w-4 shrink-0 text-primary" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{loading ? "..." : formatCurrency(projection.value)}</div>
+          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
+            <div className="text-xl font-bold md:text-2xl">{loading ? "..." : formatCurrency(projection.value)}</div>
             <p className="mt-1 text-xs text-muted-foreground">{projection.label}</p>
-            <p className={`mt-2 text-sm font-medium ${projectionColor}`}>
+            <p className={`mt-2 text-xs font-medium md:text-sm ${projectionColor}`}>
               {projection.difference >= 0 ? "Acima da meta" : "Abaixo da meta"} em {formatCurrency(Math.abs(projection.difference))}
             </p>
           </CardContent>
         </Card>
 
         <Card className="shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Média diária</CardTitle>
-            <CalendarClock className="h-4 w-4 text-primary" />
+          <CardHeader className="flex flex-row items-center justify-between gap-2 p-3 pb-2 md:p-6 md:pb-2">
+            <CardTitle className="text-xs font-medium text-muted-foreground md:text-sm">Média diária</CardTitle>
+            <CalendarClock className="h-4 w-4 shrink-0 text-primary" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{loading ? "..." : formatCurrency(dailyAverage.realized)}</div>
+          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
+            <div className="text-xl font-bold md:text-2xl">{loading ? "..." : formatCurrency(dailyAverage.realized)}</div>
             <p className="mt-2 text-xs text-muted-foreground">
               {goalDifference >= 0
                 ? "Meta superada no período"
@@ -752,18 +754,18 @@ const DashboardIndicators = ({ userId }: DashboardIndicatorsProps) => {
       </div>
 
       <Card className="shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-lg">Faturamento Mensal - {debouncedYear} vs {debouncedYear - 1}</CardTitle>
+        <CardHeader className="p-3 pb-2 md:p-6">
+          <CardTitle className="text-base md:text-lg">Faturamento Mensal - {debouncedYear} vs {debouncedYear - 1}</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
           <div className="overflow-x-auto">
-            <div className="h-80 min-w-[720px]">
+            <div className="h-64 min-w-[700px] md:h-80 md:min-w-[720px]">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData} margin={{ top: 8, right: 20, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="name" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                  <XAxis dataKey="name" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: isMobile ? 11 : undefined }} />
                   <YAxis
-                    tick={{ fill: "hsl(var(--muted-foreground))" }}
+                    tick={{ fill: "hsl(var(--muted-foreground))", fontSize: isMobile ? 11 : undefined }}
                     tickFormatter={(value) =>
                       new Intl.NumberFormat("pt-BR", { notation: "compact", compactDisplay: "short" }).format(value)
                     }
@@ -842,11 +844,43 @@ const DashboardIndicators = ({ userId }: DashboardIndicatorsProps) => {
       </Card>
 
       <Card className="shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-lg">Desempenho por Loja</CardTitle>
+        <CardHeader className="p-3 pb-2 md:p-6">
+          <CardTitle className="text-base md:text-lg">Desempenho por Loja</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
+        <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
+          {/* Lista em cards (mobile) */}
+          <div className="space-y-2 md:hidden">
+            {storePerformance.map((store) => (
+              <div key={store.id} className="rounded-lg border p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-medium break-words">{store.code} - {store.name}</p>
+                  <Badge variant="outline" className={`${statusClasses[store.status]} shrink-0`}>
+                    {statusLabels[store.status]}
+                  </Badge>
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                  <span className="text-muted-foreground">Faturamento</span>
+                  <span className="text-right">{formatCurrency(store.revenue)}</span>
+                  <span className="text-muted-foreground">Meta</span>
+                  <span className="text-right">{formatCurrency(store.goal)}</span>
+                  <span className="text-muted-foreground">% Meta</span>
+                  <span className="text-right">{store.goal > 0 ? `${formatPercent(store.percentage)}%` : "-"}</span>
+                  <span className="text-muted-foreground">Diferença</span>
+                  <span className={`text-right font-medium ${store.difference >= 0 ? "text-green-600" : "text-red-600"}`}>
+                    {formatCurrency(store.difference)}
+                  </span>
+                </div>
+              </div>
+            ))}
+            {storePerformance.length === 0 && (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Nenhuma loja vinculada ao usuário logado.
+              </p>
+            )}
+          </div>
+
+          {/* Tabela (desktop) */}
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[760px] text-sm">
               <thead>
                 <tr className="border-b text-left text-muted-foreground">
@@ -890,23 +924,23 @@ const DashboardIndicators = ({ userId }: DashboardIndicatorsProps) => {
 
       <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
         <Card className="shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-lg">Alertas de Gestão</CardTitle>
+          <CardHeader className="p-3 pb-2 md:p-6">
+            <CardTitle className="text-base md:text-lg">Alertas de Gestão</CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-2">
+          <CardContent className="grid gap-2 p-3 pt-0 md:grid-cols-2 md:gap-3 md:p-6 md:pt-0">
             {alerts.map((alert) => (
-              <div key={alert.key} className="flex items-start gap-3 rounded-lg border p-3">
+              <div key={alert.key} className="flex items-start gap-2 rounded-lg border p-2.5 md:gap-3 md:p-3">
                 {alert.tone === "success" ? (
-                  <CheckCircle2 className="mt-0.5 h-5 w-5 text-green-600" />
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600 md:h-5 md:w-5" />
                 ) : (
-                  <AlertTriangle className={`mt-0.5 h-5 w-5 ${alert.tone === "danger" ? "text-red-600" : "text-amber-600"}`} />
+                  <AlertTriangle className={`mt-0.5 h-4 w-4 shrink-0 md:h-5 md:w-5 ${alert.tone === "danger" ? "text-red-600" : "text-amber-600"}`} />
                 )}
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-medium">{alert.title}</p>
-                    <span className="text-lg font-bold">{loading ? "..." : alert.value}</span>
+                  <div className="flex items-center justify-between gap-2 md:gap-3">
+                    <p className="text-sm font-medium md:text-base">{alert.title}</p>
+                    <span className="shrink-0 text-base font-bold md:text-lg">{loading ? "..." : alert.value}</span>
                   </div>
-                  <p className="truncate text-sm text-muted-foreground">{alert.description}</p>
+                  <p className="truncate text-xs text-muted-foreground md:text-sm">{alert.description}</p>
                 </div>
               </div>
             ))}
@@ -914,25 +948,25 @@ const DashboardIndicators = ({ userId }: DashboardIndicatorsProps) => {
         </Card>
 
         <Card className="shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-lg">Operacional</CardTitle>
+          <CardHeader className="p-3 pb-2 md:p-6">
+            <CardTitle className="text-base md:text-lg">Operacional</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3 p-3 pt-0 md:space-y-4 md:p-6 md:pt-0">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-sm text-muted-foreground">Funcionários ativos</p>
-                <p className="text-2xl font-bold">{loading ? "..." : employeesData?.active || 0}</p>
+                <p className="text-xs text-muted-foreground md:text-sm">Funcionários ativos</p>
+                <p className="text-xl font-bold md:text-2xl">{loading ? "..." : employeesData?.active || 0}</p>
               </div>
-              <Users className="h-6 w-6 text-primary" />
+              <Users className="h-5 w-5 shrink-0 text-primary md:h-6 md:w-6" />
             </div>
-            <div className="grid grid-cols-2 gap-3 rounded-lg bg-muted/50 p-3">
+            <div className="grid grid-cols-2 gap-3 rounded-lg bg-muted/50 p-2.5 md:p-3">
               <div>
                 <p className="text-xs text-muted-foreground">Sem registro</p>
-                <p className="text-lg font-semibold text-amber-700">{employeesData?.unregistered || 0}</p>
+                <p className="text-base font-semibold text-amber-700 md:text-lg">{employeesData?.unregistered || 0}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Cadastros completos</p>
-                <p className="text-lg font-semibold">{formatPercent(completedRegistrationPercentage)}%</p>
+                <p className="text-base font-semibold md:text-lg">{formatPercent(completedRegistrationPercentage)}%</p>
               </div>
             </div>
             <Progress value={completedRegistrationPercentage} className="h-2" />
