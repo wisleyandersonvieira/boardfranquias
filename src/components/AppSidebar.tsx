@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { TRANSFERS_PATH } from "@/lib/routes";
 import { 
   Calculator, 
   DollarSign, 
@@ -65,7 +66,6 @@ interface AppSidebarProps {
   onOpenCaixa: (storeId: string) => void;
   onOpenAccountsPayable: () => void;
   onOpenAccountsReceivable: () => void;
-  onOpenTransfers: () => void;
   onOpenPeriodControl: () => void;
   onOpenSuppliers: () => void;
   onOpenCreditors: () => void;
@@ -93,7 +93,6 @@ const AppSidebar = ({
   onOpenCaixa,
   onOpenAccountsPayable,
   onOpenAccountsReceivable,
-  onOpenTransfers,
   onOpenPeriodControl,
   onOpenSuppliers,
   onOpenCreditors,
@@ -239,7 +238,7 @@ const AppSidebar = ({
         { id: "contas-pagar", label: "Contas a Pagar", action: "openAccountsPayable" },
         { id: "importar-nfe", label: "Importar NF-e", route: "/nfe-import" },
         { id: "contas-receber", label: "Contas a Receber", action: "openAccountsReceivable" },
-        { id: "transferencias", label: "Transferências", action: "openTransfers" },
+        { id: "transferencias", label: "Transferências", route: TRANSFERS_PATH },
         { id: "aportes-retiradas", label: "Aportes e Retiradas", action: "openPartnerTransactions" },
         { id: "registro-os", label: "Registro de OS", action: "openServiceOrders" },
         { id: "conciliacao-bancaria", label: "Conciliação Bancária", route: "/bank-reconciliation" },
@@ -429,9 +428,6 @@ const AppSidebar = ({
           break;
         case "openAccountsReceivable":
           onOpenAccountsReceivable();
-          break;
-        case "openTransfers":
-          onOpenTransfers();
           break;
         case "openPeriodControl":
           onOpenPeriodControl();

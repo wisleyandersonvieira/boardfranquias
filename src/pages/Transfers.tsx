@@ -1,19 +1,24 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Plus, Edit, Trash2, Eye, Search, FileSpreadsheet, FileText, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarIcon, Plus, Edit, Trash2, Eye, FileSpreadsheet, FileText, ChevronLeft, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { TransferFormModal } from "./TransferFormModal";
+import { TransferFormModal } from "@/components/TransferFormModal";
 import { validateCashControlPeriod } from "@/utils/periodValidation";
 import { useFinanceiroPermissions } from "@/hooks/useFinanceiroPermissions";
+import PageLayout from "@/components/page/PageLayout";
+import PageHeader from "@/components/page/PageHeader";
+import FilterCard from "@/components/page/FilterCard";
+import DataTableCard from "@/components/page/DataTableCard";
+import SearchableSelect, { SearchableSelectOption } from "@/components/page/SearchableSelect";
+import { ListPageContainer } from "@/components/page/PageContainer";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
@@ -46,16 +51,14 @@ interface Account {
   name: string;
   type: 'current' | 'cash' | 'card' | 'delivery';
   store_name?: string;
-}
-
-interface TransfersModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  store_ids: string[];
 }
 
 const ITEMS_PER_PAGE = 20;
+const ALL_STORES = "ALL_STORES";
+const ALL_ACCOUNTS = "ALL_ACCOUNTS";
 
-export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
+function TransfersContent() {
   const [userStoreIds, setUserStoreIds] = useState<string[]>([]);
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
@@ -72,9 +75,16 @@ export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
   const [currentPage, setCurrentPage] = useState(1);
 
   // Filtros
+  const [selectedStore, setSelectedStore] = useState<string>(ALL_STORES);
   const [selectedAccount, setSelectedAccount] = useState<string>("");
   const [startDate, setStartDate] = useState<Date>();
   const [endDate, setEndDate] = useState<Date>();
+
+  // Contas exibidas no filtro: apenas as da loja selecionada
+  const accountsForSelectedStore =
+    selectedStore === ALL_STORES
+      ? accounts
+      : accounts.filter((account) => account.store_ids.includes(selectedStore));
 
   // Dados paginados
   const totalPages = Math.ceil(transfers.length / ITEMS_PER_PAGE);
@@ -84,28 +94,15 @@ export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
   );
 
   useEffect(() => {
-    if (open) {
-      // Reset state when modal opens
-      setTransfers([]);
-      setHasSearched(false);
-      setCurrentPage(1);
-      setSelectedAccount("");
-      setStartDate(undefined);
-      setEndDate(undefined);
-      
-      const loadData = async () => {
-        await fetchUserStores();
-      };
-      loadData();
-    }
-  }, [open]);
+    fetchUserStores();
+  }, []);
 
   // Carregar contas após obter as lojas do usuário
   useEffect(() => {
-    if (open && userStoreIds.length > 0) {
+    if (userStoreIds.length > 0) {
       fetchAccounts();
     }
-  }, [open, userStoreIds]);
+  }, [userStoreIds]);
 
   const fetchUserStores = async () => {
     try {
@@ -125,7 +122,7 @@ export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
         const { data: allStores } = await supabase
           .from('stores')
           .select('id');
-        
+
         if (allStores) {
           allStores.forEach(s => storeIds.push(s.id));
         }
@@ -134,12 +131,12 @@ export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
         if (profile?.store_id) {
           storeIds.push(profile.store_id);
         }
-        
+
         const { data: userStores } = await supabase
           .from('user_stores')
           .select('store_id')
           .eq('user_id', user.id);
-        
+
         if (userStores) {
           userStores.forEach(us => {
             if (!storeIds.includes(us.store_id)) {
@@ -158,7 +155,7 @@ export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
           .select('id, name')
           .in('id', storeIds)
           .order('name');
-        
+
         setStores(storesData || []);
       }
     } catch (error) {
@@ -233,35 +230,48 @@ export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
         });
       };
 
+      // Lojas do usuário às quais a conta está vinculada — base do filtro por loja
+      const storeIdsOf = (acc: any, storeRelation: string): string[] => {
+        const storeAssociations = acc[storeRelation];
+        if (!storeAssociations || !Array.isArray(storeAssociations)) return [];
+        return storeAssociations
+          .map((sa: any) => sa.store_id)
+          .filter((storeId: string) => userStoreIds.includes(storeId));
+      };
+
       const filteredCurrentAccounts = filterByUserStores(currentResult.data || [], 'current_account_stores');
       const filteredCashAccounts = filterByUserStores(cashResult.data || [], 'cash_account_stores');
       const filteredCardAccounts = filterByUserStores(cardResult.data || [], 'card_account_stores');
       const filteredDeliveryAccounts = filterByUserStores(deliveryResult.data || [], 'delivery_account_stores');
 
-      const allAccounts = [
-        ...filteredCurrentAccounts.map(acc => ({ 
-          id: acc.id, 
-          name: acc.name, 
+      const allAccounts: Account[] = [
+        ...filteredCurrentAccounts.map(acc => ({
+          id: acc.id,
+          name: acc.name,
           type: 'current' as const,
-          store_name: acc.current_account_stores?.[0]?.stores?.name || ''
+          store_name: acc.current_account_stores?.[0]?.stores?.name || '',
+          store_ids: storeIdsOf(acc, 'current_account_stores'),
         })),
-        ...filteredCashAccounts.map(acc => ({ 
-          id: acc.id, 
-          name: acc.name, 
+        ...filteredCashAccounts.map(acc => ({
+          id: acc.id,
+          name: acc.name,
           type: 'cash' as const,
-          store_name: acc.cash_account_stores?.[0]?.stores?.name || ''
+          store_name: acc.cash_account_stores?.[0]?.stores?.name || '',
+          store_ids: storeIdsOf(acc, 'cash_account_stores'),
         })),
-        ...filteredCardAccounts.map(acc => ({ 
-          id: acc.id, 
-          name: acc.name, 
+        ...filteredCardAccounts.map(acc => ({
+          id: acc.id,
+          name: acc.name,
           type: 'card' as const,
-          store_name: acc.card_account_stores?.[0]?.stores?.name || ''
+          store_name: acc.card_account_stores?.[0]?.stores?.name || '',
+          store_ids: storeIdsOf(acc, 'card_account_stores'),
         })),
-        ...filteredDeliveryAccounts.map(acc => ({ 
-          id: acc.id, 
-          name: acc.name, 
+        ...filteredDeliveryAccounts.map(acc => ({
+          id: acc.id,
+          name: acc.name,
           type: 'delivery' as const,
-          store_name: acc.delivery_account_stores?.[0]?.stores?.name || ''
+          store_name: acc.delivery_account_stores?.[0]?.stores?.name || '',
+          store_ids: storeIdsOf(acc, 'delivery_account_stores'),
         }))
       ];
 
@@ -321,10 +331,10 @@ export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
 
     // Enriquecer com nomes das contas
     const enrichedTransfers = data?.map(transfer => {
-      const sourceAccount = accounts.find(acc => 
+      const sourceAccount = accounts.find(acc =>
         acc.id === transfer.source_account_id && acc.type === transfer.source_account_type
       );
-      const destinationAccount = accounts.find(acc => 
+      const destinationAccount = accounts.find(acc =>
         acc.id === transfer.destination_account_id && acc.type === transfer.destination_account_type
       );
 
@@ -337,9 +347,16 @@ export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
 
     // Filtrar por conta se selecionada
     let filteredTransfers = enrichedTransfers;
-    if (selectedAccount && selectedAccount !== "ALL_ACCOUNTS") {
-      filteredTransfers = enrichedTransfers.filter(transfer => 
+    if (selectedAccount && selectedAccount !== ALL_ACCOUNTS) {
+      filteredTransfers = enrichedTransfers.filter(transfer =>
         transfer.source_account_id === selectedAccount || transfer.destination_account_id === selectedAccount
+      );
+    } else if (selectedStore !== ALL_STORES) {
+      // "Todas as contas" com loja selecionada: apenas contas da loja
+      const storeAccountIds = accountsForSelectedStore.map(account => account.id);
+      filteredTransfers = enrichedTransfers.filter(transfer =>
+        storeAccountIds.includes(transfer.source_account_id) ||
+        storeAccountIds.includes(transfer.destination_account_id)
       );
     }
 
@@ -402,6 +419,12 @@ export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
     }
   };
 
+  // Trocar de loja invalida a conta selecionada anteriormente
+  const handleStoreChange = (storeId: string) => {
+    setSelectedStore(storeId);
+    setSelectedAccount("");
+  };
+
   const getAccountTypeLabel = (type: string) => {
     const labels = {
       current: 'Conta Corrente',
@@ -419,6 +442,19 @@ export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
     }).format(value);
   };
 
+  const storeOptions: SearchableSelectOption[] = [
+    { value: ALL_STORES, label: "Todas as lojas" },
+    ...stores.map((store) => ({ value: store.id, label: store.name })),
+  ];
+
+  const accountOptions: SearchableSelectOption[] = [
+    { value: ALL_ACCOUNTS, label: "Todas as contas" },
+    ...accountsForSelectedStore.map((account) => ({
+      value: account.id,
+      label: `${account.name} (${getAccountTypeLabel(account.type)})${account.store_name ? ` - ${account.store_name}` : ''}`,
+    })),
+  ];
+
   const exportToPDF = () => {
     if (transfers.length === 0) {
       toast({
@@ -430,10 +466,10 @@ export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
     }
 
     const doc = new jsPDF();
-    
+
     doc.setFontSize(16);
     doc.text("Relatório de Transferências", 14, 20);
-    
+
     // Adicionar filtros aplicados
     let yPos = 30;
     doc.setFontSize(10);
@@ -445,7 +481,7 @@ export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
       doc.text(`Data Fim: ${format(endDate, 'dd/MM/yyyy', { locale: ptBR })}`, 14, yPos);
       yPos += 6;
     }
-    if (selectedAccount && selectedAccount !== "ALL_ACCOUNTS") {
+    if (selectedAccount && selectedAccount !== ALL_ACCOUNTS) {
       const account = accounts.find(a => a.id === selectedAccount);
       doc.text(`Conta: ${account?.name || 'N/A'}`, 14, yPos);
       yPos += 6;
@@ -468,7 +504,7 @@ export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
     });
 
     doc.save(`transferencias_${format(new Date(), 'yyyyMMdd_HHmmss')}.pdf`);
-    
+
     toast({
       title: "Sucesso",
       description: "PDF exportado com sucesso",
@@ -497,7 +533,7 @@ export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(excelData);
-    
+
     // Ajustar largura das colunas
     ws['!cols'] = [
       { wch: 12 },
@@ -511,7 +547,7 @@ export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
 
     XLSX.utils.book_append_sheet(wb, ws, 'Transferências');
     XLSX.writeFile(wb, `transferencias_${format(new Date(), 'yyyyMMdd_HHmmss')}.xlsx`);
-    
+
     toast({
       title: "Sucesso",
       description: "Excel exportado com sucesso",
@@ -523,270 +559,263 @@ export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
   };
 
   return (
-    <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Transferências</DialogTitle>
-            <DialogDescription>
-              Gerencie as transferências entre suas contas financeiras
-            </DialogDescription>
-          </DialogHeader>
-
-          {/* Filtros */}
-          <div className="space-y-4 border-b pb-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="text-sm font-medium mb-2 block">Conta <span className="text-destructive">*</span></label>
-                <Select value={selectedAccount} onValueChange={setSelectedAccount}>
-                  <SelectTrigger className={cn(!selectedAccount && "border-destructive")}>
-                    <SelectValue placeholder="Selecione uma conta" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ALL_ACCOUNTS">Todas as contas</SelectItem>
-                    {accounts.map((account) => (
-                      <SelectItem key={account.id} value={account.id}>
-                        {account.name} ({getAccountTypeLabel(account.type)}){account.store_name ? ` - ${account.store_name}` : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium mb-2 block">Data Início</label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !startDate && "text-muted-foreground"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {startDate ? format(startDate, "PPP", { locale: ptBR }) : "Selecionar data"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={startDate}
-                      onSelect={setStartDate}
-                      initialFocus
-                      className="pointer-events-auto"
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium mb-2 block">Data Fim</label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !endDate && "text-muted-foreground"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {endDate ? format(endDate, "PPP", { locale: ptBR }) : "Selecionar data"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={endDate}
-                      onSelect={setEndDate}
-                      initialFocus
-                      className="pointer-events-auto"
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-            </div>
-
-            {/* Botões de ação */}
-            <div className="flex flex-wrap gap-2 justify-between items-center">
-              <div className="flex gap-2">
-                <Button onClick={fetchTransfers} disabled={loading}>
-                  <Search className="w-4 h-4 mr-2" />
-                  Filtrar
+    <ListPageContainer>
+      <PageHeader
+        title="Transferências"
+        subtitle="Gerencie as transferências entre suas contas financeiras"
+        actions={
+          <>
+            {hasSearched && transfers.length > 0 && (
+              <>
+                <Button variant="outline" onClick={exportToPDF}>
+                  <FileText className="w-4 h-4 mr-2" />
+                  Exportar PDF
                 </Button>
-                {hasSearched && transfers.length > 0 && (
-                  <>
-                    <Button variant="outline" onClick={exportToPDF}>
-                      <FileText className="w-4 h-4 mr-2" />
-                      Exportar PDF
-                    </Button>
-                    <Button variant="outline" onClick={exportToExcel}>
-                      <FileSpreadsheet className="w-4 h-4 mr-2" />
-                      Exportar Excel
-                    </Button>
-                  </>
+                <Button variant="outline" onClick={exportToExcel}>
+                  <FileSpreadsheet className="w-4 h-4 mr-2" />
+                  Exportar Excel
+                </Button>
+              </>
+            )}
+            {canEdit && (
+              <Button onClick={() => setShowForm(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                Cadastrar Transferência
+              </Button>
+            )}
+          </>
+        }
+      />
+
+      <FilterCard onApply={fetchTransfers} applyLabel="Filtrar" applyDisabled={loading}>
+        <SearchableSelect
+          label="Loja"
+          placeholder="Todas as lojas"
+          searchPlaceholder="Buscar loja..."
+          emptyText="Nenhuma loja encontrada"
+          options={storeOptions}
+          value={selectedStore}
+          onChange={handleStoreChange}
+        />
+
+        <div className="space-y-2">
+          <Label>
+            Conta <span className="text-destructive">*</span>
+          </Label>
+          <SearchableSelect
+            placeholder="Selecione uma conta"
+            searchPlaceholder="Buscar conta..."
+            emptyText="Nenhuma conta encontrada"
+            options={accountOptions}
+            value={selectedAccount}
+            onChange={setSelectedAccount}
+            invalid={!selectedAccount}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Data Início</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  "w-full justify-start text-left font-normal",
+                  !startDate && "text-muted-foreground"
                 )}
-              </div>
-              
-              {canEdit && (
-                <Button onClick={() => setShowForm(true)}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Cadastrar Transferência
-                </Button>
-              )}
-            </div>
-          </div>
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {startDate ? format(startDate, "PPP", { locale: ptBR }) : "Selecionar data"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={startDate}
+                onSelect={setStartDate}
+                initialFocus
+                className="pointer-events-auto"
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
 
-          {/* Tabela */}
-          <div className="border rounded-lg">
-            <Table>
-              <TableHeader>
+        <div className="space-y-2">
+          <Label>Data Fim</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  "w-full justify-start text-left font-normal",
+                  !endDate && "text-muted-foreground"
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {endDate ? format(endDate, "PPP", { locale: ptBR }) : "Selecionar data"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={endDate}
+                onSelect={setEndDate}
+                initialFocus
+                className="pointer-events-auto"
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
+      </FilterCard>
+
+      <DataTableCard title="Transferências">
+        <div className="border rounded-lg">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Data</TableHead>
+                <TableHead>Conta Origem</TableHead>
+                <TableHead>Conta Destino</TableHead>
+                <TableHead className="text-right">Valor</TableHead>
+                <TableHead>Histórico</TableHead>
+                <TableHead className="text-center">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {!hasSearched ? (
                 <TableRow>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Conta Origem</TableHead>
-                  <TableHead>Conta Destino</TableHead>
-                  <TableHead className="text-right">Valor</TableHead>
-                  <TableHead>Histórico</TableHead>
-                  <TableHead className="text-center">Ações</TableHead>
+                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                    Use os filtros acima e clique em "Filtrar" para buscar transferências
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {!hasSearched ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      Use os filtros acima e clique em "Filtrar" para buscar transferências
+              ) : loading ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-8">
+                    Carregando...
+                  </TableCell>
+                </TableRow>
+              ) : transfers.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-8">
+                    Nenhuma transferência encontrada
+                  </TableCell>
+                </TableRow>
+              ) : (
+                paginatedTransfers.map((transfer) => (
+                  <TableRow key={transfer.id}>
+                    <TableCell>
+                      {format(new Date(transfer.transfer_date + 'T12:00:00'), 'dd/MM/yyyy', { locale: ptBR })}
+                    </TableCell>
+                    <TableCell>
+                      <div>
+                        <div className="font-medium">{transfer.source_account_name}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {getAccountTypeLabel(transfer.source_account_type)}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div>
+                        <div className="font-medium">{transfer.destination_account_name}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {getAccountTypeLabel(transfer.destination_account_type)}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-medium">
+                      {formatCurrency(transfer.amount)}
+                    </TableCell>
+                    <TableCell>{transfer.description || '-'}</TableCell>
+                    <TableCell>
+                      <div className="flex gap-2 justify-center">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleView(transfer)}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        {canEdit && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEdit(transfer)}
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDelete(transfer.id, transfer.transfer_date)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
-                ) : loading ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8">
-                      Carregando...
-                    </TableCell>
-                  </TableRow>
-                ) : transfers.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8">
-                      Nenhuma transferência encontrada
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  paginatedTransfers.map((transfer) => (
-                    <TableRow key={transfer.id}>
-                      <TableCell>
-                        {format(new Date(transfer.transfer_date + 'T12:00:00'), 'dd/MM/yyyy', { locale: ptBR })}
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{transfer.source_account_name}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {getAccountTypeLabel(transfer.source_account_type)}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{transfer.destination_account_name}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {getAccountTypeLabel(transfer.destination_account_type)}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatCurrency(transfer.amount)}
-                      </TableCell>
-                      <TableCell>{transfer.description || '-'}</TableCell>
-                      <TableCell>
-                        <div className="flex gap-2 justify-center">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleView(transfer)}
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          {canEdit && (
-                            <>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleEdit(transfer)}
-                              >
-                                <Edit className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleDelete(transfer.id, transfer.transfer_date)}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
 
-          {/* Paginação */}
-          {hasSearched && transfers.length > 0 && totalPages > 1 && (
-            <div className="flex items-center justify-between px-2 py-4">
-              <div className="text-sm text-muted-foreground">
-                Exibindo {((currentPage - 1) * ITEMS_PER_PAGE) + 1} a {Math.min(currentPage * ITEMS_PER_PAGE, transfers.length)} de {transfers.length} transferências
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePageChange(currentPage - 1)}
-                  disabled={currentPage === 1}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                  Anterior
-                </Button>
-                <div className="flex items-center gap-1">
-                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                    let pageNum;
-                    if (totalPages <= 5) {
-                      pageNum = i + 1;
-                    } else if (currentPage <= 3) {
-                      pageNum = i + 1;
-                    } else if (currentPage >= totalPages - 2) {
-                      pageNum = totalPages - 4 + i;
-                    } else {
-                      pageNum = currentPage - 2 + i;
-                    }
-                    return (
-                      <Button
-                        key={pageNum}
-                        variant={currentPage === pageNum ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => handlePageChange(pageNum)}
-                        className="w-8 h-8 p-0"
-                      >
-                        {pageNum}
-                      </Button>
-                    );
-                  })}
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePageChange(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                >
-                  Próximo
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
+        {/* Paginação */}
+        {hasSearched && transfers.length > 0 && totalPages > 1 && (
+          <div className="flex items-center justify-between px-2 py-4">
+            <div className="text-sm text-muted-foreground">
+              Exibindo {((currentPage - 1) * ITEMS_PER_PAGE) + 1} a {Math.min(currentPage * ITEMS_PER_PAGE, transfers.length)} de {transfers.length} transferências
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Anterior
+              </Button>
+              <div className="flex items-center gap-1">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+                  return (
+                    <Button
+                      key={pageNum}
+                      variant={currentPage === pageNum ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => handlePageChange(pageNum)}
+                      className="w-8 h-8 p-0"
+                    >
+                      {pageNum}
+                    </Button>
+                  );
+                })}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+              >
+                Próximo
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+      </DataTableCard>
 
       <TransferFormModal
         open={showForm}
@@ -796,6 +825,15 @@ export function TransfersModal({ open, onOpenChange }: TransfersModalProps) {
         stores={stores}
         accounts={accounts}
       />
-    </>
+    </ListPageContainer>
   );
 }
+
+/** Página dedicada de Transferências (Financeiro > Transferências). */
+const Transfers = () => (
+  <PageLayout>
+    <TransfersContent />
+  </PageLayout>
+);
+
+export default Transfers;

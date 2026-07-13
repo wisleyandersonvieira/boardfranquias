@@ -16,7 +16,6 @@ import AppSidebar from "./AppSidebar";
 import { ACCOUNTS_PAYABLE_PATH } from "@/lib/routes";
 import { AccountsReceivableModal } from "@/components/AccountsReceivableModal";
 
-import { TransfersModal } from "@/components/TransfersModal";
 import { PeriodControlModal } from "@/components/PeriodControlModal";
 import JobFunctionModal from "@/components/JobFunctionModal";
 import EmployeeModal from "@/components/EmployeeModal";
@@ -56,7 +55,6 @@ const DashboardLayout = ({ children, user, pendingTasks }: DashboardLayoutProps)
   
   // Financeiro modals
   const [accountsReceivableOpen, setAccountsReceivableOpen] = useState(false);
-  const [transfersOpen, setTransfersOpen] = useState(false);
   const [periodControlOpen, setPeriodControlOpen] = useState(false);
   const [partnerTransactionsOpen, setPartnerTransactionsOpen] = useState(false);
   const [serviceOrdersOpen, setServiceOrdersOpen] = useState(false);
@@ -98,7 +96,6 @@ const DashboardLayout = ({ children, user, pendingTasks }: DashboardLayoutProps)
         onOpenCaixa={handleOpenCaixa}
         onOpenAccountsPayable={() => navigate(ACCOUNTS_PAYABLE_PATH)}
         onOpenAccountsReceivable={() => setAccountsReceivableOpen(true)}
-        onOpenTransfers={() => setTransfersOpen(true)}
         onOpenPeriodControl={() => setPeriodControlOpen(true)}
         onOpenSuppliers={() => setSuppliersModalOpen(true)}
         onOpenCreditors={() => setCreditorsModalOpen(true)}
@@ -184,13 +181,6 @@ const DashboardLayout = ({ children, user, pendingTasks }: DashboardLayoutProps)
         <AccountsReceivableModal 
           open={accountsReceivableOpen} 
           onOpenChange={setAccountsReceivableOpen} 
-        />
-      )}
-
-      {transfersOpen && (
-        <TransfersModal
-          open={transfersOpen}
-          onOpenChange={setTransfersOpen}
         />
       )}
 

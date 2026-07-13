@@ -10,9 +10,12 @@ interface FilterCardProps {
   /** Os campos de filtro. */
   children: ReactNode;
   onApply: () => void;
-  onClear: () => void;
+  /** Omitido quando a página não oferece "limpar filtros". */
+  onClear?: () => void;
   applyLabel?: string;
   clearLabel?: string;
+  /** Desabilita o botão de aplicar (ex.: enquanto a busca roda). */
+  applyDisabled?: boolean;
 }
 
 /**
@@ -26,6 +29,7 @@ export function FilterCard({
   onClear,
   applyLabel = "Aplicar Filtros",
   clearLabel = "Limpar Filtros",
+  applyDisabled = false,
 }: FilterCardProps) {
   return (
     <Card>
@@ -43,10 +47,14 @@ export function FilterCard({
           {children}
         </div>
         <div className="flex gap-2 mt-4">
-          <Button onClick={onApply}>{applyLabel}</Button>
-          <Button variant="outline" onClick={onClear}>
-            {clearLabel}
+          <Button onClick={onApply} disabled={applyDisabled}>
+            {applyLabel}
           </Button>
+          {onClear && (
+            <Button variant="outline" onClick={onClear}>
+              {clearLabel}
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>

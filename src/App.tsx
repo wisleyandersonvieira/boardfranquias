@@ -48,6 +48,8 @@ import ProductAnalysisReport from "./pages/ProductAnalysisReport";
 import BIReport from "./pages/BIReport";
 import ProtectedRoute from "./components/ProtectedRoute";
 import NfeImport from "./pages/NfeImport";
+import Transfers from "./pages/Transfers";
+import { TRANSFERS_PATH } from "./lib/routes";
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -86,6 +88,7 @@ function App() {
               <Route path="/stock" element={protect(<StockModule />)} />
               <Route path="/stock/:storeId" element={protect(<StockControl />)} />
               <Route path="/accounts-payable/*" element={protect(<AccountsPayable />)} />
+              <Route path={TRANSFERS_PATH} element={protect(<Transfers />)} />
               <Route path="/reports/accounts-payable" element={protect(<AccountsPayableModule />)} />
               <Route path="/reports/accounts-payable/pending" element={protect(<AccountsPayableReport />)} />
               <Route path="/reports/accounts-payable/paid" element={protect(<PaidAccountsReport />)} />
