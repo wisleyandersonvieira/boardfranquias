@@ -639,23 +639,23 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
 
   return (
     <Card className="h-full">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg flex items-center gap-2">
-            {title}
-            <span className="text-sm font-normal text-muted-foreground">
+      <CardHeader className="p-3 pb-2 md:p-6 md:pb-3">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <CardTitle className="text-base md:text-lg flex flex-col gap-0.5 md:flex-row md:items-center md:gap-2">
+            <span>{title}</span>
+            <span className="text-xs md:text-sm font-normal text-muted-foreground">
               ({filteredCount} registro{filteredCount !== 1 ? 's' : ''})
             </span>
           </CardTitle>
           {canEdit && (
-            <Button size="sm" onClick={() => handleOpenForm()}>
+            <Button size="sm" className="w-full md:w-auto shrink-0" onClick={() => handleOpenForm()}>
               <Plus className="h-4 w-4 mr-1" />
               Nova Despesa
             </Button>
           )}
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
         {loading ? (
           <div className="flex justify-center py-4">
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
@@ -667,10 +667,10 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
         ) : (
           <>
           {/* Filter by link status */}
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <span className="text-xs text-muted-foreground">Filtrar:</span>
-              <div className="flex gap-1">
+              <div className="flex flex-wrap gap-1">
                 {linkFilterOptions.map((option) => (
                   <Button
                     key={option.value}
@@ -684,12 +684,12 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
                 ))}
               </div>
               {linkFilter !== 'all' && (
-                <span className="text-xs font-medium text-primary ml-2">
+                <span className="text-xs font-medium text-primary md:ml-2">
                   Total: {formatCurrency(filteredTotal)}
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 md:gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -713,7 +713,7 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
               <Button
                 variant="outline"
                 size="sm"
-                className="h-6 text-xs px-2"
+                className="hidden md:inline-flex h-6 text-xs px-2"
                 onClick={() => setExpandedView(true)}
                 title="Expandir visualização"
               >
@@ -721,7 +721,91 @@ export const CashControlExpenseBox = ({ storeId, expenseType, title, referenceMo
               </Button>
             </div>
           </div>
-          <div className="border rounded">
+
+          {/* Lista em cards (mobile) */}
+          <div className="md:hidden space-y-2 max-h-[320px] overflow-y-auto">
+            {sortedExpenses.map((expense) => {
+              const isLinked = !!expense.linked_account_payable_id;
+              const cardClassName = expense.is_disabled
+                ? "bg-red-50 text-red-700"
+                : isLinked
+                  ? "bg-green-50"
+                  : "bg-card";
+
+              return (
+                <div key={expense.id} className={`rounded-lg border p-2.5 ${cardClassName}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-semibold break-words min-w-0">
+                      {expense.supplier}
+                      {expense.is_disabled && " (inabilitado)"}
+                    </p>
+                    <span className="text-sm font-semibold shrink-0">
+                      {formatCurrency(expense.amount)}
+                    </span>
+                  </div>
+
+                  <p className="mt-1 text-xs break-words">{expense.description}</p>
+
+                  <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+                    <span>Data: {safeFormatDate(expense.issue_date, "dd/MM/yyyy", "T12:00:00")}</span>
+                    <span>Criado em: {safeFormatDate(expense.created_at, "dd/MM/yyyy HH:mm")}</span>
+                    <span className={isLinked ? "font-medium text-green-700" : ""}>
+                      {isLinked ? "Vinculado" : "Não vinculado"}
+                    </span>
+                  </div>
+
+                  <div className="mt-2 flex gap-1 border-t pt-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => handleView(expense)}
+                      title="Visualizar"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    {canEdit && (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={`h-8 w-8 ${isLinked ? "opacity-50" : ""}`}
+                          onClick={() => handleOpenForm(expense)}
+                          title={isLinked ? "Não pode editar (vinculado)" : "Editar"}
+                          disabled={isLinked}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={`h-8 w-8 ${isLinked ? "text-green-600 opacity-50" : "text-blue-600"}`}
+                          onClick={() => handleOpenLinkModal(expense)}
+                          title={isLinked ? "Já vinculado" : "Vincular ao Contas a Pagar"}
+                          disabled={isLinked}
+                        >
+                          <Link2 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={`h-8 w-8 ${isLinked ? "opacity-50" : expense.is_disabled ? "text-green-600" : "text-red-600"}`}
+                          onClick={() => handleDisable(expense)}
+                          title={isLinked ? "Não pode inabilitar (vinculado)" : expense.is_disabled ? "Habilitar" : "Inabilitar"}
+                          disabled={isLinked}
+                        >
+                          <Ban className="h-4 w-4" />
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Tabela (desktop) */}
+          <div className="hidden md:block border rounded">
             <Table>
               <TableHeader className="sticky top-0 bg-card z-10">
                 <TableRow className="h-8">

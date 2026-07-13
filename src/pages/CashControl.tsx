@@ -131,33 +131,36 @@ const CashControl = () => {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Button 
-                variant="outline" 
-                size="sm" 
+        <div className="container mx-auto px-3 py-2 md:px-4 md:py-4">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 md:gap-4 min-w-0">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 px-2 shrink-0 md:px-3"
                 onClick={() => navigate('/dashboard')}
               >
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Voltar
+                <ArrowLeft className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Voltar</span>
               </Button>
-              
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-blue-500 flex items-center justify-center">
+
+              <div className="flex items-center gap-2 md:gap-3 min-w-0">
+                <div className="hidden md:flex w-10 h-10 rounded-lg bg-blue-500 items-center justify-center">
                   <Store className="h-5 w-5 text-white" />
                 </div>
-                <div>
-                  <h1 className="text-xl font-bold text-primary">Controle de Caixa</h1>
-                  <p className="text-sm text-muted-foreground">
+                <div className="min-w-0">
+                  <h1 className="text-sm md:text-xl font-bold text-primary truncate">Controle de Caixa</h1>
+                  <p className="text-xs md:text-sm text-muted-foreground truncate">
                     {store.name} - Código: {store.code}
                   </p>
                 </div>
               </div>
             </div>
 
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2 text-xs shrink-0 md:h-9 md:px-4 md:text-sm"
               onClick={() => setMonthViewModalOpen(true)}
             >
               Relatório
@@ -167,11 +170,11 @@ const CashControl = () => {
       </header>
 
       {/* Main Content - Calendar with Expense Boxes */}
-      <main className="container mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-6">
+      <main className="container mx-auto px-3 py-4 md:px-4 md:py-8">
+        <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-4 md:gap-6">
           {/* Calendar Section */}
           <div className="flex flex-col items-center">
-            <h2 className="text-xl font-bold text-foreground mb-4">Caixa Diário</h2>
+            <h2 className="text-base md:text-xl font-bold text-foreground mb-2 md:mb-4">Caixa Diário</h2>
             <Calendar
               mode="single"
               month={currentDate}
@@ -190,26 +193,26 @@ const CashControl = () => {
                 approved: "bg-green-100 border-2 border-green-300"
               }}
               className={cn(
-                "rounded-lg border shadow-lg p-4 pointer-events-auto bg-card"
+                "w-full max-w-full rounded-lg border shadow-lg p-2 pointer-events-auto bg-card md:p-4"
               )}
               classNames={{
                 months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
-                month: "space-y-4",
+                month: "space-y-2 md:space-y-4",
                 caption: "flex justify-center pt-1 relative items-center",
-                caption_label: "text-xl font-medium",
+                caption_label: "text-base md:text-xl font-medium",
                 nav: "space-x-1 flex items-center",
                 nav_button: cn(
-                  "h-8 w-8 bg-transparent p-0 opacity-50 hover:opacity-100"
+                  "h-7 w-7 md:h-8 md:w-8 bg-transparent p-0 opacity-50 hover:opacity-100"
                 ),
                 nav_button_previous: "absolute left-1",
                 nav_button_next: "absolute right-1",
                 table: "w-full border-collapse space-y-1",
-                head_row: "flex",
-                head_cell: "text-muted-foreground rounded-md w-10 font-normal text-sm",
-                row: "flex w-full mt-2",
-                cell: "h-10 w-10 text-center text-sm p-0 relative cursor-pointer hover:bg-accent rounded-md transition-colors",
+                head_row: "flex justify-between md:justify-start",
+                head_cell: "text-muted-foreground rounded-md w-8 md:w-10 font-normal text-xs md:text-sm",
+                row: "flex w-full mt-1 md:mt-2 justify-between md:justify-start",
+                cell: "h-8 w-8 md:h-10 md:w-10 text-center text-xs md:text-sm p-0 relative cursor-pointer hover:bg-accent rounded-md transition-colors",
                 day: cn(
-                  "h-10 w-10 p-0 font-normal aria-selected:opacity-100 hover:bg-accent rounded-md text-sm transition-colors",
+                  "h-8 w-8 md:h-10 md:w-10 p-0 font-normal aria-selected:opacity-100 hover:bg-accent rounded-md text-xs md:text-sm transition-colors",
                   "data-[has-data=true]:bg-yellow-100 data-[has-data=true]:border-2 data-[has-data=true]:border-yellow-300"
                 ),
                 day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
@@ -219,9 +222,12 @@ const CashControl = () => {
               }}
             />
 
-            <div className="mt-4 p-4 bg-muted rounded-lg w-full max-w-[280px]">
-              <p className="text-center text-muted-foreground text-sm">
-                Clique em um dia do calendário para acessar as funções do caixa dessa data
+            <div className="mt-2 p-2 bg-muted rounded-lg w-full max-w-[280px] md:mt-4 md:p-4">
+              <p className="text-center text-muted-foreground text-xs md:text-sm">
+                <span className="md:hidden">Selecione um dia para movimentar o caixa.</span>
+                <span className="hidden md:inline">
+                  Clique em um dia do calendário para acessar as funções do caixa dessa data
+                </span>
               </p>
             </div>
           </div>
