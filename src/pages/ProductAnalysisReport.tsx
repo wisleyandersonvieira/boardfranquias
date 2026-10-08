@@ -411,7 +411,7 @@ const ProductAnalysisReport = () => {
         styles: { fontSize: 8, cellPadding: 2 },
         headStyles: { fillColor: [41, 128, 185], textColor: 255, fontStyle: "bold" },
         alternateRowStyles: { fillColor: [245, 245, 245] },
-        didParseCell: (data: AutoTableHookData) => {
+        didParseCell: (data: any) => {
           if (data.section === "body" && data.column.index === 6) {
             const variation = exportRows[data.row.index]?.variation_percent || 0;
             if (variation >= Number(filters.variation_limit) * 2) {
@@ -421,7 +421,7 @@ const ProductAnalysisReport = () => {
           }
         },
         margin: { top: startY, left: 10, right: 10 },
-        didDrawPage: (data: AutoTableHookData) => {
+        didDrawPage: (data: any) => {
           if (data.pageNumber > 1) renderPdfHeader(doc, "Relatorio de Analise de Produto");
         },
       });

@@ -550,14 +550,23 @@ const BankReconciliation = () => {
     if (!selectedAccount || !selectedAccountType) return;
 
     try {
-      const { data } = await supabase
-        .from('bank_reconciliations')
-        .select('internal_id')
-        .eq('account_id', selectedAccount)
-        .eq('account_type', selectedAccountType)
-        .not('internal_id', 'is', null);
+      const all: { internal_id: string | null }[] = [];
+      const PAGE = 1000;
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await supabase
+          .from('bank_reconciliations')
+          .select('id, internal_id')
+          .eq('account_id', selectedAccount)
+          .eq('account_type', selectedAccountType)
+          .not('internal_id', 'is', null)
+          .order('id')
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        all.push(...(data || []));
+        if (!data || data.length < PAGE) break;
+      }
 
-      const ids = new Set((data || []).map(r => r.internal_id).filter(Boolean) as string[]);
+      const ids = new Set(all.map(r => r.internal_id).filter(Boolean) as string[]);
       setReconciledInternalIds(ids);
     } catch (error) {
       console.error('Error loading reconciled internal ids:', error);
