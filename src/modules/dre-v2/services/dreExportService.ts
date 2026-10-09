@@ -103,8 +103,42 @@ export function exportDreCsv(result: DREApuracaoResult, mode: DREViewMode, showP
 }
 
 export function exportDreExcel(result: DREApuracaoResult, mode: DREViewMode, showPercentages: boolean): void {
+  const visibleIds = new Set(result.visibleLineIdsByMode[mode]);
+  const head: (string | number)[] = ["Descricao"];
+  result.columns.forEach((c) => {
+    head.push(c.label);
+    if (showPercentages) head.push(`${c.label} %`);
+  });
+  head.push("Total");
+  const aoa: (string | number)[][] = [head];
+  const totalRevenue = result.lineResults[0]?.total || 0;
+  result.lineResults
+    .filter((line) => visibleIds.has(line.item.id))
+    .forEach((line) => {
+      const row: (string | number)[] = [`${"  ".repeat(line.item.level)}${line.item.name}`];
+      result.columns.forEach((c) => {
+        const v = Math.round((line.valuesByColumn[c.id] || 0) * 100) / 100;
+        row.push(v);
+        if (showPercentages) {
+          const rev = getColumnRevenue(result, c.id);
+          row.push(rev ? v / rev : 0);
+        }
+      });
+      row.push(Math.round(line.total * 100) / 100);
+      aoa.push(row);
+    });
   const workbook = XLSX.utils.book_new();
-  const sheet = XLSX.utils.aoa_to_sheet(buildRows(result, mode, showPercentages ? "value_percent" : "value"));
+  const sheet = XLSX.utils.aoa_to_sheet(aoa);
+  const pctCols = new Set<number>();
+  if (showPercentages) result.columns.forEach((_, i) => pctCols.add(2 + i * 2));
+  Object.keys(sheet).forEach((addr) => {
+    if (addr[0] === "!") return;
+    const cell = (sheet as any)[addr];
+    if (cell?.t !== "n") return;
+    const col = XLSX.utils.decode_cell(addr).c;
+    cell.z = pctCols.has(col) ? "0.00%" : "#,##0.00;-#,##0.00";
+  });
+  void totalRevenue;
   XLSX.utils.book_append_sheet(workbook, sheet, "DRE");
   XLSX.writeFile(workbook, `dre-${result.filters.regime}-${mode}.xlsx`);
 }
