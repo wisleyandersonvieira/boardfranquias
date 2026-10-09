@@ -1953,7 +1953,7 @@ export const DREView: React.FC<DREViewProps> = ({
             } else if (item.item_type === 'sum_line') {
               value = calculateSumLineTotal(item.id, data);
             }
-            row.push(value.toString());
+            row.push(Math.round(value * 100) / 100 as any);
           });
         });
         exportData.push(row);
@@ -1962,6 +1962,10 @@ export const DREView: React.FC<DREViewProps> = ({
       // Criar workbook e worksheet
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.aoa_to_sheet(exportData);
+      Object.keys(ws).forEach((addr) => {
+        const cell = (ws as any)[addr];
+        if (addr[0] !== '!' && cell && cell.t === 'n') cell.z = '#,##0.00;-#,##0.00';
+      });
 
       // Adicionar worksheet ao workbook
       XLSX.utils.book_append_sheet(wb, ws, "DRE");
