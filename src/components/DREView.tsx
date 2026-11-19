@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Eye, Download, ArrowLeft, FileSpreadsheet, ChevronDown, Layers } from "lucide-react";
+import { Eye, Download, ArrowLeft, FileSpreadsheet, ChevronDown, Layers, AlertTriangle } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,6 +22,8 @@ import { fetchAllPaginated } from "@/utils/supabasePagination";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { useUserMatrix } from "@/hooks/useUserMatrix";
+import { buildPayablePostings } from "@/modules/dre/payablePostings";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 interface Store {
   id: string;
   name: string;
@@ -48,6 +50,11 @@ interface DREData {
   store_name: string;
   values: Record<string, number>;
 }
+interface SkippedDREItem {
+  label: string;
+  reason: string;
+  total: number;
+}
 interface DREViewProps {
   regime?: 'cash' | 'competence';
 }
@@ -63,6 +70,8 @@ export const DREView: React.FC<DREViewProps> = ({
   const [selectedStructure, setSelectedStructure] = useState("");
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
   const [loading, setLoading] = useState(false);
+  // Itens de contas a pagar do período que não têm linha no DRE (ficam fora do cálculo)
+  const [skippedItems, setSkippedItems] = useState<SkippedDREItem[]>([]);
   const [groupStores, setGroupStores] = useState(false);
   const [userBrandId, setUserBrandId] = useState<string | null>(null);
   const { matrixId } = useUserMatrix();
@@ -374,31 +383,43 @@ export const DREView: React.FC<DREViewProps> = ({
       // Buscar contas a pagar com produtos
       let accountsPayableData, apError;
 
-      // Buscar registros de pagamentos (paginado)
-      let paymentsData: any[] = [];
-      try {
-        paymentsData = await fetchAllPaginated<any>((from, to) =>
-          supabase.from('accounts_payable_payments').select(`
+      const PAYABLE_COMPETENCE_SELECT = `
               id,
-              installment_id,
-              account_payable_id,
+              store_id,
+              data_competencia,
               payment_date,
-              amount_paid,
-              interest_amount,
-              discount_amount,
-              interest_product_id,
-              discount_product_id
-            `).gte('payment_date', `${selectedYear}-01-01`).lte('payment_date', `${selectedYear}-12-31`).range(from, to)
-        );
-      } catch (paymentsError) {
-        console.warn('Erro ao buscar payments:', paymentsError);
-      }
+              accounts_payable_items (
+                product_id,
+                quantity,
+                unit_price,
+                total_price,
+                products (
+                  id,
+                  name,
+                  subgroup_id,
+                  function_type
+                )
+              ),
+              accounts_payable_installments (
+                id,
+                installment_number,
+                due_date,
+                amount,
+                payment_date
+              ),
+              accounts_payable_payments (
+                installment_id,
+                interest_amount,
+                discount_amount,
+                interest_product_id,
+                discount_product_id,
+                created_at
+              ),
+              stores (name)
+            `;
 
-      // Criar mapa de pagamentos por installment_id para uso posterior
-      const paymentsByInstallmentId: Record<string, any> = {};
-      paymentsData?.forEach(payment => {
-        paymentsByInstallmentId[payment.installment_id] = payment;
-      });
+      // Os juros/descontos de cada pagamento vêm embutidos em cada conta
+      // (accounts_payable_payments), inclusive os de pagamentos de outros anos.
       if (isCashRegime) {
         // Para regime de caixa: buscar contas pagas (com ou sem parcelas)
 
@@ -454,6 +475,14 @@ export const DREView: React.FC<DREViewProps> = ({
                 amount,
                 payment_date
               ),
+              accounts_payable_payments (
+                installment_id,
+                interest_amount,
+                discount_amount,
+                interest_product_id,
+                discount_product_id,
+                created_at
+              ),
               stores (name)
             `).in('id', batchIds).in('store_id', selectedStores).in('status', ['paid', 'partial']);
             
@@ -475,32 +504,7 @@ export const DREView: React.FC<DREViewProps> = ({
         // Incluir payment_date e accounts_payable_installments para processar juros/descontos corretamente
         try {
           accountsPayableData = await fetchAllPaginated<any>((fromIdx, toIdx) =>
-            supabase.from('accounts_payable').select(`
-              id,
-              store_id,
-              data_competencia,
-              payment_date,
-              accounts_payable_items (
-                product_id,
-                quantity,
-                unit_price,
-                total_price,
-                products (
-                  id,
-                  name,
-                  subgroup_id,
-                  function_type
-                )
-              ),
-              accounts_payable_installments (
-                id,
-                installment_number,
-                due_date,
-                amount,
-                payment_date
-              ),
-              stores (name)
-            `).in('store_id', selectedStores).gte('data_competencia', `${selectedYear}-01-01`).lte('data_competencia', `${selectedYear}-12-31`).range(fromIdx, toIdx)
+            supabase.from('accounts_payable').select(PAYABLE_COMPETENCE_SELECT).in('store_id', selectedStores).gte('data_competencia', `${selectedYear}-01-01`).lte('data_competencia', `${selectedYear}-12-31`).range(fromIdx, toIdx)
           );
           apError = null;
         } catch (e) {
@@ -508,52 +512,60 @@ export const DREView: React.FC<DREViewProps> = ({
           apError = e;
         }
 
-        // Para competência: também precisamos buscar juros/descontos de contas cuja 
-        // competência pode estar em outro ano, mas o pagamento foi feito no ano selecionado
-        // Buscar IDs das contas que têm pagamentos no ano selecionado
-        const accountIdsFromPayments = [...new Set(paymentsData?.map(p => p.account_payable_id) || [])];
+        // Contas com competência em outro ano, mas pagas no ano selecionado: entram
+        // só com os juros/descontos que têm data de pagamento.
+        // A busca é restrita às lojas selecionadas e feita em lotes: uma única
+        // chamada com os IDs de todas as lojas estoura o tamanho da URL e falha,
+        // e esses juros/descontos sumiam do DRE sem aviso.
+        try {
+          const yearStart = `${selectedYear}-01-01`;
+          const yearEnd = `${selectedYear}-12-31`;
+          const outsideYear = `data_competencia.lt.${yearStart},data_competencia.gt.${yearEnd},data_competencia.is.null`;
+          const existingAccountIds = new Set(accountsPayableData.map((a: any) => a.id));
 
-        // Filtrar apenas IDs que não estão já nos dados buscados
-        const existingAccountIds = new Set(accountsPayableData.map((a: any) => a.id));
-        const missingAccountIds = accountIdsFromPayments.filter(id => !existingAccountIds.has(id));
-        if (missingAccountIds.length > 0) {
-          // Buscar contas adicionais que têm pagamentos no ano mas competência em outro ano
-          const {
-            data: additionalAccounts,
-            error: additionalError
-          } = await supabase.from('accounts_payable').select(`
-              id,
-              store_id,
-              data_competencia,
-              payment_date,
-              accounts_payable_items (
-                product_id,
-                quantity,
-                unit_price,
-                total_price,
-                products (
-                  id,
-                  name,
-                  subgroup_id,
-                  function_type
-                )
-              ),
-              accounts_payable_installments (
-                id,
-                installment_number,
-                due_date,
-                amount,
-                payment_date
-              ),
-              stores (name)
-            `).in('id', missingAccountIds).in('store_id', selectedStores);
-          if (!additionalError && additionalAccounts) {
-            // Marcar essas contas para processar APENAS juros/descontos, não itens normais
-            additionalAccounts.forEach((acc: any) => {
+          const [paidInstallmentRefs, paidAccountRefs] = await Promise.all([
+            // Parcelas pagas no ano de contas com competência fora dele
+            fetchAllPaginated<any>((fromIdx, toIdx) =>
+              supabase.from('accounts_payable_installments')
+                .select('id, account_payable_id, accounts_payable!inner(store_id, data_competencia)')
+                .in('accounts_payable.store_id', selectedStores)
+                .or(outsideYear, { referencedTable: 'accounts_payable' })
+                .gte('payment_date', yearStart).lte('payment_date', yearEnd)
+                .order('id').range(fromIdx, toIdx)
+            ),
+            // Contas sem parcelas pagas no ano com competência fora dele
+            fetchAllPaginated<any>((fromIdx, toIdx) =>
+              supabase.from('accounts_payable')
+                .select('id')
+                .in('store_id', selectedStores)
+                .or(outsideYear)
+                .gte('payment_date', yearStart).lte('payment_date', yearEnd)
+                .order('id').range(fromIdx, toIdx)
+            ),
+          ]);
+
+          const missingAccountIds = [...new Set<string>([
+            ...paidInstallmentRefs.map((ref: any) => ref.account_payable_id),
+            ...paidAccountRefs.map((ref: any) => ref.id),
+          ])].filter(id => id && !existingAccountIds.has(id));
+
+          const BATCH_SIZE = 50;
+          for (let i = 0; i < missingAccountIds.length; i += BATCH_SIZE) {
+            const batchIds = missingAccountIds.slice(i, i + BATCH_SIZE);
+            const {
+              data: additionalAccounts,
+              error: additionalError
+            } = await supabase.from('accounts_payable').select(PAYABLE_COMPETENCE_SELECT).in('id', batchIds).in('store_id', selectedStores);
+            if (additionalError) throw additionalError;
+            (additionalAccounts as any[] | null)?.forEach((acc: any) => {
+              // Processar APENAS juros/descontos com data de pagamento, não os itens da nota
               acc._onlyInterestDiscount = true;
+              accountsPayableData.push(acc);
             });
-            accountsPayableData = [...accountsPayableData, ...additionalAccounts];
           }
+        } catch (additionalError) {
+          // Não derruba o DRE: o que falta aqui são só ajustes de contas de outro ano.
+          console.warn('Erro ao buscar contas de outras competências pagas no ano:', additionalError);
         }
       }
 
@@ -822,403 +834,57 @@ export const DREView: React.FC<DREViewProps> = ({
         });
       });
 
-      // Processar contas a pagar
+      // Processar contas a pagar. As regras de lançamento (rateio por parcela,
+      // juros, descontos e sinais) ficam em modules/dre/payablePostings.
+      const postingConfig = {
+        interestProductId: acrescimoPagarProductId,
+        discountProductId: descontoPagarProductId
+      };
+      const skippedByKey: Record<string, SkippedDREItem> = {};
       accountsPayableData?.forEach((account: any) => {
-        if (isCashRegime) {
-          // Para regime de caixa: processar baseado nas parcelas pagas OU pagamento à vista
+        const storeId = account.store_id;
+        const storeName = account.stores?.name || 'Loja sem nome';
+        buildPayablePostings(account, isCashRegime ? 'cash' : 'competence', postingConfig).forEach(posting => {
+          const {
+            month,
+            year
+          } = getMonthAndYearFromDate(posting.date);
 
-          // Verificar se é pagamento à vista (sem parcelas)
-          const hasInstallments = account.accounts_payable_installments && account.accounts_payable_installments.length > 0;
-          if (!hasInstallments && account.status === 'paid' && account.payment_date) {
-            // Conta paga à vista - processar o valor total
-            const {
-              month,
-              year
-            } = getMonthAndYearFromDate(account.payment_date);
-
-            // Verificar se o mês está selecionado
-            if (!selectedMonths.includes(month.toString()) || year !== parseInt(selectedYear)) {
-              return;
-            }
-            const storeId = account.store_id;
-            const storeName = account.stores?.name || 'Loja sem nome';
-            const key = `${storeId}-${month}`;
-
-            // Inicializar se não existir
-            if (!groupedData[key]) {
-              groupedData[key] = {
-                month,
-                year: parseInt(selectedYear),
-                store_id: storeId,
-                store_name: storeName,
-                values: {}
-              };
-            }
-
-            // Para pagamento à vista, lançar o valor total de cada item
-            account.accounts_payable_items?.forEach((item: any) => {
-              if (item.products?.subgroup_id) {
-                const subgroupId = item.products.subgroup_id;
-                const value = parseFloat(item.total_price) || 0;
-                // Contas a pagar são débito por natureza
-                const productFunctionType = item.products.function_type || 'debit';
-
-                // Encontrar o item da estrutura que corresponde a este subgrupo
-                const structureItem = structureItems.find(si => si.item_type === 'subgroup' && si.account_group_id === subgroupId);
-
-                if (structureItem && value !== 0) {
-                  if (!groupedData[key].values[structureItem.id]) {
-                    groupedData[key].values[structureItem.id] = 0;
-                  }
-                  // Débito = negativo, Crédito = positivo
-                  const signedValue = productFunctionType === 'debit' ? -value : value;
-                  groupedData[key].values[structureItem.id] += signedValue;
-                }
-              }
-            });
-            return; // Já processou, não precisa processar parcelas
-          }
-
-          // Processar parcelas pagas
-          const paidInstallments = account.accounts_payable_installments?.filter((installment: any) => installment.payment_date !== null && installment.payment_date !== undefined) || [];
-
-          // Se não houver parcelas pagas, não processar esta conta
-          if (paidInstallments.length === 0) {
+          // Verificar se o mês está selecionado
+          if (!selectedMonths.includes(month.toString()) || year !== parseInt(selectedYear)) {
             return;
           }
+          const key = `${storeId}-${month}`;
 
-          // Separar itens normais de itens de juros/desconto
-          const normalItems = account.accounts_payable_items?.filter((item: any) => item.product_id !== acrescimoPagarProductId && item.product_id !== descontoPagarProductId) || [];
-          const interestDiscountItems = account.accounts_payable_items?.filter((item: any) => item.product_id === acrescimoPagarProductId || item.product_id === descontoPagarProductId) || [];
+          // Inicializar se não existir
+          if (!groupedData[key]) {
+            groupedData[key] = {
+              month,
+              year: parseInt(selectedYear),
+              store_id: storeId,
+              store_name: storeName,
+              values: {}
+            };
+          }
 
-          // Calcular o valor base da conta (sem juros/descontos) para proporção correta
-          const baseAccountAmount = normalItems.reduce((sum: number, item: any) => sum + (parseFloat(item.total_price) || 0), 0);
-
-          // Calcular o total de parcelas para saber a proporção de cada uma
-          const totalInstallments = account.accounts_payable_installments?.length || 1;
-          if (baseAccountAmount === 0 && interestDiscountItems.length === 0) {
-            console.warn('Conta a pagar sem itens:', account.id);
+          // Encontrar o item da estrutura que corresponde ao subgrupo do produto
+          const structureItem = posting.subgroupId
+            ? structureItems.find(si => si.item_type === 'subgroup' && si.account_group_id === posting.subgroupId)
+            : undefined;
+          if (!structureItem) {
+            // Sem linha no DRE: não entra no cálculo, mas a tela avisa.
+            const reason = posting.subgroupId ? 'subgrupo fora desta estrutura de DRE' : 'produto sem subgrupo';
+            const skippedKey = `${posting.label}|${reason}`;
+            if (!skippedByKey[skippedKey]) {
+              skippedByKey[skippedKey] = { label: posting.label, reason, total: 0 };
+            }
+            skippedByKey[skippedKey].total += Math.abs(posting.value);
             return;
           }
-
-          // Para cada parcela paga, calcular a proporção dos itens normais
-          // e lançar 100% dos juros/descontos apenas na primeira parcela que está sendo processada
-          // (já que não temos como saber qual parcela gerou qual juros)
-
-          // Abordagem: dividir os juros/descontos pelo número de parcelas pagas
-          const totalPaidInstallments = paidInstallments.length;
-          paidInstallments.forEach((installment: any) => {
-            const {
-              month,
-              year
-            } = getMonthAndYearFromDate(installment.payment_date);
-
-            // Verificar se o mês está selecionado
-            if (!selectedMonths.includes(month.toString()) || year !== parseInt(selectedYear)) {
-              return;
-            }
-            const storeId = account.store_id;
-            const storeName = account.stores?.name || 'Loja sem nome';
-            const key = `${storeId}-${month}`;
-
-            // Inicializar se não existir
-            if (!groupedData[key]) {
-              groupedData[key] = {
-                month,
-                year: parseInt(selectedYear),
-                store_id: storeId,
-                store_name: storeName,
-                values: {}
-              };
-            }
-
-            // Proporção desta parcela em relação ao valor base da conta
-            // Usar o valor real da parcela paga, não divisão igual
-            const installmentAmount = parseFloat(installment.amount) || 0;
-            const installmentProportion = baseAccountAmount > 0 ? installmentAmount / baseAccountAmount : 1 / totalInstallments;
-
-            // Processar itens normais proporcionalmente
-            normalItems.forEach((item: any) => {
-              if (item.products?.subgroup_id) {
-                const subgroupId = item.products.subgroup_id;
-                // Calcular o valor proporcional baseado na parcela paga
-                const proportionalValue = (parseFloat(item.total_price) || 0) * installmentProportion;
-                // Contas a pagar são débito por natureza
-                const productFunctionType = item.products.function_type || 'debit';
-
-                // Encontrar o item da estrutura que corresponde a este subgrupo
-                const structureItem = structureItems.find(si => si.item_type === 'subgroup' && si.account_group_id === subgroupId);
-                if (structureItem && proportionalValue > 0) {
-                  if (!groupedData[key].values[structureItem.id]) {
-                    groupedData[key].values[structureItem.id] = 0;
-                  }
-                  // Débito = negativo, Crédito = positivo
-                  const signedValue = productFunctionType === 'debit' ? -proportionalValue : proportionalValue;
-                  groupedData[key].values[structureItem.id] += signedValue;
-                }
-              }
-            });
-
-            // Processar juros/descontos da nova tabela accounts_payable_payments
-            // Cada pagamento tem seus próprios juros/descontos com data correta
-            const paymentRecord = paymentsByInstallmentId[installment.id];
-            if (paymentRecord) {
-              // Processar juros (acréscimo) se houver
-              if (paymentRecord.interest_amount > 0 && paymentRecord.interest_product_id === acrescimoPagarProductId) {
-                // Buscar subgrupo do produto de acréscimo
-                const interestItem = interestDiscountItems.find((item: any) => item.product_id === acrescimoPagarProductId);
-                if (interestItem?.products?.subgroup_id) {
-                  const subgroupId = interestItem.products.subgroup_id;
-                  const structureItem = structureItems.find(si => si.item_type === 'subgroup' && si.account_group_id === subgroupId);
-                  if (structureItem) {
-                    if (!groupedData[key].values[structureItem.id]) {
-                      groupedData[key].values[structureItem.id] = 0;
-                    }
-                    // Juros: aplicar function_type do produto (debit = negativo, credit = positivo)
-                    const productFunctionType = interestItem.products.function_type || 'debit';
-                    const signedValue = productFunctionType === 'debit' ? -paymentRecord.interest_amount : paymentRecord.interest_amount;
-                    groupedData[key].values[structureItem.id] += signedValue;
-                  }
-                }
-              }
-
-              // Processar desconto se houver
-              if (paymentRecord.discount_amount > 0 && paymentRecord.discount_product_id === descontoPagarProductId) {
-                // Buscar subgrupo do produto de desconto
-                const discountItem = interestDiscountItems.find((item: any) => item.product_id === descontoPagarProductId);
-                if (discountItem?.products?.subgroup_id) {
-                  const subgroupId = discountItem.products.subgroup_id;
-                  const structureItem = structureItems.find(si => si.item_type === 'subgroup' && si.account_group_id === subgroupId);
-                  if (structureItem) {
-                    if (!groupedData[key].values[structureItem.id]) {
-                      groupedData[key].values[structureItem.id] = 0;
-                    }
-                    // Desconto: aplicar function_type do produto (credit = positivo, debit = negativo)
-                    const productFunctionType = discountItem.products.function_type || 'credit';
-                    const signedValue = productFunctionType === 'credit' ? paymentRecord.discount_amount : -paymentRecord.discount_amount;
-                    groupedData[key].values[structureItem.id] += signedValue;
-                  }
-                }
-              }
-            } else {
-              // Fallback: se não encontrar na nova tabela, usar a lógica legada
-              // (para pagamentos feitos antes da nova estrutura)
-              interestDiscountItems.forEach((item: any) => {
-                if (item.products?.subgroup_id) {
-                  const subgroupId = item.products.subgroup_id;
-                  // Dividir o valor do juros/desconto pelo número de parcelas pagas
-                  const dividedValue = (parseFloat(item.total_price) || 0) / totalPaidInstallments;
-                  const productFunctionType = item.products.function_type || 'debit';
-
-                  // Encontrar o item da estrutura que corresponde a este subgrupo
-                  const structureItem = structureItems.find(si => si.item_type === 'subgroup' && si.account_group_id === subgroupId);
-                  if (structureItem && dividedValue !== 0) {
-                    if (!groupedData[key].values[structureItem.id]) {
-                      groupedData[key].values[structureItem.id] = 0;
-                    }
-                    // Aplicar function_type: debit = negativo, credit = positivo
-                    const signedValue = productFunctionType === 'debit' ? -dividedValue : dividedValue;
-                    groupedData[key].values[structureItem.id] += signedValue;
-                  }
-                }
-              });
-            }
-          });
-        } else {
-          // Para regime de competência: usar data_competencia para itens normais
-          // mas data de pagamento para juros/descontos
-
-          // Separar itens normais de itens de juros/desconto
-          const normalItems = account.accounts_payable_items?.filter((item: any) => item.product_id !== acrescimoPagarProductId && item.product_id !== descontoPagarProductId) || [];
-          const interestDiscountItems = account.accounts_payable_items?.filter((item: any) => item.product_id === acrescimoPagarProductId || item.product_id === descontoPagarProductId) || [];
-
-          // Processar itens normais pela data de competência
-          // MAS apenas se a conta não for marcada para processar apenas juros/descontos
-          if (normalItems.length > 0 && !account._onlyInterestDiscount) {
-            const {
-              month,
-              year
-            } = getMonthAndYearFromDate(account.data_competencia);
-
-            // Verificar se o mês está selecionado
-            if (selectedMonths.includes(month.toString()) && year === parseInt(selectedYear)) {
-              const storeId = account.store_id;
-              const storeName = account.stores?.name || 'Loja sem nome';
-              const key = `${storeId}-${month}`;
-
-              // Inicializar se não existir
-              if (!groupedData[key]) {
-                groupedData[key] = {
-                  month,
-                  year: parseInt(selectedYear),
-                  store_id: storeId,
-                  store_name: storeName,
-                  values: {}
-                };
-              }
-              normalItems.forEach((item: any) => {
-                if (item.products?.subgroup_id) {
-                  const subgroupId = item.products.subgroup_id;
-                  const value = parseFloat(item.total_price) || 0;
-                  // Contas a pagar são débito por natureza
-                  // O function_type do produto define o sinal do valor
-                  const productFunctionType = item.products.function_type || 'debit';
-
-                  // Encontrar o item da estrutura que corresponde a este subgrupo
-                  const structureItem = structureItems.find(si => si.item_type === 'subgroup' && si.account_group_id === subgroupId);
-                  if (structureItem && value !== 0) {
-                    if (!groupedData[key].values[structureItem.id]) {
-                      groupedData[key].values[structureItem.id] = 0;
-                    }
-                    // Débito = negativo, Crédito = positivo
-                    const signedValue = productFunctionType === 'debit' ? -value : value;
-                    groupedData[key].values[structureItem.id] += signedValue;
-                  }
-                }
-              });
-            }
-          }
-
-          // Processar juros/descontos pela data de pagamento
-          // Se não houver parcelas, usar payment_date da conta principal
-          // Se houver parcelas, usar payment_date de cada parcela paga
-          if (interestDiscountItems.length > 0) {
-            const hasInstallments = account.accounts_payable_installments && account.accounts_payable_installments.length > 0;
-            if (hasInstallments) {
-              // Parcelas: processar juros/descontos na data de pagamento de cada parcela paga
-              const paidInstallments = account.accounts_payable_installments?.filter((installment: any) => installment.payment_date !== null && installment.payment_date !== undefined) || [];
-              const totalPaidInstallments = paidInstallments.length;
-              if (totalPaidInstallments > 0) {
-                paidInstallments.forEach((installment: any) => {
-                  const {
-                    month,
-                    year
-                  } = getMonthAndYearFromDate(installment.payment_date);
-
-                  // Verificar se o mês está selecionado
-                  if (!selectedMonths.includes(month.toString()) || year !== parseInt(selectedYear)) {
-                    return;
-                  }
-                  const storeId = account.store_id;
-                  const storeName = account.stores?.name || 'Loja sem nome';
-                  const key = `${storeId}-${month}`;
-
-                  // Inicializar se não existir
-                  if (!groupedData[key]) {
-                    groupedData[key] = {
-                      month,
-                      year: parseInt(selectedYear),
-                      store_id: storeId,
-                      store_name: storeName,
-                      values: {}
-                    };
-                  }
-
-                  // Usar dados da nova tabela accounts_payable_payments
-                  const paymentRecord = paymentsByInstallmentId[installment.id];
-                  if (paymentRecord) {
-                    // Processar juros (acréscimo) se houver
-                    if (paymentRecord.interest_amount > 0 && paymentRecord.interest_product_id === acrescimoPagarProductId) {
-                      const interestItem = interestDiscountItems.find((item: any) => item.product_id === acrescimoPagarProductId);
-                      if (interestItem?.products?.subgroup_id) {
-                        const subgroupId = interestItem.products.subgroup_id;
-                        const structureItem = structureItems.find(si => si.item_type === 'subgroup' && si.account_group_id === subgroupId);
-                        if (structureItem) {
-                          if (!groupedData[key].values[structureItem.id]) {
-                            groupedData[key].values[structureItem.id] = 0;
-                          }
-                          // Juros: aplicar function_type do produto (debit = negativo, credit = positivo)
-                          const productFunctionType = interestItem.products.function_type || 'debit';
-                          const signedValue = productFunctionType === 'debit' ? -paymentRecord.interest_amount : paymentRecord.interest_amount;
-                          groupedData[key].values[structureItem.id] += signedValue;
-                        }
-                      }
-                    }
-
-                    // Processar desconto se houver
-                    if (paymentRecord.discount_amount > 0 && paymentRecord.discount_product_id === descontoPagarProductId) {
-                      const discountItem = interestDiscountItems.find((item: any) => item.product_id === descontoPagarProductId);
-                      if (discountItem?.products?.subgroup_id) {
-                        const subgroupId = discountItem.products.subgroup_id;
-                        const structureItem = structureItems.find(si => si.item_type === 'subgroup' && si.account_group_id === subgroupId);
-                        if (structureItem) {
-                          if (!groupedData[key].values[structureItem.id]) {
-                            groupedData[key].values[structureItem.id] = 0;
-                          }
-                          // Desconto: aplicar function_type do produto (credit = positivo, debit = negativo)
-                          const productFunctionType = discountItem.products.function_type || 'credit';
-                          const signedValue = productFunctionType === 'credit' ? paymentRecord.discount_amount : -paymentRecord.discount_amount;
-                          groupedData[key].values[structureItem.id] += signedValue;
-                        }
-                      }
-                    }
-                  } else {
-                    // Fallback para lógica legada (pagamentos anteriores à nova tabela)
-                    interestDiscountItems.forEach((item: any) => {
-                      if (item.products?.subgroup_id) {
-                        const subgroupId = item.products.subgroup_id;
-                        const dividedValue = (parseFloat(item.total_price) || 0) / totalPaidInstallments;
-                        const productFunctionType = item.products.function_type || 'debit';
-                        const structureItem = structureItems.find(si => si.item_type === 'subgroup' && si.account_group_id === subgroupId);
-                        if (structureItem && dividedValue !== 0) {
-                          if (!groupedData[key].values[structureItem.id]) {
-                            groupedData[key].values[structureItem.id] = 0;
-                          }
-                          // Aplicar function_type: debit = negativo, credit = positivo
-                          const signedValue = productFunctionType === 'debit' ? -dividedValue : dividedValue;
-                          groupedData[key].values[structureItem.id] += signedValue;
-                        }
-                      }
-                    });
-                  }
-                });
-              }
-            } else {
-              // Sem parcelas: usar payment_date da conta principal
-              if (account.payment_date) {
-                const {
-                  month,
-                  year
-                } = getMonthAndYearFromDate(account.payment_date);
-
-                // Verificar se o mês está selecionado
-                if (selectedMonths.includes(month.toString()) && year === parseInt(selectedYear)) {
-                  const storeId = account.store_id;
-                  const storeName = account.stores?.name || 'Loja sem nome';
-                  const key = `${storeId}-${month}`;
-
-                  // Inicializar se não existir
-                  if (!groupedData[key]) {
-                    groupedData[key] = {
-                      month,
-                      year: parseInt(selectedYear),
-                      store_id: storeId,
-                      store_name: storeName,
-                      values: {}
-                    };
-                  }
-                  interestDiscountItems.forEach((item: any) => {
-                    if (item.products?.subgroup_id) {
-                      const subgroupId = item.products.subgroup_id;
-                      const value = parseFloat(item.total_price) || 0;
-                      const productFunctionType = item.products.function_type || 'debit';
-                      const structureItem = structureItems.find(si => si.item_type === 'subgroup' && si.account_group_id === subgroupId);
-                      if (structureItem && value !== 0) {
-                        if (!groupedData[key].values[structureItem.id]) {
-                          groupedData[key].values[structureItem.id] = 0;
-                        }
-                        // Aplicar function_type: debit = negativo, credit = positivo
-                        const signedValue = productFunctionType === 'debit' ? -value : value;
-                        groupedData[key].values[structureItem.id] += signedValue;
-                      }
-                    }
-                  });
-                }
-              }
-            }
-          }
-        }
+          groupedData[key].values[structureItem.id] = (groupedData[key].values[structureItem.id] || 0) + posting.value;
+        });
       });
+      setSkippedItems(Object.values(skippedByKey).filter(item => item.total >= 0.005).sort((a, b) => b.total - a.total));
 
       // Processar contas a receber (RECEITAS)
       if (accountsReceivableData && accountsReceivableData.length > 0) {
@@ -2496,6 +2162,29 @@ export const DREView: React.FC<DREViewProps> = ({
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {skippedItems.length > 0 && (
+              <Alert className="mb-4">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>
+                  {formatCurrency(skippedItems.reduce((sum, item) => sum + item.total, 0))} em contas a pagar não entraram neste DRE
+                </AlertTitle>
+                <AlertDescription>
+                  <p>
+                    Os itens abaixo não têm uma linha correspondente na estrutura. Cadastre o subgrupo do produto (ou inclua o subgrupo na estrutura) para que passem a ser somados.
+                  </p>
+                  <ul className="mt-2 list-disc pl-5">
+                    {skippedItems.slice(0, 10).map(item => (
+                      <li key={`${item.label}-${item.reason}`}>
+                        {item.label}: {formatCurrency(item.total)} ({item.reason})
+                      </li>
+                    ))}
+                  </ul>
+                  {skippedItems.length > 10 && (
+                    <p className="mt-1">e mais {skippedItems.length - 10} produto(s).</p>
+                  )}
+                </AlertDescription>
+              </Alert>
+            )}
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
