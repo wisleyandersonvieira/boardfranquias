@@ -216,12 +216,51 @@ export function buildDreWorkbook(ExcelJS: ExcelModule, model: DreExportModel) {
   return workbook;
 }
 
+// ---------------------------------------------------------------------------
+// Compatibilidade com o Excel
+// ---------------------------------------------------------------------------
+
+/**
+ * O schema do Excel exige os filhos de <sheetPr> nesta ordem. O exceljs grava
+ * <pageSetUpPr> (ajuste de impressao) antes de <outlinePr> (agrupamento de
+ * linhas) quando os dois sao usados, e o Excel recusa o arquivo como
+ * corrompido - LibreOffice e Google Sheets abrem normalmente, por isso o erro
+ * so aparece no Excel.
+ */
+const SHEET_PR_ORDER = ["tabColor", "outlinePr", "pageSetUpPr"] as const;
+
+export function fixSheetPrOrder(sheetXml: string): string {
+  return sheetXml.replace(/<sheetPr(\s[^>]*)?>([\s\S]*?)<\/sheetPr>/, (_whole, attributes = "", inner: string) => {
+    const children = SHEET_PR_ORDER.map((tag) => {
+      const match = inner.match(new RegExp(`<${tag}\\b[^>]*?(?:/>|>[\\s\\S]*?</${tag}>)`));
+      return match ? match[0] : "";
+    });
+    return `<sheetPr${attributes}>${children.join("")}</sheetPr>`;
+  });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ZipModule = any;
+
+/** Aplica as correcoes de compatibilidade em todas as planilhas do arquivo. */
+export async function makeExcelCompatible(buffer: ArrayBuffer, JSZip: ZipModule): Promise<ArrayBuffer> {
+  const zip = await JSZip.loadAsync(buffer);
+  const sheetPaths = Object.keys(zip.files).filter((path) => /^xl\/worksheets\/[^/]+\.xml$/.test(path));
+  for (const path of sheetPaths) {
+    const xml: string = await zip.file(path).async("string");
+    const fixed = fixSheetPrOrder(xml);
+    if (fixed !== xml) zip.file(path, fixed);
+  }
+  return zip.generateAsync({ type: "arraybuffer", compression: "DEFLATE" });
+}
+
 /** Monta o arquivo e dispara o download no navegador. */
 export async function downloadDreExcel(model: DreExportModel): Promise<void> {
-  const module = await import("exceljs");
-  const ExcelJS = (module as ExcelModule).default ?? module;
+  const [excelModule, zipModule] = await Promise.all([import("exceljs"), import("jszip")]);
+  const ExcelJS = (excelModule as ExcelModule).default ?? excelModule;
+  const JSZip = (zipModule as ZipModule).default ?? zipModule;
   const workbook = buildDreWorkbook(ExcelJS, model);
-  const buffer = await workbook.xlsx.writeBuffer();
+  const buffer = await makeExcelCompatible(await workbook.xlsx.writeBuffer(), JSZip);
   const blob = new Blob([buffer], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
@@ -232,5 +271,6 @@ export async function downloadDreExcel(model: DreExportModel): Promise<void> {
   document.body.appendChild(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  // Revogar na hora pode cancelar o download em alguns navegadores.
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
