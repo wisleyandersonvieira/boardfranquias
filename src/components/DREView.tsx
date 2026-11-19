@@ -15,7 +15,6 @@ import {
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { addPdfHeaderWithLogo, renderPdfHeader } from "@/utils/pdfHeader";
-import * as XLSX from 'xlsx';
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { fetchAllPaginated } from "@/utils/supabasePagination";
@@ -23,6 +22,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { useUserMatrix } from "@/hooks/useUserMatrix";
 import { buildPayablePostings } from "@/modules/dre/payablePostings";
+import { downloadDreExcel, type DreExportColumn, type DreExportRow } from "@/modules/dre/dreExcelExport";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 interface Store {
   id: string;
@@ -1583,62 +1583,55 @@ export const DREView: React.FC<DREViewProps> = ({
   const getMonthName = (month: number) => {
     return months[month - 1]?.label || month.toString();
   };
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
     try {
-      // Preparar dados para exportação
-      const exportData: any[] = [];
-
-      // Cabeçalho principal
-      const headerRow1 = ['Descrição'];
-      const headerRow2 = [''];
+      // Colunas: um período por loja (ou um por período, com as lojas agrupadas)
+      const columns: DreExportColumn[] = [];
+      const columnData: DREData[] = [];
       Object.entries(groupedData).forEach(([periodKey, periodData]) => {
         const [year, month] = periodKey.split('-');
-        const monthName = `${getMonthName(parseInt(month))} ${year}`;
+        const period = `${getMonthName(parseInt(month))} ${year}`;
         periodData.forEach(data => {
-          headerRow1.push(monthName);
-          if (!groupStores) {
-            headerRow2.push(data.store_name);
-          }
+          columns.push(groupStores ? { period } : { period, store: data.store_name });
+          columnData.push(data);
         });
       });
-      exportData.push(headerRow1);
-      if (!groupStores) {
-        exportData.push(headerRow2);
-      }
 
-      // Dados das linhas
-      structureItems.forEach(item => {
-        const row = [item.item_type === 'sum_line' && item.description ? item.description : item.name];
-        Object.entries(groupedData).forEach(([_, periodData]) => {
-          periodData.forEach(data => {
-            let value = 0;
-            if (item.item_type === 'subgroup') {
-              value = data.values[item.id] || 0;
-            } else if (item.item_type === 'group') {
-              value = calculateGroupTotal(item.id, data);
-            } else if (item.item_type === 'sum_line') {
-              value = calculateSumLineTotal(item.id, data);
-            }
-            row.push(Math.round(value * 100) / 100 as any);
-          });
-        });
-        exportData.push(row);
+      // Linhas: os mesmos valores e sinais exibidos na tela
+      const rows: DreExportRow[] = structureItems.map(item => {
+        const isStock = item.item_type === 'initial_stock' || item.item_type === 'final_stock';
+        return {
+          label: item.item_type === 'sum_line' && item.description ? item.description : item.name,
+          type: isStock ? 'stock' : item.item_type === 'group' ? 'group' : item.item_type === 'sum_line' ? 'sum_line' : 'subgroup',
+          values: columnData.map(data => {
+            if (item.item_type === 'subgroup') return data.values[item.id] || 0;
+            if (item.item_type === 'group') return calculateGroupTotal(item.id, data);
+            if (item.item_type === 'sum_line') return calculateSumLineTotal(item.id, data);
+            if (item.item_type === 'initial_stock') return -calculateStockTotal(item.id, data);
+            return calculateStockTotal(item.id, data);
+          })
+        };
       });
 
-      // Criar workbook e worksheet
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.aoa_to_sheet(exportData);
-      Object.keys(ws).forEach((addr) => {
-        const cell = (ws as any)[addr];
-        if (addr[0] !== '!' && cell && cell.t === 'n') cell.z = '#,##0.00;-#,##0.00';
+      const regimeLabel = isCashRegime ? 'Regime de Caixa' : 'Competência';
+      const structureName = structures.find(structure => structure.id === selectedStructure)?.name;
+      const storeNames = stores.filter(store => selectedStores.includes(store.id)).map(store => store.name);
+      const periods = [...new Set(columns.map(column => column.period))];
+      const now = new Date();
+      const details = [
+        structureName ? `Estrutura: ${structureName}` : '',
+        storeNames.length > 0 ? `Lojas: ${storeNames.join(', ')}${groupStores && storeNames.length > 1 ? ' (agrupadas)' : ''}` : '',
+        periods.length > 1 ? `Período: ${periods[0]} a ${periods[periods.length - 1]}` : `Período: ${periods[0] ?? selectedYear}`,
+        `Gerado em ${now.toLocaleDateString('pt-BR')} às ${now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+      ].filter(Boolean);
+
+      await downloadDreExcel({
+        title: `DRE - ${regimeLabel}`,
+        details,
+        columns,
+        rows,
+        fileName: `DRE_${isCashRegime ? 'Caixa' : 'Competencia'}_${selectedYear}_${now.toISOString().split('T')[0]}.xlsx`
       });
-
-      // Adicionar worksheet ao workbook
-      XLSX.utils.book_append_sheet(wb, ws, "DRE");
-
-      // Baixar arquivo
-      const fileName = `DRE_${selectedYear}_${new Date().toISOString().split('T')[0]}.xlsx`;
-      XLSX.writeFile(wb, fileName);
       toast({
         title: "Exportação concluída",
         description: "Arquivo Excel baixado com sucesso",
